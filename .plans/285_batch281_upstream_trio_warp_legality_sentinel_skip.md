@@ -1,6 +1,6 @@
 # Plan 285 — Batch 281: the upstream llama.cpp trio (warp-legality + sentinel-skip + barrier-uniformity)
 
-**Status:** IN PROGRESS — claim `31530c184` (pushed 2026-10-25 ~08:1x +07, expiry 2026-10-27 ~08:1x +07)
+**Status:** CLOSED-LANDED — the batch era landed past this claim; **Lease closed:** claim `31530c184`, pushed 2026-10-25, was expires 2026-10-27 — lapsed with the batch landed by the ledger. Flipped 2026-11-19 (housekeeping; 0 open boxes).
 
 ## Sources (the claimed lead pack, diff source = upstream PR patch URLs, fetched this session)
 

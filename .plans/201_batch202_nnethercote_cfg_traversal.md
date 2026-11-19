@@ -1,6 +1,6 @@
 # Plan 201 — Batch 202: the nnethercote min-rank worklist rule (rust_perf, the freed slot)
 
-**Status:** ACTIVE — the next rust_perf slot per the 10-06/10-07 intake rows (B201 discharged the slot flag). One rule, `NotBenchable` decision-content (the B182/186 corpus-only precedent): the dataflow fixpoint's convergence is traversal-order-dependent — process dirty nodes in dataflow order (min-rank), never FIFO push-back.
+**Status:** CLOSED-LANDED — B201 discharged the slot flag (this line's own clause); the batch era landed. Flipped 2026-11-19 (housekeeping; 0 open boxes). (B201 discharged the slot flag). One rule, `NotBenchable` decision-content (the B182/186 corpus-only precedent): the dataflow fixpoint's convergence is traversal-order-dependent — process dirty nodes in dataflow order (min-rank), never FIFO push-back.
 
 Source: nnethercote perf blog 2026-09-30 (`/2026/09/30/how-to-speed-up-the-rust-compiler-in-september-2026.html`) + rust-lang/rust `#160193` "Improve CFG traversal" (merged 2026-08-01T04:45:44Z, milestone 1.99.0, r=cjgillot, merge commit `cb9d1b0640549f1b041aae430dc413ce93f8c204`, head `4aadc68a8a49`). Quotes re-verified THIS pass (live reads: blog HTML + merged `compiler/rustc_mir_dataflow/src/framework/mod.rs` @ `cb9d1b06`).
 

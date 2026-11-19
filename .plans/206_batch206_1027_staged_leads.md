@@ -1,6 +1,6 @@
 # Plan 206 — Batch 206: the 10-07 staged leads (llama.cpp upstream #29442 + #28782)
 
-**Status:** ACTIVE
+**Status:** CLOSED-LANDED — the staged-leads batch era landed (the sweep adjudicated against the landing ledger; 0 open boxes, claim lint clean). Flipped 2026-11-19 (housekeeping).
 
 Source: `ggml-org/llama.cpp` upstream, both commits already graded at the 10-07 watch
 pass (riir-ai `.benchmarks/rematch/2026-10-07_watch.md`, subject-read first grades;

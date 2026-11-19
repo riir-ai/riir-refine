@@ -2,7 +2,7 @@
 
 **Proposal:** [001](../.proposals/001_multi_domain_modelless_code_healer.md)
 **Branch:** `develop` (per global rule — no feature branches)
-**Status:** in flight
+**Status:** COMPLETE — the multi-domain HealDomain framework is the shipped product (clippy_lints + rust_perf + rustc_errors + docker + dist + kernel_opt + sec + shader_perf + ane all ride it; the per-domain corpus/drafter/verify narrative is `.docs/`; the plan's open shape questions were answered by the landings themselves). Status flipped 2026-11-19 (housekeeping; the file's 0 open boxes + lint-clean claims verified).
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # Plan 022 — Batch 71: the oMLX external kernel_opt distill (Research 082 consumed)
 
-**Status:** Active — scheduled by the 2026-08-24 idle-loop housekeeping decision
+**Status:** CLOSED-LANDED — the omlx lane landed through the later batch era (the plan's slot was discharged; 0 open boxes, claims closed). Flipped 2026-11-19 (housekeeping).
 ("mine the next riir-clippy batch, researching online to unblock any blocked
 tasks" — the owner instruction resolves Research 082's "batch plan opens when
 the batch is scheduled" gate).

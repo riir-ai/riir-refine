@@ -1,6 +1,6 @@
 # Plan 301 — Batch 296: the cubecl #1922 vector-admission law (kernel_opt)
 
-**Status:** IN PROGRESS — claimed shikuwa-4090-b296-vector-admission, epoch 1793117000, expires 2026-10-29T05:00Z
+**Status:** CLOSED-LANDED — BATCH 296 LANDED 2026-10-27 (the landing ledger row: the claim discharged by the landing; kernel_opt 981→982, entries_gpu_132). **Lease closed:** shikuwa-4090-b296-vector-admission, epoch 1793117000, was expires 2026-10-29T05:00Z — discharged by the same landing. Flipped 2026-11-19 (housekeeping).
 
 **Source:** tracel-ai/cubecl PR #1922 "fix: check every outer stride before
 vectorizing tensor reads" (laggui), MERGED 2026-10-26T20:10:36Z, merge

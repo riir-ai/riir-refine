@@ -1,6 +1,6 @@
 # Plan 289 — Batch 285+ candidate: bbtree ordered-structure-internals rules → rust_perf
 
-**Status:** IN FLIGHT — staged behind the rust_perf slot gate (R134 first per the standing queue law) + behind live claims walk #17 / B279; claim below
+**Status:** CLOSED-LANDED — the remainder landed as Batch 305 (2026-10-29, per the landing ledger). Flipped 2026-11-19 (housekeeping; 0 open boxes). (R134 first per the standing queue law) + behind live claims walk #17 / B279; claim below
 
 Research: `.research/322_bbtree_cache_conscious_ordered_map.md` (source pin `XiangpengHao/bbtree @ 8adae97a0ed97e5c98fa2790312eb0aec9719846`, MIT OR Apache-2.0, v0.1.5). RENUMBERED 288→289 at birth (dual allocation with the burn-cubecl lane's `.plans/288_burn_cubek_*`, their commit `795f2e38` landed first — pushed numbers never reused; the local dual_allocation gate predated their push). B-number note: the burn lane's plan 288 owns the B284 authoring slot; this plan converts at the NEXT batch number after theirs (285+), still behind the rust_perf slot gate. Workspace manual track: 8 sibling issues filed 2026-10-25 citing the research note (those are NOT this batch's tasks — this plan is the CORPUS half only).
 
