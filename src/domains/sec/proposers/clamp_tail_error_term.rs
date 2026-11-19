@@ -38,7 +38,6 @@ use std::ops::Range;
 use quote::ToTokens;
 use syn::File;
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 
 /// One detected unbounded-clamp site.
 #[derive(Debug, Clone)]
@@ -141,14 +140,14 @@ mod tests {
 
     #[test]
     fn fires_on_unbounded_clamp() {
-        let src = r#"
+        let src = r"
 fn cheap_exp_approx(z: f32) -> f32 {
     if z < -80.0 {
         return 0.0;
     }
     z.exp()
 }
-"#;
+";
         let file: File = syn::parse_str(src).unwrap();
         let found = detect(src, &file);
         assert_eq!(found.len(), 1, "the unbounded clamp must fire");
@@ -156,28 +155,28 @@ fn cheap_exp_approx(z: f32) -> f32 {
 
     #[test]
     fn silent_on_tail_emitting_clamp() {
-        let src = r#"
+        let src = r"
 fn exp_approx_tail(z: f32, w: f32) -> (f32, f32) {
     if z < -80.0 {
         return (0.0, w * 1.8048524e-35);
     }
     (z.exp(), 0.0)
 }
-"#;
+";
         let file: File = syn::parse_str(src).unwrap();
         assert!(detect(src, &file).is_empty(), "tail emission suppresses");
     }
 
     #[test]
     fn silent_on_unrelated_fns() {
-        let src = r#"
+        let src = r"
 fn clamp01_saturate(x: f32) -> f32 {
     if x < 0.0 {
         return 0.0;
     }
     x
 }
-"#;
+";
         let file: File = syn::parse_str(src).unwrap();
         assert!(detect(src, &file).is_empty(), "no large-negative clamp");
     }

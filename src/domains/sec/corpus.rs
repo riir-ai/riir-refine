@@ -4472,7 +4472,7 @@ mod tests {
         // the detector: fires on the unbounded clamp, silent on the fixed
         let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
         assert!(
-            clamp_tail_error_term::detect(&rule.buggy_code, &buggy).len() > 0,
+            !clamp_tail_error_term::detect(&rule.buggy_code, &buggy).is_empty(),
             "batch-370: detector must fire on its own buggy fixture"
         );
         let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");

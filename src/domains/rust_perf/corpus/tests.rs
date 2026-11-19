@@ -12205,7 +12205,7 @@ fn batch369_rules_present_and_parse() {
             .unwrap_or_else(|| panic!("{id} missing"))
     };
     #[cfg(feature = "rust_perf_bench")]
-    for id in ids.iter() {
+    for id in &ids {
         assert!(
             get(id).bench_spec.is_none(),
             "batch-369 {id} landed NotBenchable — bench_spec must be None"
