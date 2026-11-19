@@ -1,6 +1,7 @@
 # Plan 389 — cargo-atlas transcription batch (nominal Batch 373: R1–R3 + faces; R4/R5 gate at authoring)
 
-**Status:** OPEN — staged plan-first 2026-11-19 (Research 423, delegated-owner Claude verdict AGREE round 1, session `d133eb3f-4d93-49f0-9083-b152add054c2`). Source: flowerornament/atlas @ `49d9ee41cca1cb8359fe28e2be13b430bba96569` (MIT OR Apache-2.0). Verdict: YES B− corpus, all candidates suggestion-only NotBenchable (Batch-136 annotation class); zero benchable GOAT — this is a decision-content batch, sec + rust_perf io. The cargo half awaits a free window; the claim row lands when the lane starts; the push is the arbiter.
+**Status:** CLAIMED 2026-11-19 (zed-m3-031cell@m3, the sprint!031-cell idle lane — Protocol H fresh-passed, boundary delta CLEAN, the seal-remake 26716c9e HISTORY backfill landed f1f3220c; the cargo gates ride an isolated CARGO_TARGET_DIR while the sibling seal-view check holds the shared tree). Staged plan-first 2026-11-19 (Research 423, delegated-owner Claude verdict AGREE round 1, session `d133eb3f-4d93-49f0-9083-b152add054c2`). Source: flowerornament/atlas @ `49d9ee41cca1cb8359fe28e2be13b430bba96569` (MIT OR Apache-2.0). Verdict: YES B− corpus, all candidates suggestion-only NotBenchable (Batch-136 annotation class); zero benchable GOAT — this is a decision-content batch, sec + rust_perf io. The cargo half awaits a free window; the claim row lands when the lane starts; the push is the arbiter.
+**Claimed:** zed-m3-031cell@m3, 1795105131, expires 2026-11-21T16:18:00+00:00
 
 ## Phase 0 — re-pin + re-verify
 
