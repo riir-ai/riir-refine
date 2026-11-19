@@ -1214,6 +1214,13 @@ required-features = ["clippy_lints"]
 name = "rho_real_stream"
 required-features = ["latent_retrieval"]
 
+# The ANE pre-gate G2 cell (plan 377 P2.1) imports draft::eval_fixtures_ane,
+# which only exists under latent_retrieval — without this row --all-targets
+# builds the example featureless and fails E0432.
+[[example]]
+name = "ane_pregate_g2"
+required-features = ["latent_retrieval"]
+
 # Issue 233 T3 — the calibrated-dispatch census: per (domain x span-shape)
 # Wilson-LCB floor verdicts over the oracle-labeled eval fixtures + the
 # narrowed-vs-full recall A/B. Report-only, exit 0; the re-run lane before

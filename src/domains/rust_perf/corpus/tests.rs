@@ -12146,10 +12146,10 @@ fn batch368_rules_present_and_parse() {
 
 /// Batch 369 — the sybil inference-optimisation-skill distill (Plan 384 /
 /// Research 417): the six measurement-honesty rules' presence + parse +
-/// category + context needles + the landed posture split (ALL NotBenchable —
-/// a silent bench_spec add would red here) + the `entries_84` header
-/// provenance pins + the three FACES' landing marks (entries_79 ×2 riders,
-/// entries_08 ×1). Fixtures b369 (26 arms) live standalone under fixtures/
+/// category + context needles + the landed posture split (ALL `NotBenchable` —
+/// a silent `bench_spec` add would red here) + the `entries_84` header
+/// provenance pins + the three FACES' landing marks (`entries_79` ×2 riders,
+/// `entries_08` ×1). Fixtures b369 (26 arms) live standalone under fixtures/
 /// and are compiled AND executed pre-entry (the b363/b365/b366/b367/b368
 /// discipline): `rustc --edition 2021 --test b369_fixtures.rs &&
 /// ./b369_fixtures`.
@@ -12164,7 +12164,7 @@ fn batch369_rules_present_and_parse() {
         "unique-prompts-defeat-prefix-cache-and-cold-warm-reported-separately",
         "work-removed-build-is-not-a-valid-lower-bound",
     ];
-    for id in ids.iter() {
+    for id in &ids {
         let e = corpus
             .entries
             .iter()
@@ -12414,7 +12414,7 @@ fn batch362_rules_present_and_parse() {
 /// > repeats; the timing medians are noise by design). SLOW (spawns a cargo
 /// > build + run per rule in a temp crate, twice for the determinism leg):
 /// > `cargo test -p riir-refine --lib --features rust_perf_bench batch365_goat
-/// -- --ignored --nocapture`. Record: `.benchmarks/155_batch365_goat_cells.md`.
+/// > -- --ignored --nocapture`. Record: `.benchmarks/155_batch365_goat_cells.md`.
 #[cfg(feature = "rust_perf_bench")]
 #[test]
 #[ignore = "slow: spawns cargo build+run per rule x2 (temp bench crates)"]
