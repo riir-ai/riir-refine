@@ -64,7 +64,7 @@ use katgpt_core::escalation_guard::{DEFAULT_WINDOW, RollingRateLatch, demote_onl
 /// mirror is cross-pinned by a test whenever both features are on, the
 /// same defense as the tpr kill-switch truth-table pin.
 pub const DOMAIN_LABELS: &[&str] = &[
-    "clippy", "perf", "kernel", "sec", "docker", "dist", "shader",
+    "clippy", "perf", "kernel", "sec", "docker", "dist", "shader", "ane",
 ];
 
 /// The manifest file (beside `active_set.json` — the same operator-owned
@@ -236,7 +236,7 @@ impl EscalationManifest {
             if !DOMAIN_LABELS.contains(&label.as_str()) {
                 return Err(format!(
                     "escalation domain {label:?}: not a DomainId label \
-                     (clippy/perf/kernel/sec/docker/dist/shader)"
+                     (clippy/perf/kernel/sec/docker/dist/shader/ane)"
                 ));
             }
             if !row.modelless_cap.is_finite() || !(0.0..=1.0).contains(&row.modelless_cap) {
