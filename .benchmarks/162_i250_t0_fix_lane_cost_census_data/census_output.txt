@@ -1,0 +1,55 @@
+{
+ "rows_total": 164,
+ "rigs": [
+  "4090",
+  "amo",
+  "bmo"
+ ],
+ "repos": 23,
+ "modes": {
+  "fix": 164
+ },
+ "fix_runs": 164,
+ "verify_ran": 71,
+ "checks_per_verify_run": {
+  "min": 2,
+  "median": 2,
+  "mean": 5.27,
+  "max": 206
+ },
+ "runs_with_checks_gt2": 16,
+ "extra_checks_total": 232,
+ "checks_total": 374,
+ "wasted_verify_runs": 8,
+ "wasted_rate_of_verify_runs": 0.1127,
+ "wasted_rate_of_fix_runs": 0.0488,
+ "checks_spent_on_wasted": 26,
+ "wasted_check_share": 0.0695,
+ "partial_revert_runs": 8,
+ "clean_runs": 55,
+ "reverted_edits": 306,
+ "written_edits": 572,
+ "reverted_edit_share": 0.535,
+ "skipped_checks_total": 0,
+ "declined_total": 10790,
+ "pool_size_recorded": false
+}
+   amo riir-dapps kept 0 rev 17 checks 4 strata_rev {'(whole file)': 1, 'unnecessary_get_then_check': 16}
+   amo riir-deployer kept 0 rev 4 checks 4 strata_rev {'(whole file)': 1, 'explicit_auto_deref': 3}
+   amo riir-infer kept 0 rev 1 checks 3 strata_rev {'(whole file)': 1}
+   amo riir-instinct kept 0 rev 1 checks 3 strata_rev {'(whole file)': 1}
+   amo riir-instinct kept 0 rev 1 checks 3 strata_rev {'(whole file)': 1}
+   amo riir-kat kept 0 rev 2 checks 3 strata_rev {'(whole file)': 1, 'redundant_closure': 1}
+   amo riir-kat kept 0 rev 2 checks 3 strata_rev {'(whole file)': 1, 'redundant_closure': 1}
+   amo riir-kat kept 0 rev 1 checks 3 strata_rev {'redundant_closure': 1}
+   amo riir-dapps kept 76 rev 22 checks 4 strata_rev {'(whole file)': 1, 'unnecessary_get_then_check': 21}
+   amo riir-neuron-db kept 6 rev 2 checks 9 strata_rev {'(whole file)': 2}
+   amo riir-neuron-db kept 25 rev 3 checks 5 strata_rev {'(whole file)': 1, 'explicit_auto_deref': 2}
+   amo riir-neuron-db kept 1 rev 2 checks 4 strata_rev {'explicit_auto_deref': 2}
+   amo riir-refine kept 162 rev 244 checks 206 strata_rev {'(whole file)': 207, 'assert_is_empty': 32, 'explicit_auto_deref': 1, 'map_unwrap_or': 1, 'redundant_closure': 2, 'unnecessary_get_then_check': 1}
+   amo riir-rethink kept 1 rev 1 checks 3 strata_rev {'unnecessary_get_then_check': 1}
+   4090 riir-neuron-db kept 24 rev 2 checks 4 strata_rev {'explicit_auto_deref': 2}
+   bmo riir-kat kept 2 rev 1 checks 3 strata_rev {'redundant_closure': 1}
+CEILING all: (374, 126, 0.6631)  excluding the 206-check outlier: (168, 124, 0.2619)
+rule revert rates (written>=5): [('assert_is_empty', 30, 32, 1.067), ('unnecessary_get_then_check', 48, 39, 0.812), ('explicit_auto_deref', 70, 10, 0.143), ('doc_markdown', 69, 0, 0.0), ('double_parens', 6, 0, 0.0), ('shrink-to-fit-after-build', 35, 0, 0.0), ('vec-with-capacity', 26, 0, 0.0), ('manual_is_multiple_of', 13, 0, 0.0), ('doc_lazy_continuation', 55, 0, 0.0), ('identity_op', 30, 0, 0.0), ('uninlined_format_args', 36, 0, 0.0), ('unreadable_literal', 8, 0, 0.0)]
+verify posture off runs: 29
