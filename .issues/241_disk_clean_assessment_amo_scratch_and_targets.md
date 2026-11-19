@@ -1,7 +1,9 @@
 # Issue 241: disk-clean assessment — amo scratch + target survey (2026-11-17)
 
 **Status:** Open — housekeeping assessment (list-first, deletions per the disk-clean contract).
-**Claimed:** zed-c0c35a68@amo, 1794946800, expires 2026-11-19T02:20:00Z
+**Lease closed:** zed-c0c35a68@amo, 1794946800, was expires 2026-11-19T02:20:00Z (expired 2026-11-19T02:20Z, no landing - folded 2026-11-19 by the re-claim below; scope passed through unchanged)
+**Claimed:** zed-6addfb44@amo, 1795060553, expires 2026-11-21T04:40:00+00:00
+(claim scope: finish the list-first assessment - fresh census incl. the scratch/ symlink-trap discipline + per-item verdicts on the standing table; SAFE-class deletions per the disk-clean contract autonomous and measured, everything else stays listed for approval)
 
 ## Trigger
 
