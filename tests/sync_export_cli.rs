@@ -54,7 +54,11 @@ fn refine(dir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .current_dir(dir)
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", &acct)
-        .envs(hermetic_home::vars(&acct))
+        // HOME is its OWN scratch, never the account dir: an every-feature
+        // build writes `$HOME/.cache` (not an account artifact), which read
+        // as "export created an account" when HOME aliased `acct`
+        // (Issue 249 B6). Still hermetic — no box SSH key is reachable.
+        .envs(hermetic_home::vars(dir.join("home")))
         .env("RIIR_AUTH_ACCOUNT_DIR", &acct)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         .env("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:1")

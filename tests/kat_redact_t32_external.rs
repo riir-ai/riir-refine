@@ -392,10 +392,12 @@ fn t32_measured_evasion_set_is_pinned() {
     // (hexish made unconditional), v3 3/9, v4 3/9, v5 3/9 (unchanged since
     // v2 — v3's gain is on the ACCIDENTAL own-repo class this suite does
     // not measure; v4/v5's gains are on provider formats this suite does
-    // not wrap).
+    // not wrap). v6 3/9 — re-measured 2026-11-19 (Issue 249 B6): the
+    // penthera vocabulary families are provider rows too, the AWS-wrapped
+    // evasion set is byte-identical.
     assert_eq!(
-        REDACT_VERSION, 5,
-        "the evasion set below was measured at REDACT_VERSION 5 — re-measure \
+        REDACT_VERSION, 6,
+        "the evasion set below was measured at REDACT_VERSION 6 — re-measure \
          and update this pin as part of the next version bump"
     );
     assert_eq!(

@@ -164,21 +164,49 @@ fn binary_help_surface_is_covered() {
     // `every_public_verb_is_rendered` (the source scan is cfg-independent).
     //
     // Issue 246 gated usage_text()'s verb rows to the features that can run
-    // them, so this binary's --help-all prints NO ops/money verbs — the
-    // binary's help surface is a strict subset of the public skill with NO
-    // exemption list. (The former OPS_EXEMPT existed only because
+    // them, so a build WITHOUT kat_service prints NO ops/money verbs and its
+    // help surface is a strict subset of the public skill; a kat_service
+    // build prints the ops verbs it can run, exempted below by the
+    // generator's own table — never a hand list. (The former OPS_EXEMPT existed only because
     // usage_text named the ops verbs unconditionally; it deleted naturally
     // with the gate.) The ops verbs' public-render exclusion is structural
     // (the generator's PUBLIC_OMITTED_CATEGORIES) and their two-sided CLI
     // coverage is the generator's own adjudication, which --check runs in
     // the other tests of this file.
+    //
+    // A feature-rich posture (Layer 5c: every feature minus the net pins)
+    // builds kat_service in, so --help legitimately prints the ops verbs it
+    // can run (`account`, …). Those are exempt by the generator's OWN
+    // omitted-category table (Issue 249 B5) — derived, never hand-listed —
+    // and the floor below keeps the exemption from swallowing the gate.
+    let (ok, out) = run_generator(&["--dump-omitted-verbs"]);
+    assert!(ok, "gen_skill_md --dump-omitted-verbs failed:\n{out}");
+    let omitted: Vec<&str> = out
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert!(
+        omitted.contains(&"account"),
+        "omitted-verb derivation regressed: `account` is not in the generator's omitted set"
+    );
+    let mut checked = 0usize;
     for verb in &verbs {
         let spelled = format!("cargo refine {verb}");
+        if SKILL.contains(&spelled) {
+            checked += 1;
+            continue;
+        }
         assert!(
-            SKILL.contains(&spelled),
-            "the built binary's help prints `{spelled}` — the skill does not render it"
+            omitted.contains(&verb.as_str()),
+            "the built binary's help prints `{spelled}` — the skill does not render it \
+             and the generator does not classify it as a deliberately omitted (ops) verb"
         );
     }
+    assert!(
+        checked >= 10,
+        "rendered-verb floor: only {checked} help verbs matched the skill"
+    );
 }
 
 #[test]

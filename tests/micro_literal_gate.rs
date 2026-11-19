@@ -348,6 +348,12 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
         "src/domains/kernel_opt/corpus/tests.rs",
         "kernel-corpus probe fixtures (f32 magnitudes incl. 1e6), not money",
     ),
+    (
+        "/corpus/fixtures/",
+        "standalone corpus batch fixtures (rustc --test files: kernel_opt b362's \\
+         t ~ 1e6 f32 slab depths, rust_perf b361/b363 bench sizes and \\
+         instruction counts), not money",
+    ),
 ];
 
 fn allowed_for(path: &str) -> Option<&'static str> {

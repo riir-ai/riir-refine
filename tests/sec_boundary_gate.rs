@@ -64,8 +64,88 @@ fn cargo_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
+/// One probe run: the diagnostics of every fixture that COMPILED, plus the
+/// fixtures dropped because they do not compile standalone (Issue 249 B6).
+struct Probe {
+    diags: Vec<Diag>,
+    compiled: Vec<usize>,
+    /// `(fixture index, first error line)` — named loud, never silent.
+    dropped: Vec<(usize, String)>,
+}
+
+/// Fixtures that must COMPILE in the probe — the pinned table's rows. A
+/// dropped one is a red, never a skip.
+const MUST_COMPILE: &[&str] = &["drop-impl-no-panic"];
+
+/// Fixtures that do NOT compile standalone in the probe, pinned by
+/// MEMBERSHIP with the reason (measured 2026-11-19, Issue 249 B6: 63 of 77
+/// compile). Both directions red: a NEW non-compiling fixture must be
+/// classified here (or made self-contained), and a pinned row that starts
+/// compiling must leave — the boundary verdict ranges over the compiled set.
+const EXPECTED_DROPPED: &[(&str, &str)] = &[
+    (
+        "sql-identifier-interpolation-unallowlisted",
+        "names sqlx — too heavy for the probe",
+    ),
+    (
+        "sql-query-value-interpolation-unbound",
+        "names sqlx — too heavy for the probe",
+    ),
+    (
+        "fp16-subnormal-product-power-of-two-rescale",
+        "uses unstable f16",
+    ),
+    ("position-keyed-additive-cache-mask", "uses unstable f16"),
+    ("wide-reduction-precision-split", "uses unstable f16"),
+    (
+        "decay-gate-precision-collapse-low-precision",
+        "snippet: names an undefined Bf16",
+    ),
+    (
+        "fused-activation-approximation-expansion",
+        "snippet: names an undefined sigmoid",
+    ),
+    (
+        "stale-proposal-merges-against-shown-base",
+        "snippet: names an undefined WorkingSet",
+    ),
+    (
+        "user-impl-derived-property-validate",
+        "snippet: names an undefined EncodedPattern",
+    ),
+    (
+        "agent-code-static-boundary-diagnostics-never-gate",
+        "snippet: names an undefined scan_surfaces",
+    ),
+    (
+        "server-connection-without-read-timeout",
+        "snippet: names an undefined handle_connection",
+    ),
+    (
+        "conditional-reuseaddr-after-liveness-probe",
+        "socket2 API shape differs from the probe's 0.5",
+    ),
+    (
+        "ecb-block-mode-selection",
+        "aes/ecb padding API needs the block-padding feature",
+    ),
+    (
+        "execution-artifact-trust-ladder-before-deserialize",
+        "snippet: names an undefined Error conversion",
+    ),
+];
+
 /// Build the probe crate + run clippy with the banned list enabled.
-fn run_clippy() -> Option<Vec<Diag>> {
+///
+/// Every sec fixture is a module of ONE probe crate, so a single
+/// non-compiling fixture (a snippet naming an undefined helper, or a crate
+/// the probe does not declare) used to fail the WHOLE build — every
+/// diagnostic vanished and the boundary test went vacuously green (Issue 249
+/// B6). The probe now drops each fixture whose module carries a compile
+/// error and re-runs until the build is clean; dropped fixtures are named,
+/// [`MUST_COMPILE`] rows must survive, and the dropped set is pinned by
+/// membership in [`EXPECTED_DROPPED`].
+fn run_clippy() -> Option<Probe> {
     if !cargo_available() {
         eprintln!("SKIP: cargo not on PATH — the boundary gate needs the live toolchain");
         return None;
@@ -110,16 +190,94 @@ fn run_clippy() -> Option<Vec<Diag>> {
          \naxum = \"0.8\"\ntokio = { version = \"1\", features = [\"fs\"] }\
          \nserde = { version = \"1\", features = [\"derive\"] }\
          \ntower-http = { version = \"0.7\", features = [\"cors\"] }\
-         \njsonwebtoken = \"9\"\ncookie = \"0.18\"\n",
+         \njsonwebtoken = \"9\"\ncookie = \"0.18\"\
+         \nrand = \"0.8\"\nsocket2 = \"0.5\"\naes = \"0.8\"\necb = \"0.1\"\
+         \ned25519-dalek = \"2\"\nfancy-regex = \"0.13\"\n",
     )
     .expect("write toml");
-    let mut lib = String::new();
-    for (i, rule) in SecDomain::build_corpus().iter().enumerate() {
-        lib.push_str(&format!("#[path = \"r{i}.rs\"]\npub mod r{i};\n"));
+    let rules = SecDomain::build_corpus();
+    for (i, rule) in rules.iter().enumerate() {
         std::fs::write(src.join(format!("r{i}.rs")), &rule.buggy_code).expect("write fixture");
     }
-    std::fs::write(src.join("lib.rs"), lib).expect("write lib");
+    let mut included: Vec<usize> = (0..rules.len()).collect();
+    let mut dropped: Vec<(usize, String)> = Vec::new();
+    // Each pass drops at least one fixture or ends; deps are built once.
+    for _pass in 0..8 {
+        let lib: String = included
+            .iter()
+            .map(|i| format!("#[path = \"r{i}.rs\"]\npub mod r{i};\n"))
+            .collect();
+        std::fs::write(src.join("lib.rs"), lib).expect("write lib");
+        let (diags, errors) = clippy_pass(&dir);
+        if errors.is_empty() {
+            let _ = std::fs::remove_dir_all(&dir);
+            for (i, why) in &dropped {
+                eprintln!("dropped fixture r{i} ({}): {why}", rules[*i].rule_id);
+            }
+            return Some(Probe {
+                diags,
+                compiled: included,
+                dropped,
+            });
+        }
+        let mut progressed = false;
+        for (file, first) in errors {
+            let Some(idx) = fixture_index(&file) else {
+                panic!("probe build error outside any fixture module ({file}): {first}");
+            };
+            if let Some(pos) = included.iter().position(|&i| i == idx) {
+                included.remove(pos);
+                dropped.push((idx, first));
+                progressed = true;
+            }
+        }
+        assert!(
+            progressed,
+            "probe build errors did not shrink the fixture set"
+        );
+    }
+    panic!("probe did not reach a clean build in 8 passes");
+}
 
+/// The file an error belongs to: the first span (following macro
+/// expansion chains) inside a fixture module, else the first span's file —
+/// an error in a registry crate is attributed to the fixture that drove it.
+fn error_fixture_file(msg: &serde_json::Value) -> String {
+    fn walk(span: &serde_json::Value) -> Option<String> {
+        let file = span.get("file_name").and_then(|f| f.as_str())?;
+        if fixture_index(file).is_some() {
+            return Some(file.to_string());
+        }
+        walk(span.get("expansion")?.get("span")?)
+    }
+    let spans = msg.get("spans").and_then(|sp| sp.as_array());
+    spans
+        .into_iter()
+        .flatten()
+        .find_map(walk)
+        .or_else(|| {
+            spans?
+                .first()?
+                .get("file_name")?
+                .as_str()
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "?".to_string())
+}
+
+/// `src/rN.rs` (either separator) → `N`.
+fn fixture_index(file: &str) -> Option<usize> {
+    file.replace('\\', "/")
+        .strip_prefix("src/r")?
+        .strip_suffix(".rs")?
+        .parse()
+        .ok()
+}
+
+/// One `cargo clippy` over the probe: (lint diagnostics, per-file first
+/// compile error). Error-level messages are collected, never dropped — a
+/// silently dropped build failure is the vacuous-green class.
+fn clippy_pass(dir: &std::path::Path) -> (Vec<Diag>, Vec<(String, String)>) {
     let mut cmd = Command::new("cargo");
     cmd.arg("clippy")
         .arg("--manifest-path")
@@ -134,6 +292,7 @@ fn run_clippy() -> Option<Vec<Diag>> {
     let stdout = String::from_utf8_lossy(&out.stdout);
 
     let mut diags = Vec::new();
+    let mut errors: Vec<(String, String)> = Vec::new();
     for line in stdout.lines() {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
@@ -149,10 +308,15 @@ fn run_clippy() -> Option<Vec<Diag>> {
         // into a vacuous green (the gate's own green-zero blindness). Witness
         // the failure loud instead.
         if msg.get("level").and_then(|l| l.as_str()) == Some("error") {
-            eprintln!(
-                "PROBE BUILD ERROR: {}",
-                msg.get("rendered").and_then(|r| r.as_str()).unwrap_or("?")
-            );
+            let file = error_fixture_file(msg);
+            let first = msg
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("?")
+                .to_string();
+            if !errors.iter().any(|(f, _)| *f == file) {
+                errors.push((file, first));
+            }
             continue;
         }
         let Some(code) = msg
@@ -186,8 +350,7 @@ fn run_clippy() -> Option<Vec<Diag>> {
             file,
         });
     }
-    let _ = std::fs::remove_dir_all(&dir);
-    Some(diags)
+    (diags, errors)
 }
 
 /// The boundary holds: no banned lint fires with a MachineApplicable fix on
@@ -195,9 +358,34 @@ fn run_clippy() -> Option<Vec<Diag>> {
 /// fixture is the pinned, allowed overlap (our fix is additive there).
 #[test]
 fn no_banned_lint_fires_with_an_equivalent_fix() {
-    let Some(diags) = run_clippy() else { return };
+    let Some(probe) = run_clippy() else { return };
     let rules = SecDomain::build_corpus();
-    for d in &diags {
+    let mut got: Vec<&str> = probe
+        .dropped
+        .iter()
+        .map(|(i, _)| rules[*i].rule_id.as_str())
+        .collect();
+    got.sort_unstable();
+    let mut want: Vec<&str> = EXPECTED_DROPPED.iter().map(|(r, _)| *r).collect();
+    want.sort_unstable();
+    assert_eq!(
+        got, want,
+        "the probe's non-compiling fixture set moved (pinned by membership in \
+         EXPECTED_DROPPED) — classify a new row or remove a fixed one; \
+         first errors: {:?}",
+        probe.dropped
+    );
+    for name in MUST_COMPILE {
+        let idx = rules
+            .iter()
+            .position(|r| r.rule_id == *name)
+            .unwrap_or_else(|| panic!("{name} missing from the sec corpus"));
+        assert!(
+            probe.compiled.contains(&idx),
+            "{name} no longer compiles in the probe — the pinned table cannot be measured"
+        );
+    }
+    for d in &probe.diags {
         let is_banned = BANNED.iter().any(|b| {
             b.strip_prefix("clippy::") == Some(d.code.strip_prefix("clippy::").unwrap_or(&d.code))
                 || *b == d.code
@@ -232,7 +420,8 @@ fn no_banned_lint_fires_with_an_equivalent_fix() {
 /// documents the change loudly.
 #[test]
 fn unwrap_used_fires_without_fix_on_drop_fixture() {
-    let Some(diags) = run_clippy() else { return };
+    let Some(probe) = run_clippy() else { return };
+    let diags = probe.diags;
     let rules = SecDomain::build_corpus();
     let drop_idx = rules
         .iter()

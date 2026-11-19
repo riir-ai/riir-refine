@@ -12412,7 +12412,8 @@ fn print_v8_shaped_table(
 
 /// The corpus domain table — the Rust mirror of `gen_dashboard.py`'s
 /// `CORPUS_DOMAINS` (Issue 050 T2). Paths are repo-relative; a directory
-/// counts its DIRECT `*.rs` children except `mod.rs`, a single file counts
+/// counts its DIRECT `entries*.rs` children (the entry files — gate and test
+/// modules beside them are plumbing, Issue 249 B2), a single file counts
 /// itself.
 // Proposal 009 §F2 item (ii): the authoritative count for a COMPILED domain is
 // `build_*_seed_corpus().len()` at runtime — a text needle cannot see rules
@@ -12534,7 +12535,11 @@ fn count_corpus_domain(repo: &Path, rel: &str, needle: &str) -> u32 {
             let Some(name) = p.file_name().and_then(|s| s.to_str()) else {
                 continue;
             };
-            if name == "mod.rs" || !name.ends_with(".rs") {
+            // Entries live ONLY in `entries_*.rs` (true across both directory
+            // domains' whole history); `goat_g*.rs`/`tests.rs` carry the same
+            // needle as gate plumbing (Issue 249 B2: kernel_opt 1109 walked
+            // vs 1093 runtime — exactly goat_g1's 7 + goat_g2's 9).
+            if !name.starts_with("entries") || !name.ends_with(".rs") {
                 continue;
             }
             if let Ok(t) = std::fs::read_to_string(&p) {

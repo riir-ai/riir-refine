@@ -174,8 +174,14 @@ fn suggest_run_discloses_findings_quiet_when_clean() {
     fs::write(dir.join("config.rs"), FIXTURE).expect("write");
     let (code, out) = refine(&dir, &["--suggest", "."]);
     assert_eq!(code, Some(0), "{out}");
-    assert!(out.contains("secrets: "), "{out}");
-    assert!(out.contains("[sec] secret-shaped literal"), "{out}");
+    // The owner's UX law (2026-11-04): ONE disclosure line, locations ride
+    // the dedicated report — the former `secrets: ` header + per-finding
+    // `[sec]` lines are gone by design (Issue 249 B6 re-pin).
+    assert!(
+        out.contains("secret-shaped literal(s) in 1 file"),
+        "the one-line disclosure is missing: {out}"
+    );
+    assert!(out.contains("`cargo refine scan`"), "{out}");
     assert!(!out.contains(AWS_KEY), "warn leaked the value: {out}");
     // The warn lines are shareable too — no unkeyed fingerprint (verdict R2).
     let fp = blake3::hash(AWS_KEY.as_bytes()).to_hex()[..12].to_string();
@@ -188,7 +194,7 @@ fn suggest_run_discloses_findings_quiet_when_clean() {
     let (code, out) = refine(&dir, &["--suggest", "."]);
     assert_eq!(code, Some(0), "{out}");
     assert!(
-        !out.contains("secrets:"),
+        !out.contains("secrets:") && !out.contains("secret-shaped literal"),
         "clean run printed a secrets line: {out}"
     );
     fs::remove_dir_all(&dir).ok();

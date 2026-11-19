@@ -361,9 +361,10 @@ def _count_working_tree(path: str, needle: str) -> int:
         return p.read_text(encoding="utf-8").count(needle) if p.exists() else 0
     n = 0
     if p.is_dir():
-        for f in sorted(p.glob("*.rs")):
-            if f.name != "mod.rs":
-                n += f.read_text(encoding="utf-8").count(needle)
+        # Entries live ONLY in entries_*.rs — the Rust mirror's rule
+        # (heal.rs count_corpus_domain, Issue 249 B2).
+        for f in sorted(p.glob("entries*.rs")):
+            n += f.read_text(encoding="utf-8").count(needle)
     return n
 
 
@@ -384,7 +385,8 @@ def _count_in_rev(rev: str, path: str, needle: str) -> int:
                         capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
     n = 0
     for f in ls.stdout.splitlines():
-        if f.endswith(".rs") and not f.endswith("mod.rs"):
+        rel = f[len(path.rstrip("/")) + 1:] if f.startswith(path.rstrip("/") + "/") else f
+        if "/" not in rel and rel.startswith("entries") and rel.endswith(".rs"):
             r = subprocess.run(["git", "show", f"{rev}:{f}"],
                                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
             if r.returncode == 0:

@@ -246,8 +246,12 @@ fn replay_is_deterministic() {
                 .record("rule_p", "span_y trigger", "fix", false, false, "run-1")
                 .unwrap();
         }
-        // …and rule_p faces the mighty span_x (built from rule_q's losses):
-        for _ in 0..8 {
+        // …and rule_p faces the mighty span_x (built from rule_q's losses).
+        // 30, the G1 arm's strength: 8 sufficed under the undamped Elo K,
+        // but the default-on evidence-damped K (`elo_k_eff`, issue 190)
+        // leaves 8 losses too weak a gap and the poisoned keep CERTIFIED
+        // (Issue 249 B6). Passes in both K postures.
+        for _ in 0..30 {
             store
                 .record("rule_q", "span_x trigger", "fix", false, false, "run-1")
                 .unwrap();

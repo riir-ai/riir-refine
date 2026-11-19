@@ -81,16 +81,17 @@ use crate::domain::HealEntry;
 pub const THETA: f32 = 0.0;
 
 /// Haircut steepness `κ`, pinned so the worst (least-negative) in-distribution
-/// corpus fixture — `redundant_static_lifetimes`, the one-liner at D = −2.08
-/// (re-measured 2026-10-26, issue 172; it was −7.6 at Bench 040 and drifted
-/// as the vocab grew) — saturates f32 `sigmoid` to EXACTLY `1.0` (argument
-/// 8.5·2.08 = 17.7 ≥ 16.6), making the in-distribution
+/// corpus fixture — `redundant_static_lifetimes`, the one-liner at D = −1.61
+/// (re-measured 2026-11-19 at the Layer 5c posture, issue 249 B4; −2.08 on
+/// 2026-10-26, −7.6 at Bench 040 — it drifts as the vocab grows) — saturates
+/// f32 `sigmoid` to EXACTLY `1.0` (argument 12·1.61 = 19.3 ≥ 16.6, headroom
+/// to D = −1.38), making the in-distribution
 /// heal path bit-identical with the model installed vs not. With `θ = 0` the
 /// haircut band is `D ≤ 0` (factor ∈ [0.5, 1.0] — weak-evidence inputs get
 /// discounted toward the neutral point, strong in-scope inputs untouched).
 /// If the corpus grows a shorter fixture, the separation-pinning test fails
 /// loudly and this constant moves.
-pub const KAPPA: f32 = 8.5;
+pub const KAPPA: f32 = 12.0;
 
 /// The canonical out-of-scope corpus (table-building half).
 ///

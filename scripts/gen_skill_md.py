@@ -645,6 +645,18 @@ def main() -> None:
         ):
             print(v)
         return
+    if "--dump-omitted-verbs" in args:
+        # The complement: verbs the public skill deliberately omits (the
+        # PUBLIC_OMITTED_CATEGORIES rows). A feature-rich binary (e.g. a
+        # kat_service build) legitimately prints these in its --help; the
+        # binary-help gate exempts exactly this set, derived here — never a
+        # hand list in the test (Issue 249 B5).
+        for v in sorted(
+            v for v, (cat, _) in CATEGORIES.items()
+            if cat in PUBLIC_OMITTED_CATEGORIES
+        ):
+            print(v)
+        return
     version = extract_version((CARGO_TOML).read_text(encoding="utf-8"))
     stamp_src = BUILD_STAMP_RS.read_text(encoding="utf-8")
     feats = extract_release_features(stamp_src)

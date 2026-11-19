@@ -380,17 +380,35 @@ mod l4_savings {
 
     #[test]
     fn without_the_gate_the_same_input_burns_the_l4_call() {
-        // The A/B complement: un-gated, the same miss consults L4 (miss #1 —
-        // unknown rule, no candidates). This is the measured saving.
+        // The A/B complement: un-gated, the same garbage input COSTS
+        // something the gate removes. Which cost depends on the corpus head
+        // (feature posture), not on the gate (Issue 249 B6): the weightless
+        // drafter templates `candidates[0]`, and when that fix shares an
+        // identifier with the probe (`std` — the every-feature head is the
+        // approx_constant GOLDEN_RATIO fix) the identity guard passes it, so
+        // the garbage is SERVED a wrong fix (defend-wrong) instead of
+        // reaching miss #1 and burning L4. Exactly one of the two must hold;
+        // neither = the A/B measures nothing.
         let corpus = build_seed_corpus();
         let probe = Probe::new();
         let mut p = pipeline().with_l4_fallback(Box::new(probe.clone()));
-        let _ = p.heal(
+        let served = p.heal(
             "totally_unknown_lint_xyz",
             HELD_OUT_OOS_PROBES[0],
             &corpus.entries,
         );
-        assert_eq!(probe.count(), 1, "un-gated, the garbage input reaches L4");
+        let burned_l4 = probe.count() == 1;
+        let served_wrong = served
+            .as_ref()
+            .is_some_and(|r| r.source != riir_refine::HealSource::L4Lora);
+        println!("[l4_savings] un-gated: burned_l4={burned_l4} served_wrong={served_wrong}");
+        assert!(
+            burned_l4 != served_wrong,
+            "un-gated, the garbage input must cost exactly one of: the L4 call \
+             (burned_l4={burned_l4}, calls={}) or a served wrong fix \
+             (served_wrong={served_wrong})",
+            probe.count()
+        );
     }
 }
 

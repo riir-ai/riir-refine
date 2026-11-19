@@ -183,7 +183,12 @@ pub fn watch_peer(status: Result<u16, u16>) {
     ),
     (
         "question_mark",
-        r#"pub fn find_spawn(seed: Option<u32>) -> Option<u32> {
+        // The `# Panics` section keeps the pedantic `missing_panics_doc`
+        // (corpus vocabulary since batch 346) off this span — one labeled
+        // lint per span; the code tokens are unchanged (Issue 249 B3).
+        r#"/// # Panics
+/// Never — the `is_none` early return guards the unwrap.
+pub fn find_spawn(seed: Option<u32>) -> Option<u32> {
     if seed.is_none() {
         return None;
     }
@@ -246,7 +251,11 @@ pub fn watch_peer(status: Result<u16, u16>) {
     ),
     (
         "needless_match",
-        r#"pub fn relay(outcome: Result<u8, u8>) -> Result<u8, u8> {
+        // `# Errors` keeps the pedantic `missing_errors_doc` (corpus
+        // vocabulary since batch 346) off this span (Issue 249 B3).
+        r#"/// # Errors
+/// Returns the input's own error unchanged.
+pub fn relay(outcome: Result<u8, u8>) -> Result<u8, u8> {
     match outcome {
         Ok(v) => Ok(v),
         Err(e) => Err(e),

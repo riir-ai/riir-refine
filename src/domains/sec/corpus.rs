@@ -2095,9 +2095,9 @@ Batch 350 / Plan 356 / Research 388 (0sec-labs/0 @ `f7020eb2`, MIT OR Apache-2.0
 — cited as class provenance; the fixture is an original synthesis, \
 standalone-compiled AND executed before entry)."
                 .to_string(),
-            buggy_code: "use rand::rngs::StdRng;\nuse rand::{Rng, SeedableRng};\n\n/// Session tokens minted from a seeded PRNG: the seed (unix hours + the\n/// user id) is known to anyone who can read a clock, so every token is\n/// reproducible offline.\npub fn issue_session_token(user_id: u64, now_unix_hours: u64) -> String {\n    let mut rng = StdRng::seed_from_u64(now_unix_hours ^ user_id);\n    let raw: [u8; 16] = rng.gen();\n    raw.iter().map(|b| format!(\"{b:02x\")).collect()\n}\n"
+            buggy_code: "use rand::rngs::StdRng;\nuse rand::{Rng, SeedableRng};\n\n/// Session tokens minted from a seeded PRNG: the seed (unix hours + the\n/// user id) is known to anyone who can read a clock, so every token is\n/// reproducible offline.\npub fn issue_session_token(user_id: u64, now_unix_hours: u64) -> String {\n    let mut rng = StdRng::seed_from_u64(now_unix_hours ^ user_id);\n    let raw: [u8; 16] = rng.gen();\n    raw.iter().map(|b| format!(\"{b:02x}\")).collect()\n}\n"
                 .to_string(),
-            fixed_code: "use rand::rngs::OsRng;\nuse rand::RngCore;\n\n/// Session tokens minted from the OS entropy pool: 128 unpredictable\n/// bits per token, no seed to learn.\npub fn issue_session_token() -> String {\n    let mut raw = [0_u8; 16];\n    OsRng.fill_bytes(&mut raw);\n    raw.iter().map(|b| format!(\"{b:02x\")).collect()\n}\n"
+            fixed_code: "use rand::rngs::OsRng;\nuse rand::RngCore;\n\n/// Session tokens minted from the OS entropy pool: 128 unpredictable\n/// bits per token, no seed to learn.\npub fn issue_session_token() -> String {\n    let mut raw = [0_u8; 16];\n    OsRng.fill_bytes(&mut raw);\n    raw.iter().map(|b| format!(\"{b:02x}\")).collect()\n}\n"
                 .to_string(),
             family: SecFamily::CryptoHygiene,
         },
