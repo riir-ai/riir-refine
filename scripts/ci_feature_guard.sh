@@ -147,7 +147,7 @@ rm -f "$GATELOG"
 echo "✓ retrieval regression gate ran + passed at the latent_retrieval posture"
 
 echo
-echo "=== Layer 5c: every integration test + bin (all-features, no allowlist) ==="
+echo "=== Layer 5c: every integration test + bin (all features minus the exclusive net pins, no allowlist) ==="
 # This layer used to name each test binary explicitly. That allowlist was an
 # omission-SILENT design, and it had already rotted: 39 of 51 test binaries
 # sat outside it, including `kat_redact_t32_external` (the Proposal 005 T3.2
@@ -221,10 +221,32 @@ trap guard_cleanup EXIT
 # target it died on — turning "hangs forever, cause unknown" into a diagnosis.
 # The budget is deliberately generous: it is a wedge detector, not a perf gate.
 LAYER_5C_TIMEOUT_SECS="${LAYER_5C_TIMEOUT_SECS:-3600}"
+# Issue 249 A1: `--all-features` enables the two MUTUALLY EXCLUSIVE net pins
+# (net-mainnet + net-devnet) — kat_net_pin's explicit "conflict" posture, in
+# which every hosted service URL refuses — so every networked CLI test
+# (kat_join_cli, build_stamp_cli, frame_time_report_cli, ...) failed here BY
+# CONSTRUCTION. Layer 5c therefore runs every feature EXCEPT the net pins:
+# the shipped "multi (default mainnet)" posture. Probed 2026-11-19: minus BOTH
+# clears all three CLI binaries; minus net-devnet alone still fails 4
+# devnet-switch join tests. Each pin alone is compiled by Layer 1 (single-
+# feature combos); the conflict posture compiles under Layer 4. The set is
+# DERIVED from `cargo metadata`, never hand-listed, so a new feature joins.
+LAYER_5C_EXCLUDE="${LAYER_5C_EXCLUDE:-net-mainnet net-devnet}"
+LAYER_5C_FEATURES="$(cargo metadata --no-deps --format-version 1 | python3 -c '
+import json, sys
+drop = set(sys.argv[1].split())
+pkg = [p for p in json.load(sys.stdin)["packages"] if p["name"] == "riir-refine"][0]
+missing = drop - set(pkg["features"])
+if missing:
+    sys.exit("Layer 5c: excluded feature(s) no longer exist: " + " ".join(sorted(missing)))
+print(",".join(sorted(f for f in pkg["features"] if f not in drop)))
+' "$LAYER_5C_EXCLUDE")"
+[ -n "$LAYER_5C_FEATURES" ] || { echo "✗ Layer 5c: could not derive the feature set"; exit 1; }
+echo "  Layer 5c posture: all features minus [$LAYER_5C_EXCLUDE] ($(printf '%s' "$LAYER_5C_FEATURES" | tr ',' '\n' | wc -l | tr -d ' ') features)"
 _TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
 if [ -n "$_TIMEOUT_BIN" ]; then
     set +e
-    "$_TIMEOUT_BIN" "$LAYER_5C_TIMEOUT_SECS" cargo test --all-features --tests 2>&1 | tee "$RUNLOG"
+    "$_TIMEOUT_BIN" "$LAYER_5C_TIMEOUT_SECS" cargo test --features "$LAYER_5C_FEATURES" --tests 2>&1 | tee "$RUNLOG"
     _5C_RC=${PIPESTATUS[0]}
     set -e
     # Per-test wall-clock probe: a single test burning a large share of the
@@ -265,7 +287,7 @@ else
     # bound that is not being enforced.
     echo "  WARN: no timeout(1)/gtimeout(1) — Layer 5c runs UNBOUNDED;"
     echo "        a wedged test binary will hang this guard with no diagnosis."
-    cargo test --all-features --tests 2>&1 | tee "$RUNLOG"
+    cargo test --features "$LAYER_5C_FEATURES" --tests 2>&1 | tee "$RUNLOG"
 fi
 echo "✓ all integration tests + bin unit tests pass"
 
