@@ -25,6 +25,8 @@
 
 use std::collections::HashMap;
 
+use serde::Serialize;
+
 use crate::l4_fallback::L4Fallback as _;
 use crate::pruner::RustAnalyzerPruner;
 
@@ -243,6 +245,25 @@ impl PrefixNode {
     }
 }
 
+/// One L2 parse-gate rejection, recorded for diagnosis (issue 695's
+/// parse-robustness rung: the chunk-1 campaign's 246/248 `parse` outcomes
+/// carried NO reason — the gate's syn diagnostics were discarded at the
+/// call site, so the failure cause was unanswerable from the run record).
+/// Bounded per tree: the first [`SpanTree::PARSE_FAILURE_CAP`] rejections
+/// are kept verbatim, later ones count only.
+#[derive(Debug, Clone, Serialize)]
+pub struct ParseFailure {
+    pub span_id: String,
+    pub depth: u32,
+    pub rollout_id: u64,
+    /// The rejected edit's byte length (truncation vs drift reads here).
+    pub edit_bytes: usize,
+    /// First line of the rejected edit, single-line, ≤ 160 bytes.
+    pub edit_head: String,
+    /// The L2 gate's own diagnostic (the syn error text).
+    pub diagnostic: String,
+}
+
 /// The per-span prefix tree: interned states + the rollouts that walked them.
 #[derive(Debug, Default)]
 pub struct SpanTree {
@@ -252,6 +273,14 @@ pub struct SpanTree {
     /// One path (node indices, start..terminal inclusive) per rollout.
     pub paths: Vec<Vec<usize>>,
     pub outcomes: Vec<Outcome>,
+    /// L2 parse-gate rejections with their causes (bounded; see the cap).
+    pub parse_failures: Vec<ParseFailure>,
+}
+
+impl SpanTree {
+    /// Max [`ParseFailure`] records kept per tree; the rest count in the
+    /// stats' `parse_failures_total` without their payloads.
+    pub const PARSE_FAILURE_CAP: usize = 64;
 }
 
 impl SpanTree {
@@ -267,6 +296,7 @@ impl SpanTree {
             by_hash: HashMap::from([(state_hash(root_state), 0)]),
             paths: Vec::new(),
             outcomes: Vec::new(),
+            parse_failures: Vec::new(),
         }
     }
 
@@ -342,7 +372,22 @@ impl SpanTree {
                 break;
             };
             call += 1;
-            if !pruner.validate(&edit, "").parses {
+            let verdict = pruner.validate(&edit, "");
+            if !verdict.parses {
+                if self.parse_failures.len() < Self::PARSE_FAILURE_CAP {
+                    let mut head = edit.lines().next().unwrap_or("").to_string();
+                    if head.len() > 160 {
+                        head.truncate(160);
+                    }
+                    self.parse_failures.push(ParseFailure {
+                        span_id: span_id.to_string(),
+                        depth: start_depth + step,
+                        rollout_id,
+                        edit_bytes: edit.len(),
+                        edit_head: head,
+                        diagnostic: verdict.diagnostics.first().cloned().unwrap_or_default(),
+                    });
+                }
                 outcome = Outcome::Parse;
                 break;
             }
@@ -407,6 +452,18 @@ mod tests {
         assert_eq!(tree.nodes.len(), 1);
         assert_eq!(tree.nodes[0].samples, vec![false]);
         assert!((tree.nodes[0].q_hat() - 0.0).abs() < 1e-9);
+        // The parse-robustness record (issue 695): the rejection carries its
+        // cause, bounded by the cap.
+        assert_eq!(tree.parse_failures.len(), 1);
+        let pf = &tree.parse_failures[0];
+        assert_eq!(pf.span_id, "s");
+        assert_eq!(pf.rollout_id, 7);
+        assert_eq!(pf.depth, 0);
+        assert_eq!(pf.edit_bytes, "fn broken( {{{".len());
+        assert!(
+            !pf.diagnostic.is_empty(),
+            "the syn diagnostic must ride the record"
+        );
     }
 
     #[test]

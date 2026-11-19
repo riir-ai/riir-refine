@@ -203,6 +203,14 @@ fn finish(
     };
     write_jsonl(out, dataset, &manifest).unwrap_or_else(|e| panic!("write {}: {e}", out.display()));
     let s = &dataset.stats;
+    if s.parse_failures_total > 0 {
+        println!(
+            "[parse-gate] {} rejection(s) ({} reported) → {} (the issue-695 parse-robustness census)",
+            s.parse_failures_total,
+            s.parse_failures_reported,
+            out.with_extension("parse_failures.jsonl").display()
+        );
+    }
     println!(
         "[done] {} pairs ({} kept / {} pit-dropped) from {} spans in {:.1}s → {}",
         s.pairs,

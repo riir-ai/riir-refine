@@ -40,8 +40,8 @@ mod rollout;
 mod spans;
 
 pub use rollout::{
-    DaemonEditGenerator, EditGenerator, FnGenerator, Outcome, PrefixNode, RolloutCtx, SpanTree,
-    TerminalJudge, VocabularyJudge, state_hash,
+    DaemonEditGenerator, EditGenerator, FnGenerator, Outcome, ParseFailure, PrefixNode, RolloutCtx,
+    SpanTree, TerminalJudge, VocabularyJudge, state_hash,
 };
 pub use spans::{PavSpan, SpanSource, extra_spans, fixture_spans, store_spans};
 
@@ -281,6 +281,12 @@ pub struct PavStats {
     /// Kept pairs with `q_hat` < 0.5 / >= 0.5 (the A3 class-balance buckets).
     pub bucket_low: usize,
     pub bucket_high: usize,
+    /// L2 parse-gate rejections total (reported + dropped-past-cap) — the
+    /// parse-robustness rung's headline number (issue 695).
+    pub parse_failures_total: usize,
+    /// How many carry a full record (the per-tree [`SpanTree::PARSE_FAILURE_CAP`]
+    /// bound); the records themselves ride the `parse_failures.jsonl` sidecar.
+    pub parse_failures_reported: usize,
     pub regime: &'static str,
 }
 
@@ -296,6 +302,8 @@ impl PavStats {
 pub struct PavDataset {
     pub pairs: Vec<PavPair>,
     pub stats: PavStats,
+    /// The bounded parse-failure records (empty unless the L2 gate fired).
+    pub parse_failures: Vec<ParseFailure>,
 }
 
 /// Internal per-node scratch: on-path bookkeeping for curation.
@@ -342,6 +350,7 @@ pub fn curate(
     stats.outcomes.insert(Outcome::Parse.name().to_string(), 0);
     stats.outcomes.insert(Outcome::Budget.name().to_string(), 0);
     let mut pairs = Vec::new();
+    let mut parse_failures = Vec::new();
 
     for (span_idx, span) in spans.iter().enumerate() {
         stats.spans_total += 1;
@@ -415,9 +424,16 @@ pub fn curate(
         // Phase 3 — curation marks + pair emission.
         let marks = curation_marks(&tree, cfg.eps_pit, judge);
         emit_span_pairs(span, &tree, &marks, cap, &mut pairs, &mut stats);
+        parse_failures.extend(tree.parse_failures.iter().cloned());
+        stats.parse_failures_total += tree.parse_failures.len();
     }
 
-    PavDataset { pairs, stats }
+    stats.parse_failures_reported = parse_failures.len();
+    PavDataset {
+        pairs,
+        stats,
+        parse_failures,
+    }
 }
 
 /// Curation bookkeeping: which nodes sit on clean paths, and which lie
@@ -610,6 +626,20 @@ pub fn write_jsonl(
     let m = serde_json::to_string_pretty(manifest)
         .map_err(|e| format!("{}: encode {e}", mpath.display()))?;
     std::fs::write(&mpath, m).map_err(|e| format!("{}: {e}", mpath.display()))?;
+    // The parse-robustness sidecar (issue 695): one record per reported L2
+    // parse-gate rejection. Written only when non-empty — unarmed runs keep
+    // the output dir shape byte-identical.
+    if !dataset.parse_failures.is_empty() {
+        let fpath = path.with_extension("parse_failures.jsonl");
+        let mut f =
+            std::fs::File::create(&fpath).map_err(|e| format!("{}: {e}", fpath.display()))?;
+        for pf in &dataset.parse_failures {
+            let line = serde_json::to_string(pf)
+                .map_err(|e| format!("{}: encode {e}", fpath.display()))?;
+            writeln!(f, "{line}").map_err(|e| format!("{}: {e}", fpath.display()))?;
+        }
+        f.flush().map_err(|e| format!("{}: {e}", fpath.display()))?;
+    }
     Ok(())
 }
 
