@@ -93,6 +93,16 @@ README decision-content (the measured column): paired median 1.42× CLI / 1.77×
 - **The workspace-lineage claim** (our laya lane = this repo's port) is verified by the pins quoted above; any FURTHER claim about checkpoint drift is explicitly unverified this session.
 - Fixture hygiene: everything in the batch is an original reproduction; the differential-golden discipline laya-rust models (golden dumps vs the Python) is itself worth citing as a PORT-TESTING precedent for our own G5-style gates.
 
+## Landing provenance
+
+425 + plan 390 + the snapshot verdict line + both highwater bumps landed in commit `599593de` —
+swept into the concurrent `zed-m3-i188close` session's commit (the `.issues/188` close) by the
+shared-index race: this lane's `git add` completed seconds before their `git commit`, which
+carried the whole staged set and pushed it. Content verified intact post-landing (the snapshot
+epoch fix, the prior-art section below, plan 390's T1 composition adjudication, the verdict-gate
+status line all in HEAD at `599593de`). Verdict gate: Claude AGREE round 1 (session
+`8eef99f6-0436-49fe-a9c7-b98b16afe475`); its two fixes are folded.
+
 ## Prior art — the laya-apple lane-intel distill (Research 232, 2026-09-24)
 
 Research 232 (`.distill/001_mining_queue_snapshot.md`, 2026-09-24 row) already distilled **tc3oliver/laya-apple** — a third-party MLX/CoreML runtime for the SAME checkpoint family — as MARGINAL C corpus / LANE INTEL HIGH, filing riir-reflex `.issues/017_ane_lane_reference_design.md`. Directly relevant adjacencies this verdict inherits: (1) its BC1S fixed-batch/fixed-length-bucket graphs and its conservative padding-cost-aware bucket-derivation rule are the ANE-lane cousin of R1's length grouping — R1's authoring step must adjudicate whether the bounded-window sort COMPOSES with fixed-bucket capture (sort-within-bucket is the likely composition; sort-then-bucket would defeat the bucket's shape stability — decide at T1, never assume); (2) its no-silent-fallback/route-before-request doctrine corroborates the laya Router's pre-forward routing (Lane intel §3); (3) its decision-level parity finding (ANE FP16 cannot pass a 1e-3 p-drift bar) is the standing G5 caveat for any laya-onnx oracle use. This note extends the 232 lane map to the 0.4.35 surface; the corpus verdict (B+ vs C) grades a DIFFERENT artifact — the post-pin Rust port, which 232 predates.
