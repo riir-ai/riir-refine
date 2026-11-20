@@ -67,9 +67,10 @@ cargo zigbuild --profile dist --target x86_64-pc-windows-gnu --features "$FEATUR
 
 echo "== package + G2 leak scan + binary size gate (release.yml parity)"
 DIST="/tmp/manual_release_dist"
-# The binary's licence (the EULA) rides every archive next to the third-party list.
-ROOT_EULA="$(cd "$(dirname "$0")/.." && pwd)/release/LICENSE.md"
-[ -f "$ROOT_EULA" ] || { echo "missing $ROOT_EULA" >&2; exit 1; }
+# The project's MIT licence rides every archive next to the third-party list
+# (221 verdict D6: the binaries-only EULA retired at the issue close).
+ROOT_LICENSE="$(cd "$(dirname "$0")/.." && pwd)/LICENSE"
+[ -f "$ROOT_LICENSE" ] || { echo "missing $ROOT_LICENSE" >&2; exit 1; }
 rm -rf "$DIST" /tmp/manual_release_stage
 mkdir -p "$DIST"
 BINS=""
@@ -80,14 +81,14 @@ for t in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86
         BINS="$BINS $bin"
         cp "$bin" "$stage/cargo-refine.exe"
         cp /tmp/manual_release_licenses.md "$stage/THIRD_PARTY_LICENSES.md"
-        cp "$ROOT_EULA" "$stage/LICENSE.md"
+        cp "$ROOT_LICENSE" "$stage/LICENSE.md"
         (cd "$stage" && zip -q "$DIST/cargo-refine-${TAG}-${t}.zip" cargo-refine.exe LICENSE.md THIRD_PARTY_LICENSES.md)
     else
         bin="target/$t/dist/cargo-refine"
         BINS="$BINS $bin"
         cp "$bin" "$stage/cargo-refine"
         cp /tmp/manual_release_licenses.md "$stage/THIRD_PARTY_LICENSES.md"
-        cp "$ROOT_EULA" "$stage/LICENSE.md"
+        cp "$ROOT_LICENSE" "$stage/LICENSE.md"
         tar -czf "$DIST/cargo-refine-${TAG}-${t}.tar.gz" -C "$stage" cargo-refine LICENSE.md THIRD_PARTY_LICENSES.md
     fi
     ./scripts/binary_leak_scan.sh "$bin"
@@ -95,7 +96,7 @@ done
 # The size gate runs on the RAW binaries, exactly as the CI package job does.
 ./scripts/binary_size_gate.sh $BINS
 cp /tmp/manual_release_licenses.md "$DIST/THIRD_PARTY_LICENSES.md"
-cp "$ROOT_EULA" "$DIST/LICENSE.md"
+cp "$ROOT_LICENSE" "$DIST/LICENSE.md"
 # Explicit file list — `*` here would include SHA256SUMS itself on any
 # manual re-hash of the dir (redirect truncates it first → empty-string
 # self-entry → `sha256sum -c` fails on the release page).
