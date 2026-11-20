@@ -1,6 +1,6 @@
 # Plan 391 — Batch 375: laya round-2 distill (the staged unread-sweep candidates)
 
-**Status:** LANDED 2026-11-20 (zed-m3-b375@m3, epoch 1795176927 — Batch 375: 5 rust_perf rules + 1 sec rule + 1 count-neutral face; R2's staged benchability question resolved NOT-BENCHABLE-BY-MODEL (correctness-first landing, no GOAT cell — T4 not owed, asserted); drops/stagings recorded in the entries_88 header; claim from the Batch-374 landing row's staged queue)
+**Status:** LANDED 2026-11-20 (zed-m3-b375@m3, epoch 1795176927 — batch commit `d8b57ef98`; Batch 375: 5 rust_perf rules + 1 sec rule + 1 count-neutral face; R2's staged benchability question resolved NOT-BENCHABLE-BY-MODEL (correctness-first landing, no GOAT cell — T4 not owed, asserted); drops/stagings recorded in the entries_88 header; claim from the Batch-374 landing row's staged queue)
 **Claimed:** zed-m3-b375@m3, 1795176927, expires 2026-11-22T12:15:27Z
 
 Source: `github.com/NandhaKishorM/laya` — landing pin `416dd9ed20da2d43fc40e23712e9adceefabf634` (T0 tip check at clone 2026-11-20T12:15Z: **STILL THE REMOTE TIP** — no re-pin). Apache-2.0. Clone ephemeral at `.raw/laya`, removed at batch close.
