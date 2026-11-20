@@ -638,6 +638,14 @@ differential_anchor = ["latent_retrieval"]
 # count hull. Report-only, gates nothing; off = byte-identical report.
 noise_weighted_evidence = ["katgpt-core/estimators"]
 
+# Plan 392 Phase 1 (Research 426): the REPORT-ONLY epiplexity mining-gain
+# census over the committed mining_gain_panel fixture — Phase 0's SPARSE
+# verdict (rank 2 vs bar 7) made observable through katgpt-core's Plan 641
+# GainEstimator (consumed, never forked; the same `estimators` umbrella
+# noise_weighted_evidence forwards). Report-only: the example reads the
+# fixture and prints; the mining queue file is never touched.
+epiplexity_census = ["katgpt-core/estimators"]
+
 # Issue 134 T2 — the pool-depth allocation gate: scale the suggest lane's
 # per-domain retrieval pool + truncation K by the measured demonstrability
 # constant (Research 585 / SAT arXiv:2609.22682 — depth pays where selection
@@ -1244,6 +1252,16 @@ required-features = ["latent_retrieval"]
 name = "calibrated_dispatch_census"
 required-features = ["calibrated_dispatch", "latent_retrieval", "clippy_lints", "rust_perf"]
 
+# Plan 392 Phase 1 — the mining-gain census instrument (REPORT-ONLY,
+# read-only): loads .benchmarks/mining_gain_panel.jsonl, fits the
+# katgpt-core epiplexity GainEstimator, prints the saturation verdict, the
+# per-domain gain table and the gain-ordered queue; exits 0 on every
+# successful read. Run:
+#   cargo run --features epiplexity_census --example mining_gain_census [-- --history]
+[[example]]
+name = "mining_gain_census"
+required-features = ["epiplexity_census"]
+
 # Issue 233 T3 — the G2 cost leg + the real-scan pool-cut value read. One
 # process = one arm; the runner invokes it twice at feature sets differing
 # ONLY in calibrated_dispatch and alternates the invocations (A,B,A,B,A,B,
@@ -1380,6 +1398,17 @@ required-features = ["rustc_errors", "latent_retrieval"]
 [[test]]
 name = "kernel_goat_g1_smoke"
 required-features = ["kernel_opt"]
+
+# Plan 392 Phase 1: the census gate battery — fixture decode (138 rows x 8
+# domains, accuracy bounds), full-pipeline determinism (bit-identical
+# weights across two runs), the queue's ordering shape, the DEMOTED /
+# SKIP-SELECTION decision functions, and the loader's typed refusal
+# battery. Whole-file `#![cfg(feature = "epiplexity_census")]` + this row
+# = the required-features discipline (the repo-birth gate law). Run:
+#   cargo test --test epiplexity_census_gates --features epiplexity_census
+[[test]]
+name = "epiplexity_census_gates"
+required-features = ["epiplexity_census"]
 
 # Issue 126 lane (b) — the Lemma-4.2 likelihood-ratio tier guard's
 # store-level G1/G3 arms (poisoned wrong-goal credit excluded / clean

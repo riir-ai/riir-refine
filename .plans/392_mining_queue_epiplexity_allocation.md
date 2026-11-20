@@ -1,6 +1,6 @@
 # Plan 392: Mining-Queue Epiplexity Allocation + Domain Saturation Gate
 
-**Status:** OPEN — filed from katgpt-rs Research 685 + riir-refine Research 426; P0 census DONE 2026-11-20 (verdict SPARSE — univariate per-domain fit family, §Phase 0 below); Phase 1 consumes katgpt-core `epiplexity_gain` (katgpt-rs Plan 641) — consume, never fork; Phase 1 is GATED on that primitive landing (its pre-registered `Sparse` verdict is the census's output shape).
+**Status:** OPEN — filed from katgpt-rs Research 685 + riir-refine Research 426; P0 census DONE 2026-11-20 (verdict SPARSE — univariate per-domain fit family, §Phase 0 below; spectrum CORRECTED same day, eff10 = 1); Phase 1 consumer LANDED 2026-11-20 (`examples/mining_gain_census.rs` + the gated `epiplexity_census` module + 11 gates; consumes katgpt-core `epiplexity_gain` — katgpt-rs Plan 641, landed `9151d140c` — consume, never fork; example output confirms the Sparse arm + a temporally stable kernel_opt-top queue; REPORT-ONLY until G2 passes). G2 (allocation value, the promotion bar) OPEN.
 **Claimed:** zed-m3-p392census@m3, 1795182273, expires 2026-11-22T13:44:18Z
 **Priority:** fusion ladder #1 (self-evolve product stack).
 
@@ -10,20 +10,19 @@ The mining queue (`.distill/001_mining_queue_snapshot.md`) orders rule-batch min
 
 ## Phase 0 — census (BLOCKING, hours, CPU-only)
 
-- [x] Mix-variation census over score_history.jsonl + batch landing logs — **DONE 2026-11-20, verdict SPARSE** (numbers below; the univariate per-domain fallback is the fit family; influence does not identify).
+- [x] Mix-variation census over score_history.jsonl + batch landing logs — **DONE 2026-11-20, verdict SPARSE** (numbers below; the univariate per-domain fallback is the fit family; influence does not identify). **CORRECTED same day:** the first pass's Jacobi pairing was divergent (the +s sign with the pinned θ drives the target off-diagonal UP: 3 → 4.8 measured on a rank-1 Gram) and read rank 2 / PR 2.08; the converged spectrum reads **eff10 = 1, PR 1.392** — trace invariant rel err 2.3e-16 against the direct Gram trace. Verdict unchanged and strengthened.
 
 ## Phase 0 census results (2026-11-20, zed-m3-p392census@m3)
 
 **Data + method.** Sources: `.benchmarks/score_history.jsonl` (254 rows, 2026-08-19 → 2026-11-13, shas in-row) + the per-domain count chain in `AGENTS.md`'s git history (the live counter per domain; parsed per sha by bullet regex — clippy `N corpus lints` (early: `N common lints`), rust_perf/kernel_opt/sec/docker/shader `N rules`, dist `N suggest-only rules`, ane `N suggestion-only seed rules`; earliest AGENTS.md uses a numbered list, handled). 196 distinct run shas → **138 unique corpus mix states** (2026-08-19 → 2026-11-13). Sanity: **zero monotonicity violations** per domain across the whole series; the last state cross-validates against `pins_manifest.json` (post-window deltas reconcile exactly: +44 rust_perf, +12 kernel_opt, +11 sec, +6 ane born after 11-13; clippy/docker/dist/shader unchanged).
 
-**Exposure matrix** (138 unique mix states × K=8 domains from `pins_manifest.json`: clippy_lints, rust_perf, kernel_opt, sec, docker, dist, shader_perf, ane). Singular spectra (Jacobi, exact):
+**Exposure matrix** (138 unique mix states × K=8 domains from `pins_manifest.json`: clippy_lints, rust_perf, kernel_opt, sec, docker, dist, shader_perf, ane). Singular spectra (Jacobi, converged; values CORRECTED 2026-11-20 — see the checkbox note):
 
 | variant | σ1..σ8 | eff rank (σ≥10%·σmax) | eff rank (σ≥1%·σmax) | participation ratio |
 |---|---|---|---|---|
-| raw | 1054.0, 286.3, 24.9, 15.9, 13.8, 8.9, 8.8, 5.6 | **2** | 5 | 1.68 |
-| per-column centered | 932.1, 380.6, 41.2, 40.9, 31.9, 21.9, 6.6, 0.8 | **2** | 6 | 2.08 |
+| per-column centered | 2845.2, 185.1, 153.7, 104.9, 50.8, 20.4, 11.6, 0.0 | **1** | 5 | 1.392 |
 
-**Verdict (pre-registered bar: effective rank ≥ K−1 = 7):** under floor by EVERY standard definition (2 / 5–6 / ≈2) → **SPARSE — the cross-domain γ_m,k influence is structurally unidentifiable from logged score-bench history; the fit family is univariate per-domain (headroom × exposure survive, influence does not), carried as a typed `Sparse` record (exactly katgpt-rs Plan 641's pre-registered fallback shape).** Mechanism: sequential one-domain-at-a-time accumulation makes every domain's count a monotone time staircase — after de-meaning, all columns are ≈ collinear time ramps (centered σ1 = the ramp, σ2 = the growth-rate split; the genuinely independent mix variation σ3..σ8 sits 20–40× below). One accuracy scalar per state along a single temporal path cannot separate which domain's spans moved accuracy. Nuance, for the record: the landing DELTA matrix (137 count-bump events × 8) does span R⁸ (σ≥1% rank 8 — every domain had independent landing events), but cumulative-sum mixing along one path destroys the separability the scalar regression needs — mix variation exists in the landing record, not in the observation structure.
+**Verdict (pre-registered bar: effective rank ≥ K−1 = 7):** under floor by EVERY standard definition (1 / 5 / 1.39) → **SPARSE — the cross-domain γ_m,k influence is structurally unidentifiable from logged score-bench history; the fit family is univariate per-domain (headroom × exposure survive, influence does not), carried as a typed `Sparse` record (exactly katgpt-rs Plan 641's pre-registered fallback shape).** Mechanism: sequential one-domain-at-a-time accumulation makes every domain's count a monotone time staircase — after de-meaning, the columns collapse onto the kernel_opt variance ramp (σ1 = 2845; the second direction σ2 = 185.1 sits at 6.5% of σmax, under the 10% share) — one accuracy scalar per state along a single temporal path cannot separate which domain's spans moved accuracy. The all-zero ane column contributes the exact 0 singular value. Nuance, for the record: the landing DELTA matrix does touch every domain independently (8 landing directions), but cumulative-sum mixing along one path destroys the separability the scalar regression needs — mix variation exists in the landing record, not in the observation structure.
 
 **Per-domain landing census** (count-bump events over the window; batch-size min/median/max):
 
@@ -59,8 +58,8 @@ Saturation reading: the standing gen-1 series is SATURATED on its own instrument
 
 ## Phase 1 — consumer wiring (behind a demo/measurement binary, not the production fixer)
 
-- [ ] `examples/mining_gain_census.rs` (or extend the existing census lane): fit + rank domains by sigmoid-tempered marginal gain each corpus generation; print the ordered queue + per-domain ε-floor status; REPORT-ONLY (exit 0, never changes the queue) until G2 passes.
-- [ ] Saturation gate: a domain whose predicted remaining gain Ŝ(∞)−Ŝ(t) sits under the bar is printed DEMOTED — the Pile-saturation law as a queue gate; if one domain dominates the area integral, print SKIP-SELECTION (the allocation machinery refuses to run).
+- [x] `examples/mining_gain_census.rs` (or extend the existing census lane): fit + rank domains by sigmoid-tempered marginal gain each corpus generation; print the ordered queue + per-domain ε-floor status; REPORT-ONLY (exit 0, never changes the queue) until G2 passes. (LANDED 2026-11-20: the gated `epiplexity_census` src module carries `load_panel` + the two decision fns + `run_census` as data; the example is a thin printer; `--history` shows the queue temporally stable — kernel_opt top / rust_perf second at all 9 snapshots; 11 gate tests bit-identity-pin the pipeline over the committed 138-row fixture `.benchmarks/mining_gain_panel.jsonl`.)
+- [x] Saturation gate: a domain whose predicted remaining gain Ŝ(∞)−Ŝ(t) sits under the bar is printed DEMOTED — the Pile-saturation law as a queue gate; if one domain dominates the area integral, print SKIP-SELECTION (the allocation machinery refuses to run). (Bars: `SATURATION_DEMOTE_HEADROOM` 0.005, `DOMINANCE_SKIP_WEIGHT` 0.85; on this fixture: none demoted, none dominant, `ane` typed `NoCurve` — not allocable.)
 
 ## Phase 2 — GOAT cell
 
