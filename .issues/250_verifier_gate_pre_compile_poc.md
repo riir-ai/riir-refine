@@ -1,7 +1,7 @@
 # Issue 250: Verifier-gate shadow-score → decline-guard POC for the fix lane (ITERLOGIC transplant)
 
 **Status:** Open — research-derived POC (riir-refine Research 424, EMNLP 2026 Findings "Iterative Natural Logic Verification for Multi-hop QA"); verdict round 1 corrections applied (compile-label scope, cost model first, G1 per-posture)
-**Claimed:** zed-m3-accrue@m3, 1795181524, expires 2026-11-22T13:32:04+00:00
+**Lease closed:** zed-m3-accrue@m3, 1795181524, was expires 2026-11-22T13:32:04+00:00 — the accrual ENABLER landed same session: m3's maintained binary rebuilt at HEAD 0a70aee0 (release set COMPLETE incl. index_cache + ane_pregate; build hash == HEAD), event log e2e-verified on this box (scratch crate, 2 fix runs → 2 v1 rows: a kept oracle-applied edit and a kept corpus edit, verify-gated, run_edits/run_checks pinned, reverted:false — the accrual path is LIVE on m3; rows accrue from the next real fix workload — this cycle's 10-repo sweep found zero actionable mechanical debt, so no rows landed yet)
 **Lease closed:** katgpt-rs-93@amo, 1795140000, was expires 2026-11-22T00:00:00Z — T1b step 1 (event log) landed; the floor run waits on accumulated v1 event rows
 **Lease closed:** katgpt-rs-93@amo, 1795118000, was expires 2026-11-22T00:00:00Z — T1a complete (FAIL, Bench 162 addendum); T1b unclaimed
 **Lease closed:** katgpt-rs-93@amo, 1795116000, was expires 2026-11-22T00:00:00Z — T0 complete (Bench 162); T1 unclaimed
