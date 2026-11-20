@@ -1,8 +1,8 @@
 # Plan 387 — anemll-forge ANE-hybrid transcription batch
 
-**Status:** staged — Claude verdict AGREE (2 rounds, session c676122d) recorded 2026-11-18; awaiting a batch window (Research 421).
-**Claimed:** shikuwa-4090-b387, 1795012831, expires 2026-11-20T14:40:31+00:00
-(claim scope 2026-11-18T15:40+07, the boss-housekeeping wake's queue triage: staged-unclaimed and UNBLOCKED per the verdict's own "awaiting a batch window" — T0's re-clone/re-pin/two-pin-diff + T0b's unread-residue read + T1's dedup re-verification are ZERO-CARGO (clone + greps + reads), executable inside the i1223 exclusive window's zero-cargo posture; T2+ authoring rides the SAME window (corpus .rs writes + rustc standalone fixture preflights are the B371-proven posture); only T4's cargo gate postures wait for the post-run window. Sequenced BEHIND plan 385 (Batch 371, same lane, R1 landed wip 86c1ff55cbe, gates pending the same window) — this lane runs the batches serially: 385's gates land first, then 387's T0-T3 authoring proceeds in the same window, T4-T8 gate+land after.)
+**Status:** CLAIMED 2026-11-20T17:3xZ (zed-m3-b376-anemll@m3 — the box QUIET/AC; the lease taken past shikuwa-4090-b387's EXPIRED claim per claim_lease_check: 5 live / 5 expired, item 387 expired 2026-11-20T14:40:31Z with no landing — last batch 375 — and the 4090 rig QUIET; the push is the arbiter). Authoring + fixtures + gates run on m3; zero-GPU throughout (every rule suggestion-only NotBenchable-by-domain — no accelerator measurement owed; the ane/rust_perf corpora are data tables + standalone fixture preflights, the B371/B375-proven posture).
+**Claimed:** zed-m3-b376-anemll@m3, 1795195300, expires 2026-11-22T17:30:00+00:00
+(claim scope: the full T0–T8 arc — T0 re-clone/re-pin/quote-verification + the two-pin diff are zero-cargo; T0b unread-residue reads zero-cargo; T1 dedup greps zero-cargo; T2 authoring + T3 fixture standalone preflights are the established cargo posture on a quiet box; T4 gate postures ride CARGO_TARGET_DIR=/tmp/b376; T7's reflex issue is its own commit in that repo.)
 
 Distills `Anemll/anemll-forge` @ `v8-gpu-ane-prefill` (PIN `912925f7f0579c0918786267a7457f7abb36e597`,
 MIT, tip 2026-11-17) into a mixed transcription batch: ane-domain majority + rust_perf caching.
