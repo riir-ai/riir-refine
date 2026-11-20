@@ -393,3 +393,37 @@ fn necessity_row_mirror_tracks_the_authority_wire() {
     assert_eq!(mirror.verdict, "DECORATIVE");
     assert_eq!(mirror.delta_resolved, 0);
 }
+
+/// Issue 252: per-rule `reverted ≤ written` by construction, an
+/// all-reverted rule reads its attempted count (v1 read `written: 0`), and
+/// whole-file reverts land on the per-file marker only.
+#[test]
+fn verify_rule_counts_written_covers_reverted() {
+    let edits = [
+        ("unnecessary_get_then_check", true),
+        ("unnecessary_get_then_check", true),
+        ("doc_markdown", false),
+        ("doc_markdown", true),
+        ("redundant_closure", true),
+    ];
+    let (written, reverted) = verify_rule_counts(edits, 1);
+    assert_eq!(written["unnecessary_get_then_check"], 2);
+    assert_eq!(reverted["unnecessary_get_then_check"], 2);
+    assert_eq!(written["doc_markdown"], 2);
+    assert_eq!(reverted["doc_markdown"], 1);
+    assert_eq!(written["redundant_closure"], 1);
+    assert_eq!(reverted[WHOLE_FILE_STRATUM], 1);
+    assert!(!written.contains_key(WHOLE_FILE_STRATUM));
+    for (rule, &r) in reverted
+        .iter()
+        .filter(|(k, _)| k.as_str() != WHOLE_FILE_STRATUM)
+    {
+        assert!(
+            r <= written[rule],
+            "{rule}: reverted {r} > written {}",
+            written[rule]
+        );
+    }
+    let (w0, r0) = verify_rule_counts([], 0);
+    assert!(w0.is_empty() && r0.is_empty());
+}

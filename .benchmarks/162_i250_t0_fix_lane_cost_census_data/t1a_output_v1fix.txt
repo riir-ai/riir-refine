@@ -1,0 +1,16 @@
+{
+ "fit_runs": 82,
+ "eval_verify_runs": 36,
+ "median_ts": 1794408744.0,
+ "fit_rules_with_p_ge_0.25": {
+  "map_unwrap_or": 0.5,
+  "redundant_closure": 2.5,
+  "unnecessary_get_then_check": 0.5,
+  "assert_is_empty": 0.727
+ }
+}
+tau=0.25: all={'actual': 82, 'simulated': 79, 'reduction': 0.0366, 'false_decline_rate': 0.0292, 'reverts_caught': '17/25'}  ex-outlier={'actual': 77, 'simulated': 74, 'reduction': 0.039, 'false_decline_rate': 0.0274, 'reverts_caught': '17/22'}  PASS=False
+tau=0.5: all={'actual': 82, 'simulated': 79, 'reduction': 0.0366, 'false_decline_rate': 0.0292, 'reverts_caught': '17/25'}  ex-outlier={'actual': 77, 'simulated': 74, 'reduction': 0.039, 'false_decline_rate': 0.0274, 'reverts_caught': '17/22'}  PASS=False
+tau=0.75: all={'actual': 82, 'simulated': 79, 'reduction': 0.0366, 'false_decline_rate': 0.0058, 'reverts_caught': '1/25'}  ex-outlier={'actual': 77, 'simulated': 74, 'reduction': 0.039, 'false_decline_rate': 0.0068, 'reverts_caught': '1/22'}  PASS=False
+outlier in eval: 5
+held-out perfect-guard ceiling: actual 82 -> ideal 64 = 0.2195 reduction

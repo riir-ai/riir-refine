@@ -61,8 +61,41 @@ pub const MIN_ARMS_PER_CLASS: usize = 2;
 /// Strata entries per row (top by total outcome) — the row stays bounded
 /// no matter how many distinct rules a campaign touched.
 pub const MAX_STRATA: usize = 32;
-/// Schema version of the on-disk row.
-pub const ROW_VERSION: u8 = 1;
+/// Schema version of the on-disk row. v2 (Issue 252): under a verify run,
+/// `strata[rule].written` counts every edit the verify batch ATTEMPTED and
+/// `reverted` counts that rule's edits the compile gate put back (span
+/// reverts + every edit of a whole-file-reverted file), so
+/// `reverted ≤ written` per rule. v1 rows counted only KEPT edits as
+/// written (a rule whose edits all reverted read `written: 0`).
+pub const ROW_VERSION: u8 = 2;
+
+/// The `(whole file)` stratum: the count of whole-file reverts (a per-FILE
+/// marker, outside the per-rule `reverted ≤ written` invariant).
+pub const WHOLE_FILE_STRATUM: &str = "(whole file)";
+
+/// Issue 252 — per-rule attempted / reverted counts for one verify run,
+/// derived from ONE source (the verify batch + its per-file revert state)
+/// so `reverted ≤ written` holds by construction. Each item is one
+/// attempted edit: `(rule_id, reverted)`; `whole_file_reverts` feeds the
+/// [`WHOLE_FILE_STRATUM`] marker.
+#[must_use]
+pub fn verify_rule_counts<'a>(
+    edits: impl IntoIterator<Item = (&'a str, bool)>,
+    whole_file_reverts: u32,
+) -> (BTreeMap<String, u32>, BTreeMap<String, u32>) {
+    let mut written: BTreeMap<String, u32> = BTreeMap::new();
+    let mut reverted: BTreeMap<String, u32> = BTreeMap::new();
+    for (rule, was_reverted) in edits {
+        *written.entry(rule.to_string()).or_insert(0) += 1;
+        if was_reverted {
+            *reverted.entry(rule.to_string()).or_insert(0) += 1;
+        }
+    }
+    if whole_file_reverts > 0 {
+        reverted.insert(WHOLE_FILE_STRATUM.to_string(), whole_file_reverts);
+    }
+    (written, reverted)
+}
 
 /// Whether the append lane is enabled (default) or demoted (`=0`).
 #[must_use]

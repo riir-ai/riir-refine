@@ -60,3 +60,13 @@ Pre-registered in `.issues/250` (`6e9c2759`). `t1a_rule_prior.py` (+ `t1a_output
 - The prior catches most reverting edits (17 of 22) but saves almost no checks. A doomed rule rarely sits alone in a run's batch: other edits in the same batch still revert or still force the rounds. The 3.9% saving is identical at every τ, i.e. it comes from batches the decline empties or cleans regardless of which rules cross the threshold.
 - Declining whole rules also drops kept edits (2.7%).
 - **Consequence for T1b:** a useful floor needs **per-edit** (not per-rule) resolution and must clear the cleaning-the-batch problem. The rule prior's 3.9% is the number the similarity arm must beat. The stratum accounting artifact (reverted > written under whole-file reverts) should be fixed in the blueprint row before any learned arm trains on these strata.
+
+## Correction — Issue 252 (2026-11-20)
+
+These rows are blueprint **v1**, where `strata.written` and `outcomes.edits_written` count only KEPT edits under a verify run (Issue 252, fixed at row v2). Two figures above used `written` as "attempted":
+
+- **Reverted-edit share:** 306 reverts / (572 kept + 306 reverted) = **34.9%** of attempted edits, not 53.5%.
+- **Per-rule revert rates** = reverted / (kept + reverted): assert_is_empty 32/62 = **0.52**, unnecessary_get_then_check 39/87 = **0.45**, explicit_auto_deref 10/80 = **0.125**. The "> 1" readings were the undercount, not attribution.
+- **T1a re-run with v1 semantics** (`t1a_rule_prior_v1fix.py` → `t1a_output_v1fix.txt`): at τ = 0.5 the check reduction is still **3.9%** and false declines are **2.74%** ex-outlier. **The FAIL verdict stands.**
+
+The check counts, the wasted-verify rate, the ceilings and the G3 bar do not read `written`, so they are unchanged.

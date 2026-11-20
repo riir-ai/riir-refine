@@ -16399,6 +16399,11 @@ fn main() {
     #[allow(unused_mut)]
     let mut bp_reverted_by_rule: std::collections::BTreeMap<String, u32> =
         std::collections::BTreeMap::new();
+    // Issue 252: per-rule ATTEMPTED edits of the verify batch (the strata's
+    // `written` under a verify run; empty when verify did not run).
+    #[allow(unused_mut)]
+    let mut bp_attempted_by_rule: std::collections::BTreeMap<String, u32> =
+        std::collections::BTreeMap::new();
     #[allow(unused_mut)]
     let mut bp_verify: Option<riir_refine::blueprint::VerifyCapture> = None;
     // Plan 329 P2: the run-end refusal roll-up — every fix-path
@@ -18467,9 +18472,6 @@ fn main() {
             checks: report.n_checks,
             skipped_checks: report.skipped_checks,
         });
-        for r in &report.reverted {
-            *bp_reverted_by_rule.entry(r.rule_id.clone()).or_insert(0) += 1;
-        }
         // ── 037-T2: per-batch derived state (kept/reverted), computed ONCE
         // — consumed by the oracle pre-pass below + the review loop.
         let batch_state: Vec<(std::collections::HashSet<usize>, bool)> = verify_batches
@@ -18488,6 +18490,26 @@ fn main() {
                 (reverted_lines, whole)
             })
             .collect();
+        // Issue 252: the blueprint strata from the SAME per-edit revert
+        // state `kept` is computed from — attempted = written, reverted =
+        // span-reverted line or whole-file revert (v1 counted only KEPT
+        // edits as written, so all-reverted rules read `written: 0`).
+        {
+            let edits = verify_batches
+                .iter()
+                .zip(&batch_state)
+                .flat_map(|(b, (lines, whole))| {
+                    b.edits
+                        .iter()
+                        .map(move |e| (e.rule_id.as_str(), *whole || lines.contains(&e.final_line)))
+                });
+            let whole_files =
+                u32::try_from(batch_state.iter().filter(|(_, w)| *w).count()).unwrap_or(u32::MAX);
+            let (attempted, reverted) =
+                riir_refine::blueprint::verify_rule_counts(edits, whole_files);
+            bp_attempted_by_rule = attempted;
+            bp_reverted_by_rule = reverted;
+        }
 
         // ── P104: the verdict-based disclosure — kept edits under a
         // FAILED final check (the revert loop exhausted with compile
@@ -19882,7 +19904,14 @@ fn main() {
             .sum();
         let mut bp_strata: std::collections::BTreeMap<String, riir_refine::blueprint::RuleOutcome> =
             std::collections::BTreeMap::new();
-        for (rule, n) in &fixstat_rules {
+        // Issue 252: under a verify run `written` is what the batch
+        // ATTEMPTED (kept + reverted); otherwise the written fixes.
+        let bp_written = if bp_attempted_by_rule.is_empty() {
+            &fixstat_rules
+        } else {
+            &bp_attempted_by_rule
+        };
+        for (rule, n) in bp_written {
             bp_strata.entry(rule.clone()).or_default().written = *n;
         }
         for (rule, n) in &bp_reverted_by_rule {
@@ -19917,7 +19946,7 @@ fn main() {
             },
             outcomes: riir_refine::blueprint::BlueprintOutcomes {
                 files_written: n_fixed_files,
-                edits_written: fixstat_rules
+                edits_written: bp_written
                     .values()
                     .map(|&n| usize::try_from(n).unwrap_or(usize::MAX))
                     .sum(),
