@@ -9,7 +9,37 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 373 entries across 15 categories as of Batch 374 (+4: complexity ×2 —
+//! 378 entries across 15 categories as of Batch 375 (+5: measurement-honesty ×2 —
+//! `gate-cut-fitted-on-serving-representation` (suggestion-only: fit or derive any
+//! threshold on EXACTLY the representation the comparator reads at serve time — bin,
+//! quantize, round BEFORE the cut, never after; a full-precision cut can sit above
+//! the rounded value of its own cohort (0.8333 < 0.83333…) and abstain it, and admits
+//! wrong answers it measured as rejected (9.8% → 25.6% error); the length face:
+//! measure the SERIALIZED text, never a proxy rendering) +
+//! `lower-bound-precheck-understates-never-fabricates` (suggestion-only: a fast-path
+//! refuse gate refuses ONLY on a proven lower bound — unproven abstains typed and the
+//! exact measurer decides; the reported number is a measured understatement, never
+//! `cap + 1`; the probe prices its own cost; exact-type checks keep the bound sound) —
+//! arithmetic ×1 — `reference-round-replicated-in-integer-arithmetic` (suggestion-only:
+//! a port matching a reference runtime's rounding bit-for-bit makes ONE half-even
+//! decision on the exact scaled rational and converts back with a sticky-bit
+//! single-rounding, never scale-multiply-and-round whose product destroys
+//! tie-adjacency (0.00625 → 0.0062 vs Python's 0.0063, ~2% of values, in-source
+//! measured); the reference-runtime-parity family seed, the reporting-round face
+//! (the pinned-width-consumer complement of the Issue-940 law) folded in-notes) —
+//! allocation ×1 — `deepcopy-snapshot-before-untrusted-mutation` (suggestion-only:
+//! a validation sized against an input reads a snapshot taken BEFORE hooks can
+//! rewrite in place; a shallow copy shares the nested containers and misses it the
+//! same way; opposite polarity of clone-before-mutating borrow-appeasement,
+//! adjudicated in-rule) — caching ×1 — `artifact-load-replaces-whole-state`
+//! (suggestion-only: a load installs the artifact's WHOLE state, absences included —
+//! `None` clears the previously-fitted section; merge reports `calibrated: true`
+//! over a state the directory never held and the route rides a band its heads were
+//! never measured against) — the laya round-2 (the staged unread-sweep candidates;
+//! NandhaKishorM/laya @ `416dd9ed` — still the remote tip, no re-pin; T0 two reader
+//! subagents re-derived every staged quote fresh, the prior session's transcripts
+//! dead; clone removed at batch close) — prior: 373 entries as of Batch 374 (+4:
+//! complexity ×2 —
 //! `batch-mixed-length-pads-to-longest-group-by-length` (the BENCHABLE
 //! GOAT lead: mixed-length batched passes pad every row to the pass max;
 //! a bounded-window stable sort by row length cuts the maxima, results
@@ -901,15 +931,30 @@ mod entries_84;
 mod entries_85;
 mod entries_86;
 mod entries_87;
+mod entries_88;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 369 entries
-/// (Batch 372, 2026-11-18, Plan 310 / Research 349: +4 — the infinity
-/// tokio-family distill, `entries_86`, hydro-project/infinity @ `1abc6fcff`
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 378 entries
+/// (Batch 375, 2026-11-20, Plan 391 / Research 425 round 2: +5 — the laya
+/// round-2, the staged unread-sweep candidates, `entries_88`,
+/// NandhaKishorM/laya @ `416dd9ed` Apache-2.0, still the remote tip:
+/// measurement-honesty ×2 (`gate-cut-fitted-on-serving-representation` +
+/// `lower-bound-precheck-understates-never-fabricates`), arithmetic ×1
+/// (`reference-round-replicated-in-integer-arithmetic` — the
+/// reference-runtime-parity family seed, the reporting-round face folded
+/// in-notes), allocation ×1 (`deepcopy-snapshot-before-untrusted-
+/// mutation`), caching ×1 (`artifact-load-replaces-whole-state`); all
+/// suggestion-only `NotBenchable` `bench_spec: None`; the batch's sec
+/// half lands in `src/domains/sec/corpus.rs`, same commit; prior: 373
+/// entries (Batch 374, 2026-11-20, Plan 390 / Research 425: +4 — the
+/// laya re-distill, `entries_87`, the BENCHABLE batching GOAT lead
+/// `ParetoDominant` 3/0/0 two-run stable + 3 suggestion-only; prior: 369
+/// entries (Batch 372, 2026-11-18, Plan 310 / Research 349: +4 — the
+/// infinity tokio-family distill, `entries_86`, hydro-project/infinity @ `1abc6fcff`
 /// Apache-2.0: concurrency ×3 — `closed-channel-select-arm-gate` (the
 /// select arm-lifecycle law), `inline-actor-futures-pool-not-spawn-per-
 /// actor` (the `FuturesUnordered` pool law + the no-yield-idle-recheck
@@ -1266,6 +1311,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_85::b371_rules());
     entries.extend(entries_86::b372_rules());
     entries.extend(entries_87::b374_rules());
+    entries.extend(entries_88::b375_rules());
     Corpus::new(entries)
 }
 
