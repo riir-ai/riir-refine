@@ -316,7 +316,7 @@ Fact pins for these drafts (verdict r1 fixes applied):
 ## Related
 
 - [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md) — public program digest; full strategy in the private readiness playbook
-- [refine issue 190](../.issues/190_mozilla_grant_readiness_gaps.md) — the readiness task list (v2: T11 public-repo-free policy, T12 verify-before-claim, T13 credit-scope integrity)
+- refine issue 190 — the readiness task list (v2: T11 public-repo-free policy, T12 verify-before-claim, T13 credit-scope integrity) — closed + removed 2026-11-20 after submission; record in `HISTORY.md`
 - [refine .docs/01_orientation/mozilla_grant_readiness.md](../.docs/01_orientation/mozilla_grant_readiness.md) — the private playbook (v3: §9 the two postures + license strategy, §11 the consult email)
 - [riir-rethink Proposal 005](../../riir-rethink/.proposals/005_mozilla_human_scale_ai_incubator.md) — PARKED (superseded by the one-proposal decision); its community-candidate work lives on as product follow-up
 - [Research 003](../../katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md) — the openness law this application proposes to amend for the charitable core
