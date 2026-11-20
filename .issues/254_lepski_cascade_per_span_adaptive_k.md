@@ -1,6 +1,7 @@
 # Issue 254: Lepski cascade per-span adaptive fan-out K — consumer of katgpt-core `lepski_cascade`
 
 **Status:** open — routed from katgpt-rs Issue 1229 (primitives + G1/G4 + dash_attn arm landed upstream, katgpt-rs `e866932a1`); unclaimed; first task is a kill-check against Bench 141
+**Claimed:** zed-m3-i254kill@m3, 1795200165, expires 2026-11-22T18:42:00Z — scope: the kill-check (read Bench 141 + Research 681 + Issue 1229; adjudicate cost + quality axes at today's corpus sizes; watch-row close or live-wire per the verdict)
 
 Consumer of `katgpt_core::lepski_cascade` (`estimators` umbrella; `A_DEFAULT = 1` serving
 constant, katgpt-rs Issue 1229 G1 cell 2). Wire, never fork.
