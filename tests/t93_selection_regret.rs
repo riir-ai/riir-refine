@@ -81,6 +81,10 @@ fn reliability(mode: SelectionMode, c: &Cand) -> f32 {
         SelectionMode::BetaPosterior | SelectionMode::Entropic | SelectionMode::TetherBlend => {
             katgpt_core::best_belief_score(c.s, c.f, EPSILON)
         }
+        // Issue 251: the product challenger shares the Beta axis verbatim —
+        // it changes the COMPOSITION law, which this harness holds additive.
+        #[cfg(feature = "composition_product")]
+        SelectionMode::ProductComposition => katgpt_core::best_belief_score(c.s, c.f, EPSILON),
     }
 }
 

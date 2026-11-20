@@ -614,6 +614,12 @@ source_case_gate = []
 # correlation cell stays the issue's standing gate. Feature-off is
 # byte-identical by construction (new gated code only).
 two_signal_composition = []
+# Issue 251 (Research 424): the multiplicative (soft-AND) composition
+# challenger for candidate selection — `SelectionMode::ProductComposition`
+# scores `ln evo + ln belief` instead of the 0.6/0.4 additive blend. Opt-in,
+# default-off, NEVER in the release set; the additive blend is the cold-start
+# identity and the DEMOTE. Adjudication: examples/composition_product_replay.
+composition_product = []
 
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
@@ -1212,6 +1218,14 @@ required-features = ["clippy_lints"]
 [[example]]
 name = "rho_real_stream"
 required-features = ["latent_retrieval"]
+
+# Issue 251 T2 — paired replay of the product (soft-AND) composition
+# challenger vs the additive incumbent over the durable store (report-only,
+# store-read-only). Run: cargo run --release --features
+# latent_retrieval,composition_product --example composition_product_replay
+[[example]]
+name = "composition_product_replay"
+required-features = ["latent_retrieval", "composition_product"]
 
 # The ANE pre-gate G2 cell (plan 377 P2.1) imports draft::eval_fixtures_ane,
 # which only exists under latent_retrieval — without this row --all-targets

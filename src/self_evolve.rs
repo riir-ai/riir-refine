@@ -131,9 +131,9 @@ struct Candidate {
 }
 
 /// Weight on the evolution-score axis in candidate selection.
-const W_EVO: f32 = 0.6;
+pub(crate) const W_EVO: f32 = 0.6;
 /// Weight on the reliability axis in candidate selection.
-const W_RATE: f32 = 0.4;
+pub(crate) const W_RATE: f32 = 0.4;
 
 /// Conservatism of the Beta lower bound in [`SelectionMode::BetaPosterior`].
 ///
@@ -253,6 +253,23 @@ pub enum SelectionMode {
     /// / `gemma2_directions` precedent); harnesses in
     /// `tests/t33_tether_selection_ab.rs` + `tests/t33_tether_g4_alloc.rs`.
     TetherBlend,
+    /// `ln evolution + ln best_belief_score(S, F, ε)` — the multiplicative
+    /// (soft-AND) composition challenger (Issue 251; Research 424). Same two
+    /// legs as [`BetaPosterior`](Self::BetaPosterior), composed as a product
+    /// in probability space instead of the 0.6/0.4 additive blend: a weak leg
+    /// is never forgiven by a strong one. The reported score is the product
+    /// itself (`exp` of the log-sum), so it stays on the `(0, 1]` scale every
+    /// downstream reader of `evolution_score` expects.
+    ///
+    /// Input law: both legs must be in `(0, 1]`; a pool holding any refused
+    /// leg (see [`crate::selection_product::ProductLeg`]) is scored by the
+    /// additive incumbent, with one loud notice per process.
+    ///
+    /// Opt-in, default-off, never in the release set; the additive blend
+    /// stays the cold-start identity. Adjudicated by
+    /// `examples/composition_product_replay.rs` (paired, report-only).
+    #[cfg(feature = "composition_product")]
+    ProductComposition,
 }
 
 // Issue 229 (Research 396 §8, verdict round-1 REVISE 2026-11-12): the
@@ -297,11 +314,44 @@ fn reliability_score(mode: SelectionMode, counts: (u32, u32), rate: f32) -> f32 
         SelectionMode::BetaPosterior | SelectionMode::TetherBlend => {
             katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
         }
+        // Issue 251: the product challenger shares the Beta axis verbatim —
+        // it changes the COMPOSITION law, not the per-candidate leg.
+        #[cfg(feature = "composition_product")]
+        SelectionMode::ProductComposition => {
+            katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
+        }
         SelectionMode::Entropic => {
             warn_entropic_degraded_once();
             katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
         }
     }
+}
+
+/// The non-TETHER composition of the two selection legs (Issue 251).
+///
+/// `product == false` is the incumbent `W_EVO·evo + W_RATE·rel`, the exact
+/// f32 expression the cold-start pins (`selection_tether.rs`,
+/// `t93_selection_regret`) reproduce bit-identically. `product == true` is
+/// the challenger's log-sum, reached only for a pool whose every leg was
+/// admitted ([`HealPipeline::product_pool_admitted`]).
+#[cfg(feature = "composition_product")]
+#[inline]
+fn compose(product: bool, evo: f32, reliability: f32) -> f32 {
+    if product {
+        // Admission was checked for the whole pool; a refusal here is a
+        // logic error, so fail toward the incumbent rather than -inf.
+        crate::selection_product::product_score(evo, reliability)
+            .unwrap_or(W_EVO * evo + W_RATE * reliability)
+    } else {
+        W_EVO * evo + W_RATE * reliability
+    }
+}
+
+/// Feature-off: the incumbent expression only.
+#[cfg(not(feature = "composition_product"))]
+#[inline]
+fn compose(_product: bool, evo: f32, reliability: f32) -> f32 {
+    W_EVO * evo + W_RATE * reliability
 }
 
 /// The selection facts needed to attribute a realized outcome back to the
@@ -530,6 +580,9 @@ impl HealPipeline {
         // only at window boundaries anyway (the Issue 033 lag law).
         let tether = matches!(self.selection_mode, SelectionMode::TetherBlend);
         let rho = self.tether.rho();
+        // Issue 251: the product law scores the pool only when EVERY leg is
+        // admitted (input law) — a pool is never scored under two laws.
+        let product = self.product_pool_admitted(rule_id, candidates);
 
         let mut best = None::<(usize, f32)>;
         // The winner's endpoint pair, carried out for the TETHER observation.
@@ -554,7 +607,7 @@ impl HealPipeline {
             let combined = if tether {
                 (1.0 - rho) * evo_score + rho * reliability
             } else {
-                W_EVO * evo_score + W_RATE * reliability
+                compose(product, evo_score, reliability)
             };
             // Issue 048 T3 — GP acquisition tie-break: lexicographic AFTER
             // the combined score. Fires ONLY on exact f32 equality (the
@@ -593,7 +646,43 @@ impl HealPipeline {
         if tether {
             self.stage_tether_pick(rule_id, &candidates[best_idx].code, best_axes);
         }
+        // The product law picks on the log-sum; it REPORTS the product so the
+        // score stays on the (0, 1] scale downstream readers expect.
+        let best_score = if product {
+            best_score.exp()
+        } else {
+            best_score
+        };
         (best_idx, best_score)
+    }
+
+    /// Issue 251: does the product law score this pool? Only in
+    /// [`SelectionMode::ProductComposition`], and only when every candidate's
+    /// two legs are admitted by [`crate::selection_product::ProductLeg`];
+    /// otherwise the pool degrades to the additive incumbent, loudly.
+    #[cfg(feature = "composition_product")]
+    fn product_pool_admitted(&self, rule_id: &str, candidates: &[Candidate]) -> bool {
+        if !matches!(self.selection_mode, SelectionMode::ProductComposition) {
+            return false;
+        }
+        let admitted = candidates.iter().all(|cand| {
+            let evo = self.evolution.score_candidate(rule_id, &cand.direction);
+            let rel = reliability_score(self.selection_mode, cand.counts, cand.success_rate)
+                * crate::journey::journey_factor(cand.journey.0, cand.journey.1);
+            crate::selection_product::product_score(evo, rel).is_some()
+        });
+        if !admitted {
+            crate::selection_product::warn_product_degraded_once();
+        }
+        admitted
+    }
+
+    /// Feature-off: the product law does not exist; every pool is additive.
+    #[cfg(not(feature = "composition_product"))]
+    #[inline]
+    #[allow(clippy::unused_self)]
+    fn product_pool_admitted(&self, _rule_id: &str, _candidates: &[Candidate]) -> bool {
+        false
     }
 
     /// Stage the `TetherBlend` pick's `(rule_id, fixed_code, p1, p2)` so a later

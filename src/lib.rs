@@ -259,6 +259,8 @@ pub mod structural_admission_store;
 // layers consume this).
 pub mod journey;
 pub mod selection_entropic;
+#[cfg(feature = "composition_product")]
+pub mod selection_product;
 pub mod selection_tether;
 pub mod self_evolve;
 
