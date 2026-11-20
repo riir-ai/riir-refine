@@ -1,7 +1,7 @@
 # Plan 392: Mining-Queue Epiplexity Allocation + Domain Saturation Gate
 
 **Status:** OPEN — filed from katgpt-rs Research 685 + riir-refine Research 426; P0 census DONE 2026-11-20 (verdict SPARSE — univariate per-domain fit family, §Phase 0 below; spectrum CORRECTED same day, eff10 = 1); Phase 1 consumer LANDED 2026-11-20 (`examples/mining_gain_census.rs` + the gated `epiplexity_census` module + 11 gates; consumes katgpt-core `epiplexity_gain` — katgpt-rs Plan 641, landed `9151d140c` — consume, never fork; example output confirms the Sparse arm + a temporally stable kernel_opt-top queue; REPORT-ONLY until G2 passes). G2 (allocation value, the promotion bar) OPEN.
-**Claimed:** zed-m3-p392census@m3, 1795182273, expires 2026-11-22T13:44:18Z
+**Lease closed:** zed-m3-p392census@m3, epoch 1795182273, expiry 2026-11-22T13:44:18Z — Phase 0 census + Phase 1 consumer landed (867023c6); Phases 2–3 remain gated on the katgpt-rs Plan 641 G2 cell (open-unclaimed), nothing claimed-but-stopped.
 **Priority:** fusion ladder #1 (self-evolve product stack).
 
 ## Premise
