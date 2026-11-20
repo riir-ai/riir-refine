@@ -1,6 +1,7 @@
 # Issue 252 — blueprint strata under-count `written`: edits that revert were never counted as written
 
-**Status:** OPEN — filed 2026-11-20 (katgpt-rs-93@amo) from Issue 250 T1a (Bench 162 addendum); unclaimed.
+**Status:** IN PROGRESS — filed 2026-11-20 (katgpt-rs-93@amo) from Issue 250 T1a (Bench 162 addendum).
+**Claimed:** katgpt-rs-93@amo, 1795120000, expires 2026-11-22T00:00:00Z
 
 ## The finding
 
