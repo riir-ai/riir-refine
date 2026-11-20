@@ -1,6 +1,7 @@
 # Plan 392: Mining-Queue Epiplexity Allocation + Domain Saturation Gate
 
 **Status:** OPEN — filed from katgpt-rs Research 685 + riir-refine Research 426; GATED on the P0 mix-variation census; consumes katgpt-core `epiplexity_gain` (katgpt-rs Plan 641) — consume, never fork.
+**Claimed:** zed-m3-p392census@m3, 1795182273, expires 2026-11-22T13:44:18Z
 **Priority:** fusion ladder #1 (self-evolve product stack).
 
 ## Premise
