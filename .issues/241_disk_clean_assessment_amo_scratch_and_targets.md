@@ -64,3 +64,35 @@ standing list for the next deep clean (owner approval or a closed-lane re-scan).
 
 This session's own footprint: no new target dirs, no worktrees, no /tmp plans.
 The incremental sweep's recompile tax lands on the next dev-profile builds (expected).
+
+## 2026-11-20 re-survey (amo idle housekeeping lane, epoch 1795148454) — healthy box (356 Gi avail, tripwire NOT armed); six merge-gate worktrees found as ~703 G of UNLISTED candidate rows; list-only this cycle (today-mtime protection)
+
+Fresh `du` census + per-worktree adjudication. The 11-19 table had none of these rows:
+the `git/wt-mg-*` / `git/wt2-mg-*` merge-gate worktrees (ownership inferred — `mg-N` naming + the
+sprint!083 gate landing today; the mtimes govern, never the inference). All six carry SOURCE
+mtimes from this morning 07:06–08:30 → the never-delete-today law holds on every row:
+
+| Path (registered wt of) | target | HEAD | today's activity | verdict |
+|---|---|---|---|---|
+| `git/wt-mg-045` (seal-remake) | 160G | `3654e0d9` MERGED (on origin) | `wrangler.jsonc` 07:06 | teardown-law leftover — WAIT for a quiet window (sprint!083 landed seal-sprints `5b30fd1` today) |
+| `git/wt2-mg-045` (seal-remake) | 162G | `3654e0d9` MERGED | Cargo.lock churn 08:26 | same |
+| `git/wt-mg-075` (seal-remake) | 160G | `32b7fdc39` **NOT-ON-ANY-BRANCH** | Cargo.lock churn 07:08 | ANCHORED: `hold/wt-mg-075` created in seal-remake; adjudicate the unlanded commit (land it or let the hold branch carry it) before any removal |
+| `git/wt2-mg-075` (seal-remake) | 162G | `f7ff677dc` **NOT-ON-ANY-BRANCH** | `src/harness.rs` mtime 08:28, tree clean | ANCHORED: `hold/wt2-mg-075` created; same adjudication + the today-mtime hold |
+| `git/wt-mg-065` (seal-game-editor) | 24G | `91283c500` MERGED | `feat-interaction/src/lib.rs` 07:09, tree clean | leftover once quiet (gate-lane fmt/build touch) |
+| `git/wt2-mg-065` (seal-game-editor) | 35G | `91283c500` MERGED | same, 08:30 | same |
+
+Candidate reclaim ≈ **703 G** (all `target/` trees; removal = `git worktree remove` + the target
+dir per the teardown law, never while fresh source mtimes exist). Correction to the 11-19 row:
+`git/seal-remake/target` measured **205G today** (was 162G — ~43G of release rebuilds + gate
+lanes since). Deep-clean window = a day with NO fresh source mtimes under `wt-mg-*`/`wt2-mg-*`
+AND the two `-075` commits adjudicated. The -045/-065 quartet alone is ~381G of pure leftover
+build cache once quiet.
+
+Same-session Protocol-H findings (context for the next lane): the seal-sprints checkout was
+jammy — an unpushed local commit `600848e` ("fix(i067)" lease reshape) turned out to be a
+STALE-TREE WHOLESALE REVERT (deleted live issues 039/084/085 + plan 069, stripped live claims
+in 050/061/063/067, un-closed DONE plan 033, reverted HISTORY/TASKS); its legitimate intent
+(UUID-blind lease reshape) was already landed properly on origin (the `d498106` note in
+`.plans/067`). develop re-set to origin/develop `7daa9bc` (ff refused — diverged; hold branch
+`hold/i067-stale-revert-600848e` preserves the commit for adjudication). seal-sprints now
+synced + clean. riir-refine itself: clean, up to date, nothing to sweep.
