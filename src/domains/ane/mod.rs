@@ -61,6 +61,15 @@ pub enum AneFamily {
     PrecisionDsp,
     /// Weight palette/quantization depth + retention gates.
     PaletteQuant,
+    /// Whole-output validity gates (per-stage parity vs host reference) —
+    /// the detection GRANULARITY law, not the numerics itself.
+    Validation,
+    /// Serving-time call shaping (batch-per-call, submission pacing).
+    Serving,
+    /// Concurrent access to accelerator handles (serialization contracts).
+    Concurrency,
+    /// Process lifecycle bounds (resource growth, load-time failure gates).
+    Lifecycle,
 }
 
 impl AneFamily {
@@ -74,6 +83,10 @@ impl AneFamily {
             Self::GraphShape => "graph-shape",
             Self::PrecisionDsp => "precision-dsp",
             Self::PaletteQuant => "palette-quant",
+            Self::Validation => "validation",
+            Self::Serving => "serving",
+            Self::Concurrency => "concurrency",
+            Self::Lifecycle => "lifecycle",
         }
     }
 }

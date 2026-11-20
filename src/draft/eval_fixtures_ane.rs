@@ -78,4 +78,58 @@ fn quantize_encoder(w: &[f32]) -> Vec<u8> {
     kmeans_palette(w, 4)
 }"#,
     ),
+    // ── Batch 376 wave (the anemll branch-delta, Research 421) ──────────────
+    (
+        "ane-int8-matmul-shape-silent-wrong-gate",
+        r#"fn serve_ffn(x: &[f32], form: Form) -> Vec<f32> {
+    // the new INT8 form benchs faster; adopted on speed alone
+    int8_matmul_pair(x, form) // rel 0.98 wrong at this shape, no signal
+}"#,
+    ),
+    (
+        "ane-stage-parity-gate-cpu-vs-ane-same-model",
+        r#"fn accept(build: &Build) -> bool {
+    // whole-model cosine passes; per-stage numerics unchecked
+    cosine(out_probs(build), ref_probs(build)) > 0.99
+}"#,
+    ),
+    (
+        "ane-hybrid-pipeline-block-granularity-not-layer-interleave",
+        r#"fn run_layer(x: &Tensor) -> Tensor {
+    // within-layer channel split: the second unit idles through the first's half
+    let ffn_ane = ane_ffn_channels(x, 0.76);
+    gpu_mixers(add(ffn_ane, gpu_ffn_channels(x, 0.24)))
+}"#,
+    ),
+    (
+        "ane-prediction-gap-fewer-bigger-calls",
+        r#"fn run_blocks(x: &Tensor, n_blocks: usize) -> Vec<Tensor> {
+    // one 64-row call per block: N gaps at 0.23 ms each
+    (0..n_blocks).map(|b| ane_ffn_64rows(x, b)).collect()
+}"#,
+    ),
+    (
+        "ane-concurrent-same-function-silent-corruption",
+        r#"fn serve_workers(function: Function, workers: usize) {
+    // each worker clones the binding; the SAME function underneath
+    (0..workers).map(|_| {
+        let f = function.clone_binding();
+        spawn(move || publish(f.evaluate(next_input())))
+    });
+}"#,
+    ),
+    (
+        "ane-host-output-pool-unbounded-call-bound",
+        r#"fn decode_loop(chunk: &Chunk, tokens: usize) -> Vec<Token> {
+    // unbounded: every call allocates fresh outputs the runtime never frees
+    (0..tokens).map(|_| read_token(&chunk.call(next_state()))).collect()
+}"#,
+    ),
+    (
+        "ane-package-size-build-gate-before-kernel-panic",
+        r#"fn load(path: &str) -> Model {
+    // no size gate, no version check — trust the runtime (panics the kernel past 1.1 GB)
+    load_unchecked(path)
+}"#,
+    ),
 ];

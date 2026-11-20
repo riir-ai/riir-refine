@@ -704,6 +704,22 @@ pub(super) fn entries() -> Vec<KernelRule> {
         // Distinct from expm1-for-near-zero-exp-minus-one (stable exp(x)−1
         // NEAR ZERO — this is the FAR-tail saturation of ln(1+e^x)) and
         // exp2-log2-base2 (base conversion — this is domain clamping).
+        // FACE (Batch 376, the framework-op site — anemll @ fe8de185): the
+        // hazard is not only hand-written ln(1+exp) — a VENDOR transcendental
+        // carries its own saturation behavior. The ANE's fp16 `softplus`
+        // returns 0 for inputs ≥ ~11 (exp overflow inside the op — its own
+        // far tail, at a LOWER threshold than f32's ~88), so DeltaNet decay
+        // gates with a + dt ≥ 11.2 become g = 0 — NO decay — instead of up
+        // to -7.5/token: layer 0 measured 74-81 of 384 head-token values
+        // (~20%) silently stuck, spread over 15-16 of 48 heads. The gates
+        // that should nearly reset state every token never decay — the same
+        // identity-stuck class the gate-dtype rule (gpu_97) guards on the
+        // OUTPUT dtype side, here on the INPUT evaluation domain. Fix is the
+        // same stable spelling at the call site: relu(x) + log(1 +
+        // exp(-|x|)) (their qwen38_ane_chunk.py, all DeltaNet paths) — and
+        // the regime note: a backend/framework UPDATE can change the op's
+        // effective domain, so the parity harness must cover the far tail,
+        // not just the mid-band (the M3U PyTorch KL numbers never saw it).
         KernelRule {
             rule_id: "softplus-piecewise-saturation-clamp".to_string(),
             gpu_concept: "softplus ln(1 + exp(x)) overflows (exp → inf → ln(inf)) for large x and wastes precision for very negative x — evaluate the piecewise form: return x for x > 20 (softplus equals x to f32 precision), 0 for x < -20 (the exponential underflows the sum), and the transcendental only inside the safe band. Pin the thresholds to the CPU reference implementation so GPU and CPU outputs stay bit-comparable under test; when the result feeds an exp() decay gate on a persistent recurrent state, the unclamped form does not just lose precision — one inf poisons the state permanently. Distinct from expm1-for-near-zero-exp-minus-one (cancellation near zero — this is far-tail saturation) and exp2-log2-base2 (base-2 conversion — this is domain clamping)".to_string(),

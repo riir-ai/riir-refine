@@ -9,7 +9,25 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 378 entries across 15 categories as of Batch 375 (+5: measurement-honesty ×2 —
+//! 380 entries across 15 categories as of Batch 376 (+2: caching ×2 —
+//! `snapshot-state-kv-prefix-consistency-drop-invalid` (suggestion-only: a
+//! snapshot of joint (state, KV-rows) memory held beside a live cache must be
+//! VALIDATED at restore time against what the cache now holds — a snapshot
+//! whose tokens are NOT a prefix of the live rows is invalid (a second writer
+//! rewrote the rows under it) and must be DROPPED so the request runs cold,
+//! never restored: restoring it silently pairs one component's state with the
+//! OTHER writer's rows; the `restorable()` predicate + typed raise shape) +
+//! `hybrid-state-prefix-snapshot-reuse` (suggestion-only: prefix snapshots of
+//! hybrid state are kept across the rewrite via the priced rows-aside copy —
+//! the staged splash candidate landed at its second instance, the anemll
+//! 'sysk' mechanism; the copy is freed at restore, reuse admitted under the
+//! consistency rule) — the `anemll` branch-delta `rust_perf` half (`Anemll/anemll-forge`
+//! @ `fe8de185` branch `v8-gpu-ane-prefill`, MIT — re-pinned at the batch T0 past
+//! the verdict pin `912925f`; the two-pin diff `117ded62..fe8de185` proves the
+//! the `v8_prefill` docs NEW since the 09-30 record) + 2 count-neutral FACES on
+//! `entries_74` hosts (the per-runtime residency split on `one-program-many-functions` + the DRAM-measured interference re-adjudication on `ane-split-calibration-fit`); Plan 387 / Research 421, `entries_89`.
+//!
+//! prior: 378 entries as of Batch 375 (+5: measurement-honesty ×2 —
 //! `gate-cut-fitted-on-serving-representation` (suggestion-only: fit or derive any
 //! threshold on EXACTLY the representation the comparator reads at serve time — bin,
 //! quantize, round BEFORE the cut, never after; a full-precision cut can sit above
@@ -932,13 +950,14 @@ mod entries_85;
 mod entries_86;
 mod entries_87;
 mod entries_88;
+mod entries_89;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 378 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 380 entries
 /// (Batch 375, 2026-11-20, Plan 391 / Research 425 round 2: +5 — the laya
 /// round-2, the staged unread-sweep candidates, `entries_88`,
 /// NandhaKishorM/laya @ `416dd9ed` Apache-2.0, still the remote tip:
@@ -1312,6 +1331,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_86::b372_rules());
     entries.extend(entries_87::b374_rules());
     entries.extend(entries_88::b375_rules());
+    entries.extend(entries_89::b376_rules());
     Corpus::new(entries)
 }
 
