@@ -16404,6 +16404,10 @@ fn main() {
     #[allow(unused_mut)]
     let mut bp_attempted_by_rule: std::collections::BTreeMap<String, u32> =
         std::collections::BTreeMap::new();
+    // Issue 250 T1b: the per-edit event rows of this run's verify batch
+    // (report-only; written beside the blueprint row, same demote env).
+    #[allow(unused_mut)]
+    let mut bp_edit_events: Vec<riir_refine::blueprint::EditEventRow> = Vec::new();
     #[allow(unused_mut)]
     let mut bp_verify: Option<riir_refine::blueprint::VerifyCapture> = None;
     // Plan 329 P2: the run-end refusal roll-up — every fix-path
@@ -18509,6 +18513,31 @@ fn main() {
                 riir_refine::blueprint::verify_rule_counts(edits, whole_files);
             bp_attempted_by_rule = attempted;
             bp_reverted_by_rule = reverted;
+            let run_edits =
+                u32::try_from(verify_batches.iter().map(|b| b.edits.len()).sum::<usize>())
+                    .unwrap_or(u32::MAX);
+            let run_checks = u32::try_from(report.n_checks).unwrap_or(u32::MAX);
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            for (b, (lines, whole)) in verify_batches.iter().zip(&batch_state) {
+                for e in &b.edits {
+                    bp_edit_events.push(riir_refine::blueprint::EditEventRow {
+                        v: riir_refine::blueprint::EDIT_EVENT_VERSION,
+                        ts,
+                        run_id: heal_run_id.clone(),
+                        path: b.path.display().to_string(),
+                        rule: e.rule_id.clone(),
+                        line: e.final_line,
+                        reverted: *whole || lines.contains(&e.final_line),
+                        whole_file: *whole,
+                        run_edits,
+                        run_checks,
+                        restore: e.restore.clone(),
+                        replacement: e.replacement.clone(),
+                    });
+                }
+            }
         }
 
         // ── P104: the verdict-based disclosure — kept edits under a
@@ -19966,6 +19995,24 @@ fn main() {
                 "blueprint: could not append history row ({}): {e}",
                 bp_root
                     .join(riir_refine::blueprint::HISTORY_RELPATH)
+                    .display()
+            );
+        }
+        // Issue 250 T1b: the per-edit event log (repo-relative paths).
+        for ev in &mut bp_edit_events {
+            if let Ok(rel) = std::path::Path::new(&ev.path).strip_prefix(&bp_root) {
+                ev.path = rel.display().to_string();
+            }
+        }
+        if let Err(e) = riir_refine::blueprint::maybe_append_edit_events(
+            riir_refine::blueprint::lane_enabled(),
+            &bp_root,
+            &bp_edit_events,
+        ) {
+            eprintln!(
+                "blueprint: could not append edit events ({}): {e}",
+                bp_root
+                    .join(riir_refine::blueprint::EDIT_EVENTS_RELPATH)
                     .display()
             );
         }

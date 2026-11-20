@@ -427,3 +427,38 @@ fn verify_rule_counts_written_covers_reverted() {
     let (w0, r0) = verify_rule_counts([], 0);
     assert!(w0.is_empty() && r0.is_empty());
 }
+
+/// Issue 250 T1b: edit events append one JSON line per row, round-trip,
+/// and the gate / empty batch never touch the file.
+#[test]
+fn edit_events_append_roundtrip_and_gate() {
+    let dir = std::env::temp_dir().join(format!("bp_edit_events_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let row = EditEventRow {
+        v: EDIT_EVENT_VERSION,
+        ts: 1,
+        run_id: "run-1".into(),
+        path: "src/a.rs".into(),
+        rule: "redundant_closure".into(),
+        line: 7,
+        reverted: true,
+        whole_file: false,
+        run_edits: 2,
+        run_checks: 3,
+        restore: "|x| f(x)".into(),
+        replacement: "f".into(),
+    };
+    assert!(!maybe_append_edit_events(false, &dir, std::slice::from_ref(&row)).unwrap());
+    assert!(!maybe_append_edit_events(true, &dir, &[]).unwrap());
+    assert!(!dir.join(EDIT_EVENTS_RELPATH).exists());
+    let mut second = row.clone();
+    second.reverted = false;
+    assert!(maybe_append_edit_events(true, &dir, &[row.clone(), second.clone()]).unwrap());
+    let text = std::fs::read_to_string(dir.join(EDIT_EVENTS_RELPATH)).unwrap();
+    let back: Vec<EditEventRow> = text
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(back, vec![row, second]);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -263,18 +263,86 @@ pub fn cap_strata(strata: BTreeMap<String, RuleOutcome>) -> BTreeMap<String, Rul
 /// stderr and continues (the meter-save precedent: a lost bookkeeping event
 /// never fails a heal).
 pub fn append_row(root: &Path, row: &BlueprintRow) -> std::io::Result<PathBuf> {
-    let path = root.join(HISTORY_RELPATH);
+    append_jsonl(root, HISTORY_RELPATH, std::slice::from_ref(row))
+}
+
+/// Append `rows` (one JSON line each, ONE write) to `root/relpath`, creating
+/// the parent on first write — the shared body of the blueprint lane's
+/// bookkeeping files.
+///
+/// # Errors
+///
+/// Propagates create-dir/serialize/append IO errors.
+pub fn append_jsonl<T: Serialize>(
+    root: &Path,
+    relpath: &str,
+    rows: &[T],
+) -> std::io::Result<PathBuf> {
+    let path = root.join(relpath);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut line = serde_json::to_string(row).map_err(std::io::Error::other)?;
-    line.push('\n');
+    let mut buf = String::new();
+    for row in rows {
+        buf.push_str(&serde_json::to_string(row).map_err(std::io::Error::other)?);
+        buf.push('\n');
+    }
     std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)?
-        .write_all(line.as_bytes())?;
+        .write_all(buf.as_bytes())?;
     Ok(path)
+}
+
+/// Issue 250 T1b — the per-edit event log: one row per edit a verify batch
+/// ATTEMPTED (report-only; rides the blueprint lane's demote env). The
+/// per-run, per-edit record the G3 compile-savings simulation needs and
+/// no other store keeps (the trajectory store aggregates per
+/// key/shape/fix; blueprint strata are per rule).
+pub const EDIT_EVENTS_RELPATH: &str = ".refine/edit_events.jsonl";
+/// Schema version of an [`EditEventRow`].
+pub const EDIT_EVENT_VERSION: u8 = 1;
+
+/// One attempted edit's verify outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EditEventRow {
+    pub v: u8,
+    pub ts: u64,
+    /// The heal run (groups a run's batch).
+    pub run_id: String,
+    /// The edited file, repo-relative when under the heal root.
+    pub path: String,
+    pub rule: String,
+    /// 1-based line in the fixed source.
+    pub line: usize,
+    /// The compile gate put this edit back (span revert or whole-file).
+    pub reverted: bool,
+    /// The revert was the whole file's.
+    pub whole_file: bool,
+    /// Edits the verify batch attempted in this run.
+    pub run_edits: u32,
+    /// cargo checks the run's verify spent (baseline + rounds).
+    pub run_checks: u32,
+    /// The replaced text and its replacement (the similarity arm's input).
+    pub restore: String,
+    pub replacement: String,
+}
+
+/// The gated write of a run's edit events (no rows → no touch).
+///
+/// # Errors
+///
+/// Propagates [`append_jsonl`]'s errors.
+pub fn maybe_append_edit_events(
+    enabled: bool,
+    root: &Path,
+    rows: &[EditEventRow],
+) -> std::io::Result<bool> {
+    if !enabled || rows.is_empty() {
+        return Ok(false);
+    }
+    append_jsonl(root, EDIT_EVENTS_RELPATH, rows).map(|_| true)
 }
 
 /// The gated write: [`lane_enabled`] on → append (silent on success — G1's
