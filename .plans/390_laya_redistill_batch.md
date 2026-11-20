@@ -1,6 +1,7 @@
 # Plan 390 — Batch 374: laya-onnx/0.4.35 re-distill (rust_perf batching lead + serving transcription)
 
-**Status:** STAGED — unclaimed (Research 425, YES B+; verdict session zed-m3-laya@m3, 2026-11-20)
+**Status:** CLAIMED — staged by Research 425 (YES B+; verdict session zed-m3-laya@m3, 2026-11-20); executing from zed-6ef0ba37@m3 the same day (reflex 128's lane — T9's pin-refresh disposition already RESOLVED by that lane: recommendation routed AND executed, reflex 128 PIN HELD, commits a1fc4a5a/17463a3d; record the resolution in the snapshot landing row, no filing owed)
+**Claimed:** zed-6ef0ba37@m3, 1795173677, expires 2026-11-22T11:21:17Z
 
 Source: `github.com/NandhaKishorM/laya` — verdict pin `416dd9ed20da2d43fc40e23712e9adceefabf634` (tip 2026-11-20; FAST-MOVING — T0 re-pins and re-verifies). Apache-2.0. Clone ephemeral at `.raw/laya`, removed at batch close.
 
