@@ -14,13 +14,13 @@
     }
   },
   "rust_perf": {
-    "benchable": 141,
+    "benchable": 142,
     "categories": 15,
-    "notbenchable": 228,
-    "rules": 369
+    "notbenchable": 231,
+    "rules": 373
   },
   "sec": {
-    "rules": 77
+    "rules": 79
   },
   "shader_perf_rules": 8
 }

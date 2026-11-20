@@ -9,7 +9,43 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 369 entries across 15 categories as of Batch 372 (+4: concurrency ×3 —
+//! 373 entries across 15 categories as of Batch 374 (+4: complexity ×2 —
+//! `batch-mixed-length-pads-to-longest-group-by-length` (the BENCHABLE
+//! GOAT lead: mixed-length batched passes pad every row to the pass max;
+//! a bounded-window stable sort by row length cuts the maxima, results
+//! restored to input order, per-row results bit-identical — the pad is
+//! inert; the uniform-length control Ties, the FP-near-threshold caveat
+//! is the source's own; pre-registered bars + the real-padded-work model
+//! in the rule) + `long-doc-window-aggregation-picks-deciding-window`
+//! (suggestion-only: noul takes the strongest window, choice/score the
+//! most-confident — averaging lets the neutral majority out-vote the one
+//! window that saw the deciding span; the picked window's probability is
+//! the answer's, carried with index/span/count attribution, never
+//! laundered into a fake whole-document number) — and measurement-honesty
+//! ×2 — `confidence-threshold-bucketed-by-answer-shape` (suggestion-only:
+//! the same confidence field orders OPPOSITE between checkpoints across
+//! option counts, so one flat cut abstains at a different accuracy target
+//! per shape — bucket the threshold qtype × option-band + a default,
+//! echo the applied threshold; carries the R3 tri-state gate face folded
+//! in-notes: exactly passed/abstained/unevaluated, no gate configured
+//! reports NOTHING, non-finite confidence is its own state) +
+//! `budget-room-from-constructed-artifact-not-configured-cap`
+//! (suggestion-only: `max_len - head_max_len` is not a safe figure in
+//! either direction — per-option token floors grow the built head past
+//! its cap past ~cap/4 options (77→319, 100→411 vs the 320 cap) so the
+//! cap-sized state TRUNCATES, and the small question wastes room — size
+//! from the constructed head; the `len_derived` genus's budget face) — the
+//! laya 0.5.0-surface re-distill (NandhaKishorM/laya @ `416dd9ed` — 2
+//! commits past the v0.5.0 tag; Research 425's "0.4.35" label corrected
+//! at T0; Apache-2.0, clone read at the pin 2026-11-20, T0 two reader
+//! subagents, 25 direct quotes byte-verified, 8 record corrections
+//! carried into the notes) + the batch's sec half (R8 + R9 rules, R4 +
+//! R10 rider faces) in `src/domains/sec/corpus.rs`, same commit; honest
+//! T0 drop: R7 unicode-parity (thin — the standalone fixture cannot pull
+//! the parity crate, `entries_29`'s fixture carries the second instance);
+//! the TileLang/graph/tokenizer/LRU KILLs stay dedup evidence in
+//! Research 425's table; Plan 390, `entries_87`) — prior: 369 entries
+//! across 15 categories as of Batch 372 (+4: concurrency ×3 —
 //! `closed-channel-select-arm-gate` (suggestion-only, the tokio select
 //! arm-lifecycle law: a closed channel is ALWAYS READY and an ungated arm
 //! spins the loop — gate with the state bool/Option-take, the close kept
@@ -864,6 +900,7 @@ mod entries_83;
 mod entries_84;
 mod entries_85;
 mod entries_86;
+mod entries_87;
 
 #[cfg(test)]
 mod tests;
@@ -1228,6 +1265,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_84::b369_rules());
     entries.extend(entries_85::b371_rules());
     entries.extend(entries_86::b372_rules());
+    entries.extend(entries_87::b374_rules());
     Corpus::new(entries)
 }
 

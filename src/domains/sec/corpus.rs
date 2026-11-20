@@ -230,6 +230,34 @@
 //! honest poor precision — vocabulary-gated, same-file only, review
 //! decides). Detector modules: `proposers::zeroize_secret`,
 //! `proposers::keyed_state_cap`, `proposers::gateway_ctor`.
+//!
+//! Batch 374 (2026-11-20, Plan 390 / Research 425): the laya
+//! serving-boundary pair (NandhaKishorM/laya @ `416dd9ed20da2d43fc40e23712e9adceefabf634`
+//! — 2 commits past the v0.5.0 tag; Research 425's "0.4.35" label corrected
+//! at T0; Apache-2.0, clone read at the pin, quotes byte-verified; the
+//! fixtures are ORIGINAL syntheses, never pasted source). TWO suggest-only
+//! `InputValidation` rules: the per-request amplification guard
+//! (`request-amplification-guard-before-expensive-path` — a
+//! caller-controlled per-unit count drives a per-unit expensive path; a
+//! typed 413-class refusal raised BEFORE the expensive path, naming field
+//! and cap, with BOTH the per-question and the per-request-total caps;
+//! adjudicated vs `untrusted-keyed-state-unbounded` (growth-over-time) and
+//! `length-prefix-validate-before-alloc` (the alloc face) in-rule both
+//! directions) and the callable-field refusal
+//! (`callable-naming-wire-fields-refused-not-dropped` — a body field whose
+//! NAME binds a server-side executable surface is refused typed naming the
+//! field, never silently dropped: the drop is a false-consent surface;
+//! benign unknown fields still pass — the over-broad refusal is the pinned
+//! tamper). PLUS two count-neutral rider faces on existing hosts: the
+//! port-parity-validation face on `gateway-type-forces-security-check`
+//! (a port re-validates at the seams the SOURCE validated — the port's
+//! public variants are hand-writable even when its types make the check
+//! look unreachable) and the calibration-table-fallback face on
+//! `capacity-exceeded-silent-fallback-not-refusal` ('A fallback prevents a
+//! loading failure; it does not establish calibrated confidence.' — loud
+//! degradation with a retained raw, never a quiet substitute). The batch's
+//! `rust_perf` half (4 rules + 1 in-note face) lands in
+//! `src/domains/rust_perf/corpus/entries_87.rs`, same commit.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -917,7 +945,22 @@ repairs. Honest recall limits: a warned truncate or a log-limit drop inside \
 encode-vocabulary fns fires too and review decides (suggest-only is the blast-radius \
 control); the slice form (`&entries[..CAP]`) and `take(n)` clamps are out; cross-fn \
 builds unconnected. Batch 294 / Plan 298 / Research 332 (RUSTSEC-2026-0379, CC0 — \
-cited as class provenance; the fixture is an original synthesis)."
+cited as class provenance; the fixture is an original synthesis). RIDER FACE (Batch \
+374 / Plan 390 / Research 425, NandhaKishorM/laya @ 416dd9ed Apache-2.0 — the \
+CALIBRATION-TABLE FALLBACK axis, adjacent-not-owned: this rule owns a cap that \
+silently DROPS payload; the face owns a fallback value that silently REPLACES \
+unusable config — and its honesty law is the complement: 'A fallback prevents a \
+loading failure; it does not establish calibrated confidence.' (README:1884-1885 \
+verbatim) — the clamp-and-warn path (lang_temperatures.rs:131/:338-344: clamp to \
+[TEMP_MIN, TEMP_MAX], invalid/non-finite → 1.0, the warning naming the affected \
+entries AND the applied values, `{name}={raw} -> {applied}`) keeps the raw values \
+reachable (`temperature_raw`) so an audit can read what SHIPPED vs what was \
+AUTHORED — a fallback is a LOUD degradation with a retained raw, never a quiet \
+substitute. The two arms of the source's own law split exactly on this rule's \
+refusal axis: a bad temperature is forgiven-and-clamped (downstream consumers can \
+degrade), while a bad binning value is REFUSED — 'Nothing recalibrates a \
+confidence the way an out-of-range binning value would, so there is no defensible \
+fallback for it.' (calibrate.py fallback-existence law). Count-neutral."
                 .to_string(),
             buggy_code: "const MAX_TARGETS: usize = 64;\n\npub fn encode_table(targets: &[u16], out: &mut Vec<u8>) {\n    let mut owned = targets.to_vec();\n    if owned.len() > MAX_TARGETS {\n        owned.truncate(MAX_TARGETS); // silently drops the excess\n    }\n    out.extend_from_slice(&(owned.len() as u16).to_be_bytes());\n    for t in &owned {\n        out.extend_from_slice(&t.to_be_bytes());\n    }\n}\n"
                 .to_string(),
@@ -1199,7 +1242,22 @@ same-file gateway fn taking a self reference with check vocabulary that referenc
 struct's type by EXACT ident; the fixed shape (the ctor already pub(crate)/private, or \
 no ctor in the file) stays silent. Batch 327 / Plan 332 / Research 364 (firezone/sanstun \
 @ 35cb1932948bd0776, Apache-2.0 — cited as class provenance; the fixture is an original \
-synthesis)."
+synthesis). RIDER FACE (Batch 374 / Plan 390 / Research 425, NandhaKishorM/laya \
+@ 416dd9ed Apache-2.0 — the PORT-PARITY VALIDATION axis, adjacent-not-owned: this \
+rule owns CHECKPOINT BYPASS via a pub constructor in the SAME language; the face owns \
+the port's mirror obligation — when a port's TYPES make the source's validation look \
+unreachable, the validation still runs again where the source ran it, because the \
+port's variants are public and hand-writable. laya-rust/src/confidence.rs:7-9 at the \
+pin verbatim: 'The variants are public, so an unvalidated value can be written by \
+hand; [`MinConfidence::validate`] therefore runs again where Python runs \
+`check_min_confidence`' — '(the start of `predict_batch`, and the router's `predict` \
+and `predict_batch`), so a hand-built value cannot reach the gate' (:9-10); and the \
+source names the honest boundary (:12-13): 'What cannot be reached from Rust is the \
+type check (`bool`, `str`, `None` in place of a float) and the `isinstance(m, dict)` \
+check: the types already rule them out' — the type-level checks the port genuinely \
+subsumes are retired; the VALUE checks are re-run at the same sites. The law: a port \
+re-validates at the seams the SOURCE validated, never trusting its own constructor \
+reachability as a substitute. Count-neutral."
                 .to_string(),
             buggy_code: "pub struct LoginClaim {\n\
     user: u64,\n\
@@ -3025,6 +3083,91 @@ entry)."
             fixed_code: "/// The clamp-point residual (e^-80): every clamped item's true tail\n/// is at most this times its weight, so the emitted term OVER-covers.\nconst E_NEG_80: f32 = 1.804_852_4e-35;\n\n/// The cheap clamped exponential WITH the emitted tail term.\nfn cheap_exp_tail(z: f32, w: f32) -> (f32, f32) {\n    if z < -80.0 {\n        return (0.0, w * E_NEG_80); // the clamp's cost, made visible\n    }\n    (z.exp(), 0.0)\n}\n\nfn denom_with_bound(logits: &[(f32, f32)]) -> (f32, f32) {\n    let mut denom = 0.0f32;\n    let mut tail = 0.0f32;\n    for &(z, w) in logits {\n        let (v, t) = cheap_exp_tail(z, w);\n        denom += v;\n        tail += t;\n    }\n    // Factor 2 covers the summation's own f32 rounding — a check,\n    // never a proof of all arithmetic error.\n    (denom, 2.0 * tail)\n}\n"
                 .to_string(),
             family: SecFamily::Numerics,
+        },
+
+        // ── Batch 374 — the laya serving-boundary pair (Plan 390 / Research 425) ──
+        SecRule {
+            rule_id: "request-amplification-guard-before-expensive-path".to_string(),
+            sec_concept: "a CALLER-CONTROLLED per-unit count (options per question, items per request, rows per batch) \
+    drives a per-unit EXPENSIVE path — without a cap the request's cost scales linearly with a \
+    number the caller chose: the bounded repair is a typed refusal raised BEFORE the expensive path \
+    runs (the HTTP 413 class), naming the field and the cap so the caller can re-split; per-question \
+    AND per-request totals both get the guard (two counts, two caps). SOURCE (NandhaKishorM/laya @ \
+    416dd9ed20da2d43fc40e23712e9adceefabf634, Apache-2.0; clone .raw/laya read at the pin, T0 \
+    2026-11-20, quotes byte-verified). THE LAW, laya/serve.py:142-143 at the pin verbatim: \
+    '_BATCH_ROW_TOKENS_ASSUMED = 512' / '# HTTP-only amplification guard; the library keeps its \
+    head_max_len-aware budget.' / 'MAX_CHOICE_OPTIONS = 100' — and the check, :1096-1105: 'count = \
+    len(crit); total_options += count; if count > max_choice_options: raise \
+    HTTPException(status_code=413, detail=\"too many choice options for %r (%d > %d)\" % (qid, \
+    count, max_choice_options))' — the refusal PRECEDES tokenization/inference (the docstring pins \
+    the order: 'Reject absent or oversized inference requests before tokenization (400/413)'), it \
+    names the question, the count and the cap, and the per-REQUEST total carries its own cap ('too \
+    many answer options across questions (%d > %d)'). The README connects the guard to the \
+    budget-overstate regime (the R6 kin): 'MAX_CHOICE_OPTIONS = 100' puts the head-overflow regime \
+    within reach over HTTP, so the guard is what keeps the constructed-budget law honest against \
+    caller input. ⛔ ADJUDICATION vs the family, both directions: `untrusted-keyed-state-unbounded` \
+    (B327) owns PEER-KEYED GROWTH over TIME (many distinct keys accumulating in a table — a storage \
+    DoS); THIS owns PER-REQUEST AMPLIFICATION (one request whose caller-chosen count inflates the \
+    work — no state, no accumulation, the cost dies with the request); \
+    `length-prefix-validate-before-alloc` owns the MISSING-CHECK alloc-DoS face (an unbounded length \
+    prefix sizes an allocation); THIS is bounded-but-per-unit WORK (the allocation may be small; the \
+    EXPENSE is the per-unit compute) — a request can pass an alloc check and still burn the server; \
+    `unbounded-read-into-vec` is the read-side twin of the length-prefix rule, still not this. \
+    REGIME: any HTTP/RPC surface whose per-unit work is caller-parameterized (options, items, \
+    sub-queries, page sizes) feeding a nontrivial per-unit path. ANTI-REGIMES: unit costs so small \
+    the guard is noise (a count cap on string lengths the parser bounds anyway); internal callers \
+    (the guard is an UNTRUSTED-INPUT boundary law — a private fn taking a bounded enum needs no \
+    413); caps WITHOUT the total axis (the per-question cap alone lets N questions each at cap \
+    multiply — the source carries BOTH). Suggest-only (the refusal type and the cap values are \
+    protocol decisions). Fixture: `fixtures/b374_fixtures.rs` F5 (the before-the-work census pin + \
+    the typed refusal naming field and cap + the at-cap boundary + the naive-arm-no-refusal-path \
+    defect pin). Batch 374 / Plan 390 / Research 425 (the fixture is an original synthesis, \
+    standalone-compiled AND executed before entry).".to_string(),
+            buggy_code: "/// The naive serve path: the caller-chosen option count drives the\n/// whole per-option pass. No guard, no refusal path at all — one\n/// request with 250_000 options burns the server linearly.\npub fn serve(question: &Question) -> Answer {\n    let options = question.crit.len(); // caller-controlled\n    let mut scored = Vec::with_capacity(options);\n    for option in &question.crit {\n        scored.push(score_option(option)); // EXPENSIVE per unit\n    }\n    Answer::argmax(scored)\n}\n"
+                .to_string(),
+            fixed_code: "pub const MAX_CHOICE_OPTIONS: usize = 100;\npub const MAX_TOTAL_OPTIONS: usize = 500;\n\n#[derive(Debug)]\npub enum Rejection { TooManyOptions { field: &'static str, got: usize, cap: usize } }\n\n/// The guard runs FIRST — before tokenization, before any per-option\n/// work — and refuses TYPED, naming the field and the cap.\npub fn serve(question: &Question, total_options_so_far: usize) -> Result<Answer, Rejection> {\n    let count = question.crit.len();\n    if count > MAX_CHOICE_OPTIONS {\n        return Err(Rejection::TooManyOptions { field: \"options\", got: count, cap: MAX_CHOICE_OPTIONS });\n    }\n    if total_options_so_far + count > MAX_TOTAL_OPTIONS {\n        return Err(Rejection::TooManyOptions { field: \"total options\", got: total_options_so_far + count, cap: MAX_TOTAL_OPTIONS });\n    }\n    let mut scored = Vec::with_capacity(count);\n    for option in &question.crit {\n        scored.push(score_option(option));\n    }\n    Ok(Answer::argmax(scored))\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        SecRule {
+            rule_id: "callable-naming-wire-fields-refused-not-dropped".to_string(),
+            sec_concept: "a request-body field whose NAME binds a server-side executable surface (hooks, on_predict_start, \
+    callbacks) that the receiving deployment does not implement must be REFUSED with a typed error \
+    naming the field — never silently dropped: the drop is a FALSE-CONSENT surface (the caller \
+    believes its instrumentation/extensibility point is in place; it never ran). SOURCE \
+    (NandhaKishorM/laya @ 416dd9ed20da2d43fc40e23712e9adceefabf634, Apache-2.0; clone .raw/laya read \
+    at the pin). THE LAW, README:659-661 at the pin verbatim: 'a body that names `hooks`, \
+    `hooks_raise`, `hooks_timeout`, `on_predict_start`, or `on_predict_end` is refused with 422 \
+    rather than silently dropped, matching what `laya-serve` does for the same fields.' — the closed \
+    vocabulary, laya/serve.py:178 verbatim: 'BODY_REFUSALS = (\"hooks\", \"on_predict_start\", \
+    \"on_predict_end\", \"hooks_raise\", \"hooks_timeout\")'. THE MECHANISM is two-sided: (1) the \
+    fields name the SDK's own extension surface — accepting them in one venue and executing nothing \
+    is the lie; refusing keeps the venues consistent ('matching what laya-serve does'); (2) an \
+    executable-naming field is exactly what an attacker probes with (a hook name is a capability \
+    QUESTION — if any deployment somewhere DOES bind it, the silent drop became a silent exec path); \
+    a typed refusal turns the probe into an answer. ⛔ ADJUDICATION vs the family: \
+    `untrusted-content-interpolated-into-prompt` (B350) owns untrusted CONTENT flowing into a prompt \
+    — THIS owns capability-NAMING FIELD NAMES (the name itself is the surface, no content flows \
+    anywhere); `jwt-alg-family-confusion-allowlist` (B350) owns the crypto-allowlist axis on one \
+    field's VALUE — THIS is the refuse-not-drop axis on a closed NAME vocabulary; benign unknown \
+    fields MUST still pass (only the capability vocabulary refuses — an over-broad refusal breaks \
+    every client that sends metadata; the fixture pins the over-broad tamper). REGIME: any wire \
+    surface whose schema has (or may grow) extension points — SDK/client parity lanes, plugin/config \
+    bodies, cross-venue request shapes. ANTI-REGIMES: fields with no executable meaning anywhere in \
+    the product (deny_unknown_fields-style strict schemas are a DIFFERENT posture — stricter, and a \
+    compat decision, not this law); venues that DO implement the hook (execute it or refuse \
+    explicitly — never accept-and-ignore). Suggest-only. Detector note: the vocabulary is \
+    product-specific — a parse-only pass flags the SHAPE (a match arm / ignore branch over a name in \
+    a hook/on_* vocabulary beside a serde/dict body walk) and review decides. Fixture: \
+    `fixtures/b374_fixtures.rs` F6 (the silent-drop false-consent pin + the typed refusal naming the \
+    field + the benign-notes pass + the over-broad-refusal tamper). Batch 374 / Plan 390 / Research \
+    425 (the fixture is an original synthesis, standalone-compiled AND executed before entry).".to_string(),
+            buggy_code: "/// The naive body handler: unknown fields fall through the match\n/// with no arm — silently dropped. A client that names `hooks` (the\n/// SDK's own extension surface) gets a 200 and NO hook.\npub fn handle_body(body: Body) -> Reply {\n    let mut text = String::new();\n    for field in body.fields {\n        match field {\n            Field::Text(t) => text.push_str(&t),\n            Field::Other(_) => {} // dropped on the floor — the false consent\n        }\n    }\n    Reply::answer(text) // 200: the caller believes its hook is live\n}\n"
+                .to_string(),
+            fixed_code: "/// The capability-naming vocabulary: fields that bind a server-side\n/// executable surface in SOME deployment of this product.\nconst CALLABLE_FIELDS: &[&str] = &[\n    \"hooks\", \"on_predict_start\", \"on_predict_end\", \"hooks_raise\", \"hooks_timeout\",\n];\n\n#[derive(Debug)]\npub enum BodyError { CallableFieldRefused(String) }\n\npub fn handle_body(body: Body) -> Result<Reply, BodyError> {\n    // refuse FIRST, typed, naming the field — the drop is the lie\n    for field in &body.fields {\n        if let Field::Other(name) = field {\n            if CALLABLE_FIELDS.contains(&name.as_str()) {\n                return Err(BodyError::CallableFieldRefused(name.clone()));\n            }\n        }\n    }\n    // benign unknown fields still pass — only the capability vocabulary refuses\n    let mut text = String::new();\n    for field in body.fields {\n        if let Field::Text(t) = field {\n            text.push_str(&t);\n        }\n    }\n    Ok(Reply::answer(text))\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
         },
 
     ]
