@@ -1,6 +1,7 @@
 # Issue 251: Multiplicative (soft-AND) composition challenger for candidate selection
 
 **Status:** Open — research-derived (riir-refine Research 424; lineage: Issue 033 / `selection_tether.rs`)
+**Claimed:** katgpt-rs-d1@m3, 1795182880, expires 2026-11-22T13:54:40+00:00
 **Priority:** low — the additive blend is bit-pinned cold-start identity; this is a challenger with a real risk of losing
 
 ## The idea
