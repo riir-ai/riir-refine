@@ -1,10 +1,10 @@
-## 2026-11-20 — Issue 252 CLOSED: blueprint strata `written` undercount (katgpt-rs-93@amo)
-
-Under a verify run the blueprint row took `strata[rule].written` and `outcomes.edits_written` from `fixstat_rules`, which counts only KEPT edits (it feeds the stats lane as applied fixes, and that use is unchanged), while `reverted` came from `report.reverted`. All-reverted rules therefore read `written: 0` (11 strata in 7 runs fleet-wide). The fix derives both counts from ONE source, `blueprint::verify_rule_counts` over the verify batch and its per-file revert state (the same state `kept` uses), so `reverted ≤ written` per rule by construction. `(whole file)` stays a per-file marker. `ROW_VERSION` is now 2; rows before it carry the undercount. Unit pin `verify_rule_counts_written_covers_reverted`; clippy clean at the installed binary's feature set and at a no-`fix_verify` posture. Bench 162 got a correction note (revert share 34.9%, not 53.5%; the T1a FAIL stands). Lease katgpt-rs-93@amo, 1795120000, expires 2026-11-22T00:00:00Z — folded at close.
-
 ## HISTORY.md — riir-refine
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
+
+## 2026-11-20 — Issue 252 CLOSED: blueprint strata `written` undercount (katgpt-rs-93@amo)
+
+Under a verify run the blueprint row took `strata[rule].written` and `outcomes.edits_written` from `fixstat_rules`, which counts only KEPT edits (it feeds the stats lane as applied fixes, and that use is unchanged), while `reverted` came from `report.reverted`. All-reverted rules therefore read `written: 0` (11 strata in 7 runs fleet-wide). The fix derives both counts from ONE source, `blueprint::verify_rule_counts` over the verify batch and its per-file revert state (the same state `kept` uses), so `reverted ≤ written` per rule by construction. `(whole file)` stays a per-file marker. `ROW_VERSION` is now 2; rows before it carry the undercount. Unit pin `verify_rule_counts_written_covers_reverted`; clippy clean at the installed binary's feature set and at a no-`fix_verify` posture. Bench 162 got a correction note (revert share 34.9%, not 53.5%; the T1a FAIL stands). Lease katgpt-rs-93@amo, 1795120000, expires 2026-11-22T00:00:00Z — folded at close.
 
 ## 2026-11-18 — Batch 372 LANDED (Plan 310 / Research 349): the infinity tokio-family rust_perf distill
 
