@@ -1,6 +1,6 @@
 # Mozilla evidence pack — cargo refine (issue 190 T3)
 
-**Date:** 2026-10-31 · **Collector:** zed-m3-idle-ev190 (agent) · **Feeds:** issue [190](../../.issues/190_mozilla_grant_readiness_gaps.md) T3 → Proposal 025 application packet.
+**Date:** 2026-10-31 · **Collector:** zed-m3-idle-ev190 (agent) · **Feeds:** issue 190 T3 (closed + removed 2026-11-20; proposal SUBMITTED — record in `HISTORY.md`) → Proposal 025 application packet.
 **Provenance:** GitHub REST API, unauthenticated read, 2026-10-31 ~15:1x UTC (star/fork/download counters are point-in-time). Internal figures read from tracked files at the cited paths. No telemetry exists anywhere in the product — every number below is a durable public counter or a tracked record.
 
 ## 1. Public distribution surface
