@@ -13,6 +13,8 @@
 
 Schmidhuber's RSI essay is a 39-year survey (Meta Evolution 1987 → self-modifying policies/SSA 1994 → fast-weight programmers/SRWM 1991-2022 → OOPS 2002 → Gödel Machine 2003 → adversarial curiosity → PowerPlay 2011 → DGM/HGM 2025-26). **Verdict: Gain (modelless track).** The workspace already ships modelless forms of seven of the eight extractable mechanisms — most strikingly the healer's `fix_verify` compile gate IS the Gödel-machine acceptance rule and the frontier band `0 < p̂ ≤ 0.5` IS PowerPlay's capability frontier, measured. The ONE uncovered, documented-gap-pulling extraction is **PowerPlay's generator half**: a modelless fixture generator that constructs the simplest code shapes the current fix corpus cannot repair (oracle-verified), which simultaneously feeds Issue 089's unwired frontier admission gate, creates the interacting-error corpus Bench 087/099 say cannot exist today, and unblocks the flip-dynamics gain axes (horizon report, necessity swap-donor pool). Filed as **issue 122**. Training-track top item (RFT→GRPO quest-grammar loop) filed as **riir-train issue 559**.
 
+> **PASS-Redirects (synthesis):** Ren et al. [arXiv:2611.21056 "Evaluation-Free Recursive Self-Improvement for Coding Agents"] — ELITE's w/o-deterministic-gates ablation (76.1→52.0 collapse) is the external counterfactual measurement of this note's "`fix_verify` IS the Gödel-machine acceptance rule" identification: the gate is load-bearing, now at SOTA-agent scale (riir-refine R431).
+
 ---
 
 ## 1. Source digest (what the essay claims)

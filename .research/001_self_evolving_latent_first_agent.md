@@ -30,6 +30,8 @@ sigmoid, no LLM, no backprop — is the novel angle our stack enables.
 | Object | What evolves | Representative systems | riir-clippy applicability |
 |---|---|---|---|
 | **Framework** | Agent edits its own scaffold/code | SICA, SIFT, STOP, Darwin Gödel Machine | **N/A** — riir-clippy is modelless, not an LLM agent loop that rewrites itself |
+
+> **PASS-Redirects (synthesis):** Ren et al. [arXiv:2611.21056 "Evaluation-Free Recursive Self-Improvement for Coding Agents"] — the first EVALUATION-FREE member of this survey's framework class (mechanism integration instead of evaluate-and-select; zero candidate task evals, SOTA-transfer); the N/A row stands — it evolves the scaffold, riir-clippy evolves the corpus, and its full gate loop already ships in `fix_verify` (riir-refine R431).
 | **Memory** | Accumulate fix trajectories, retrieve for future tasks | SWE-Exp, EvoCoder, Repository Memory, EvoRepair, SAGE | **YES — the primary gap** |
 | **Skills/tools** | Distill trajectories into reusable procedures/tool bank | CODESKILL, GSkill, Socratic-SWE, EffiSkill, Live-SWE-Agent | **YES — drafter direction vectors should evolve** |
 | **Model** | SFT/RL updates from coding feedback | Self-play SWE-RL, Agent-RLVR, ReVeal, CURE, ZeroCoder | **Deferred** — this is L4 LoRA, already deferred to riir-train |
