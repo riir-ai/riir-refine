@@ -20,7 +20,13 @@ The corpus already carries `context_notes` + quality gates (`--gate-calibration`
 
 ## T1 — the capped first run (only if T0 leaves a gap)
 
-- **Sample:** 20–30 rules, stratified across domains (clippy_lints / rust_perf / kernel_opt), fixed by hash before the run.
+**T1 — the capped first run (only if T0 leaves a gap)**
+
+- **Sample: FROZEN 2026-11-21 (amo-idle-i242-preflight), before any hosted call.** 30 rules, 10/10/10 stratified clippy_lints / rust_perf / kernel_opt, deterministic: `sorted(ids, key=sha256("242:<domain>:<rule_id>"))[:10]` over the corpus sources at riir-refine develop `bb47308e` — extractors: clippy `name:` (120 ids), rust_perf/kernel_opt `rule_id:` (380 / 1098 ids). **sample-digest sha256 `a5ad3f9fba066fa15e5867779a1a0c09e154726ab922afca22d679212a5506f4`** over the sorted-key JSON. The frozen ids:
+  - clippy_lints: `doc_lazy_continuation`, `needless_bool`, `filter_next`, `unnecessary_lazy_evaluations`, `cast_lossless`, `needless_range_loop`, `unnecessary_map_or`, `map_or_identity`, `match_bool`, `manual_repeat_n`
+  - rust_perf: `eager-pointer-collect-lazy-fetch`, `watchdog-deadline-moves-on-command-progress`, `bufread-scan-in-buffer-scratch-fragment`, `saturating-f2i-cast-proven-range-to-int-unchecked`, `batch-reserve-monotonic-counters-offload-bulk`, `byte-flag-table-masked-run-scan`, `retain-inplace`, `work-removed-build-is-not-a-valid-lower-bound`, `regex-hoist-lazylock`, `smallvec-stack`
+  - kernel_opt: `boot-identity-hash-read-once`, `same-input-gemv-segments-single-launch`, `walk-terminating-fill-for-unused-buffer-capacity`, `tile-coo-sparse-tile-aligned-format`, `enumerable-domain-bit-identity-admission-gate`, `verify-fold-gqa-repeats-into-row-axis-tile-fill`, `defer-promoted-write-to-first-consumer-dispatch`, `dtype-branch-dispatch-parity-in-place-precondition`, `moe-group-selection-fused-into-topk`, `block-scaled-mma-scale-register-owns-its-rows`
+  - Re-derivation: any corpus change re-freezes by the same procedure at the new commit (the digest is the audit anchor, not a barrier).
 - **Hosted budget:** ≤ $10 list-price cap for the whole run (the dspy-wsp writer-spend datum, Research 671); refuse to start without the cap recorded.
 - **Kill bar (pre-registered):** if description-only re-drafts reach **Δ < 10 points of fix-match over the description-less control** on the fixtures, the audit CLOSES NEGATIVE — the corpus's descriptions carry no re-derivable signal beyond task prompts, and the instrument dies with the negative recorded (Issue-565 precedent).
 - **Pass bar:** Δ ≥ 10 points with per-rule variance that identifies specific low-fidelity rule families — the only promotion-worthy outcome is **a rule-quality defect the existing gates missed** (e.g., a family whose `context_notes` never survived the bottleneck).
