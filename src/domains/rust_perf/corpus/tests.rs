@@ -12693,9 +12693,9 @@ fn batch375_rules_present_and_parse() {
     }
 }
 
-/// Batch 376 (Plan 387 / Research 421 — the anemll branch-delta rust_perf
+/// Batch 376 (Plan 387 / Research 421 — the anemll branch-delta `rust_perf`
 /// half): the two new rules are present, parse, and carry the concept
-/// needles; both suggestion-only NotBenchable (bench_spec None).
+/// needles; both suggestion-only `NotBenchable` (`bench_spec` None).
 #[test]
 fn batch376_rules_present_and_parse() {
     let corpus = build_perf_seed_corpus();
@@ -12703,7 +12703,7 @@ fn batch376_rules_present_and_parse() {
         "snapshot-state-kv-prefix-consistency-drop-invalid",
         "hybrid-state-prefix-snapshot-reuse",
     ];
-    for id in ids.iter() {
+    for id in &ids {
         let e = corpus
             .entries
             .iter()
@@ -12765,7 +12765,7 @@ fn batch376_rules_present_and_parse() {
 /// 2026-11-22 out of batch order: the number was allocated at claim
 /// 2026-11-19, the predecessor lane's lease lapsed unlanded, the takeover
 /// landed it late): the two new io rules are present, parse, and carry the
-/// concept needles; both suggestion-only NotBenchable (bench_spec None).
+/// concept needles; both suggestion-only `NotBenchable` (`bench_spec` None).
 #[test]
 fn batch373_rules_present_and_parse() {
     let corpus = build_perf_seed_corpus();
@@ -12773,7 +12773,7 @@ fn batch373_rules_present_and_parse() {
         "child-exchange-concurrent-bounded-drain",
         "serialize-under-cap-refuses-before-spawn",
     ];
-    for id in ids.iter() {
+    for id in &ids {
         let e = corpus
             .entries
             .iter()
@@ -12833,7 +12833,7 @@ fn batch373_rules_present_and_parse() {
 
 /// Batch 378 (Plan 393 / Research 427 — the humanfia pair distill): the
 /// two new measurement-honesty rules are present, parse, and carry the
-/// concept needles; both suggestion-only NotBenchable (bench_spec None).
+/// concept needles; both suggestion-only `NotBenchable` (`bench_spec` None).
 #[test]
 fn batch378_rules_present_and_parse() {
     let corpus = build_perf_seed_corpus();
@@ -12841,7 +12841,7 @@ fn batch378_rules_present_and_parse() {
         "tuning-source-contamination-filter-vs-scorer-reference",
         "proxy-selection-runs-behavioral-catch-on-survivors",
     ];
-    for id in ids.iter() {
+    for id in &ids {
         let e = corpus
             .entries
             .iter()

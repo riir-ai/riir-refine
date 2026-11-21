@@ -1,6 +1,6 @@
 # 429 — maya-inkling-mini distill (alesha-pro/maya-inkling-mini)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED 2026-11-22 — Batch 379 (Plan 395, zed-m3-maya@m3): 3 rules + 3 count-neutral faces (see the queue snapshot LANDING row); the T0/T1 findings folded below.
 
 ## Source
 
@@ -148,6 +148,47 @@ NONE. The CUDA LLM-serving kernel family is deeply covered
 famous-lib gap seeded; no follow-up pool owed.
 
 ## Caveats
+
+## Caveats
+
+**LANDED-UPDATE 2026-11-22 (the batch lane's T0/T1 folds):**
+
+- **Upstream MOVED +3 commits past the pin** (`c520fd14` the specdec-drafter
+  tip + README/guide/config, `fc911481` dual-GPU EP, `82de2288` the
+  xq16_sup buffer fix) — every mined quote site verified BYTE-EXACT at BOTH
+  pin and tip (R1's two lines at pin :1349/:1355 = tip :1353/:1359; R2's
+  "x = hi + lo in FP16" both; F1's byte_perm sites both); the "single
+  squashed commit" reading was a depth-1 artifact (the pin has a docs-only
+  parent). No re-pin (the pin is the arbiter; the moved surface — specdec
+  drafter kernels ~1000 lines + dual-GPU EP — is future re-distill
+  lane-intel, never re-mined blind).
+- **UNREAD residue closed** (T0): the `experts_mma_kernel` body read (R2's
+  operand layout CONFIRMED — the :2814-2816 comment + the
+  `g == 1 ? C : 0` lane-group limb read + the `v[0] + v[1]` column fold);
+  the `ik2_main.cu` graph body read (capture per OutMode × tier state,
+  replace after `cudaStreamSynchronize`, `g_fgraph[2][4]`); the prefill
+  flash path read (`attn_flash_f16_kernel` smem tiles + the Tq-row grid —
+  R1's anti-regime evidence).
+- **T1 verdicts:** R1 = RULE (not a face) — the gpu_106 kinship resolves
+  ADJACENT-DISTINCT (gpu_106 owns the reuse-ARITHMETIC pole R=1; R1's rows
+  have R <= 8 consumers whose reuse is fragment-internal, admission =
+  occupancy + materialization tax, two-regime vs the smem flash prefill);
+  R2 = RULE adjacent-distinct vs gpu_93 (the 3-mma both-operand form vs
+  the spare-columns zero-mma one-sided form — adjudicated in-rule both
+  directions; gpu_102's pow2-prescale + B242's other-operand prescale
+  named); R3 = RULE (the two-knob bytes-in-flight law with the measured
+  ceiling anti-regime; the prefetch families own HOW, this owns
+  WHETHER/WHERE — distinct lens from gpu_94's SM-occupancy). All three
+  suggestion-only NotBenchable, `bench_spec: None`, category A/N/A.
+- **Faces:** F1 + F2 + F4 landed count-neutral on their owners (the exact
+  sites in the queue snapshot LANDING row); F3 stays a RECORD (this note's
+  §Lane-intel row 2 + the snapshot line) — never a landing.
+- **Fixture gate:** 17/17 standalone (b379_fixtures.rs, debug AND -O,
+  zero warnings) — caught FOUR arm defects (the subnormal shift math
+  `1u32 << 37` overflow, a coarse sweep step, an over-strict exactness
+  assert — residuals with 12-13 significant bits are NOT f16-exact, they
+  are bounded — and the R3 model's missing per-stream MLP-reach clamp,
+  which IS the mechanism's reason concurrency is the lever).
 
 - Single squashed commit: no git archaeology; every quote verified against the
   TREE at the pin only. Upstream-state (P113): the ik2 engine IS this fork's own

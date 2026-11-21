@@ -213,6 +213,8 @@ fn r6_palette_depth_gated_on_measured_retention() {
 /// against a 0.01 admission bar), and the speed number never certifies.
 #[test]
 fn a4_form_gate_refuses_silent_shape_wrongness() {
+    const BAR: f64 = 0.01;
+
     let corpus = build_ane_seed_corpus();
     let a4 = corpus
         .entries
@@ -222,7 +224,6 @@ fn a4_form_gate_refuses_silent_shape_wrongness() {
     // the pinned wrongness numbers are far past any honest tolerance
     let rel_gate_up = 0.98_f64;
     let rel_no_split = 1.24_f64;
-    const BAR: f64 = 0.01;
     assert!(rel_gate_up > BAR && rel_no_split > BAR);
     assert!(a4.fixed_code.contains("rel_err"));
     assert!(a4.fixed_code.contains("host_reference"));
@@ -256,10 +257,10 @@ fn a1_stage_parity_magnitude_checks() {
     let rel_l2: f64 = a
         .iter()
         .zip(b.iter())
-        .map(|(p, q)| ((*p - *q) as f64).powi(2))
+        .map(|(p, q)| f64::from(*p - *q).powi(2))
         .sum::<f64>()
         .sqrt()
-        / na as f64;
+        / f64::from(na);
     assert!(cos > 0.999, "cosine is blind here: {cos}");
     assert!(rel_l2 > 0.5, "rel-L2 sees the scale loss: {rel_l2}");
     assert!(a1.fixed_code.contains("fraction_subnormal"));
@@ -295,6 +296,7 @@ fn a8_block_granularity_overlaps_units() {
 /// A9: the gap arithmetic — N calls pay N gaps; pairing halves them while
 /// the batch width stops at the 19%-worse-per-token cliff.
 #[test]
+#[allow(clippy::cast_precision_loss)] // test arithmetic: 64 calls, exactly representable
 fn a9_gap_count_halves_on_pairing() {
     let corpus = build_ane_seed_corpus();
     let a9 = corpus
@@ -304,7 +306,7 @@ fn a9_gap_count_halves_on_pairing() {
         .expect("A9 present");
     let n_blocks = 64_usize;
     let gap_ms = 0.23_f64;
-    let per_call_cost = |calls: usize| calls as f64 * gap_ms;
+    let per_call_cost = |calls: usize| (calls as f64) * gap_ms;
     assert!((per_call_cost(n_blocks) - 14.72).abs() < 1e-9);
     assert!(per_call_cost(n_blocks / 2) < per_call_cost(n_blocks));
     // the cliff: past 64 rows/call the per-token cost rises 19%
