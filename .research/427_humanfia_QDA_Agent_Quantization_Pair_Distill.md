@@ -86,7 +86,7 @@ Discard audit: the no-build row carries a mechanism-level reason (envelope + pub
 
 - riir-refine: this note (427) + Plan 393 + the queue row (2026-11-21); `.research/.highwater` 426→427, `.plans/.highwater` 392→393.
 - riir-infer: Issue 1242 (KL-anchor ranked selection + gencheck census + cached anchors + break-even estimator) + Issue 1243 (GGUF checkpoint consumption + own-traces calibration + scale search + checkpoint averaging); `.issues/.highwater` 1241→1243. **Committed `56ed0e7a`.**
-- riir-train: Plan 508 (own-answer KD; Path 0.5; secondary); `.plans/.highwater` 507→508. **Committed `d25e4be69`.**
+- riir-train: Plan 508 (own-answer KD; Path 0.5; secondary); `.plans/.highwater` 507→508. **Committed `a98110f01`** (rebased onto origin/develop after a sibling landing; first hash `d25e4be69`).
 - `dual_allocation_gate` RUN CLEAN on all three repos this session (0/0/0 each).
 
 ## 9 Honest caveats
