@@ -1,6 +1,6 @@
 # Research 428 — veecore/colorless-rs: Colorless Write-Once Controlflow — Distill Verdict
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — batch-377-landed (e41a514f3, 2026-11-22, zed-m3@m3 — rust_perf 382→384, entries_91: R1 `sync-async-twin-duplication` + R2 `box-dyn-future-in-hot-path-colorless` KEPT at the drop-or-keep gate; R3 stays the recorded DROP per the verdict; fixtures b394 7/7; the pre-registered BOX-STATE gate routing self-resolved — bmo's Tailscale dropped at gate time and amo's queue held the job behind Exclusive lanes, the gates ran locally on m3 at load 2.15/16 after the sibling's test drained, disclosed in the landing receipt)
 
 **Source:** github.com/veecore/colorless-rs @ `b5db6b95cf2f18efbb12fabe5709ac003fcde622` (shallow clone `.raw/colorless-rs`, REMOVED at verdict close) + the users.rust-lang.org show-and-tell (topic 143702, posted 2026-11-16). MIT OR Apache-2.0 (LICENSE-MIT/LICENSE-APACHE/LICENSE-ZLIB in-tree), edition 2024, rust-version 1.95, workspace version 0.1.0 "Unreleased", **NOT on crates.io** (pre-alpha; keywords `["async", "cps", "function-coloring", "zero-cost"]`, categories asynchronous/concurrency/no-std/rust-patterns — all read at the pin from `Cargo.toml`).
 
