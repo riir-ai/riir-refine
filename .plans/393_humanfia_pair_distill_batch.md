@@ -1,6 +1,7 @@
 # Plan 393 — the humanfia pair distill batch (qda + humanize → 3 transcription rules; nominal Batch 377)
 
-**Status:** FILED — claim with a lease line before the first corpus edit (claim-lease check first, katgpt-rs Issue 943 discipline). Companion: Research 427 (the verdict, dedup evidence, Path 0 table).
+**Status:** FILED — claim with a lease line before the first corpus edit (claim-lease check first, katgpt-rs Issue 943 discipline). T0.1 CLAIMED (re-clone + re-pin, lease below); T0.2+ open. Companion: Research 427 (the verdict, dedup evidence, Path 0 table).
+**Claimed:** zed-393-t01@amo, 1795224851, expires 2026-11-23T01:34:11+00:00
 
 **Pre-registered proof path (ungoat law):** all three rules are suggestion-only, NotBenchable-by-domain (the metric-mismatch/annotation class, Batch-136 precedent) — the proof IS the fixture + falsifier + in-rule adjudication set below, plus the standing gates (standalone compile+execute pre-entry, pins_manifest, score-bench). No perf bars exist for this batch; any promotion beyond suggestion-only is out of scope by construction.
 
