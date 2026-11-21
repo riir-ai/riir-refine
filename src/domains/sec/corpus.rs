@@ -272,6 +272,15 @@
 //! negative second-instance read reported in-rule). The batch's
 //! `rust_perf` half (5 rules + the reporting-round face folded in-notes)
 //! lands in `src/domains/rust_perf/corpus/entries_88.rs`, same commit.
+//!
+//! Batch 373 (2026-11-22, Plan 389 / Research 423): the cargo-atlas
+//! pair — `external-helper-config-pinned-invocation` +
+//! `subprocess-argument-injection-pinned-flags` (+ the F1 rider face
+//! on B342 `read-output-trust-inherits-argument-taint`),
+//! flowerornament/atlas @ `49d9ee41` MIT OR Apache-2.0 — landed OUT OF
+//! BATCH ORDER (374/375/376 landed first; the number was allocated at
+//! claim 2026-11-19, the predecessor lane's lease lapsed unlanded, the
+//! takeover landed it late), 80→82.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -1885,7 +1894,7 @@ pub fn gate(
         // ── read-output-trust-inherits-argument-taint (InputValidation; suggest-only) ──
         SecRule {
             rule_id: "read-output-trust-inherits-argument-taint".to_string(),
-            sec_concept: "a read's output inherits its ARGUMENTS' trust: outputs of a read whose argument values are attacker-derived (taint-novel — present in untrusted tool/content text, absent from the user's own request) are untrusted EVEN WHEN delivered in typed, well-formed fields — provenance flows through the CALL, not through the channel. The source's law, verbatim (at the pin): 'A read's output identities are trustworthy only if the read was NOT steered by injection, i.e. none of the read's arg values are taint-novel.' The attack shape: injected content steers one argument (a query, a path, an id filter) of a structured read; the read returns attacker-chosen rows in perfectly typed fields; a downstream consumer that trusts the CHANNEL (typed output == safe) is steered without ever seeing a malformed value. KINSHIPS: distinct-from the wire_taint family (`proposers::wire_taint` — buffer-level code patterns: length-prefix/read-into-vec shapes at the WIRE decode sink; this rule is call-level information flow at the TOOL/QUERY composition sink — different layer, different sink, adjacent genus note mandatory); distinct-from `unvalidated-egress-url` (egress URL assembly — this is input-side read steering feeding trust decisions); kin `abuse-strike-counts-cross-site-requests` (label/provenance carried across requests — the same 'the channel is not the provenance' genus at the counting sink). Regime: tool-using agents, plugin/function-call hosts, RPC layers where untrusted text can reach ARGUMENT values while outputs are consumed as trusted structure. Anti-regimes: arguments are machine-derived constants (no taint exists); the consumer re-validates outputs against the user's own request anyway (the inheritance is redundant). Suggest-only: the taint tracking's granularity (per-argument vs per-call) is the host's design. Detector: none at landing (vocabulary-gated hard — needs call-argument provenance vocabulary; deferred). Fixture: `corpus/fixtures/b340_fixtures.rs` F4 (dual-source conflict: a value read under a steered argument poisons its typed outputs even when the same value arrives clean elsewhere — the conflict resolves to the attacker). FACE (Batch 342, harness-adapters — the HOST-SANCTION-PROVENANCE arm): sanction inputs derive from the HUMAN turns only — safeagents' Policy builds its host-allowlist context from 'The request without the model's own turns: a host the model wrote earlier is no more sourced than one it writes now' (policy.py:59-62, huggingface/safeagents @ `0de8e22d`, quoted at the pin) — model-echo NEVER self-authorizes: an agent cannot launder a host into the allowed set by having said it in an earlier turn; the taint-inheritance law above owns what a steered READ returns, THIS face owns what the SANCTION SOURCE may contain. FACE (Batch 342, harness-adapters — the AUTHORED-ONLY SCOPING arm, the per-field-class trust inversion): detectors match only AGENT-AUTHORED fields (commands, arguments, file contents, queries, URLs — the plugin channel sets `frozenset({Channel.COMMAND, Channel.ARGUMENTS, ...})` at the pin), never tool OUTPUTS, and never the model's own reasoning ('Reasoning is left out: a model's account of what it is doing is not evidence of what it does', scan.py docstring) — evidence flows ONE WAY: authored fields are the scan SURFACE, outputs are the DATA the scan protects; a scanner that reads outputs as findings (or skips authored fields for them) inverts the trust direction and misses the steered call while flagging benign results; day-one Unicode discipline (the `ascii-token-unicode-word-boundary-scan-miss` law) applies to every name-anchored detector pattern these faces seed. Batch 340 / Plan 349 / Research 381 (saintmachines/spillway @ `0fc9f55f`, Apache-2.0 — floor.py `query_entailed`, quoted byte-exact at the pin; the fixture is an original synthesis, standalone-compiled AND executed)."
+            sec_concept: "a read's output inherits its ARGUMENTS' trust: outputs of a read whose argument values are attacker-derived (taint-novel — present in untrusted tool/content text, absent from the user's own request) are untrusted EVEN WHEN delivered in typed, well-formed fields — provenance flows through the CALL, not through the channel. The source's law, verbatim (at the pin): 'A read's output identities are trustworthy only if the read was NOT steered by injection, i.e. none of the read's arg values are taint-novel.' The attack shape: injected content steers one argument (a query, a path, an id filter) of a structured read; the read returns attacker-chosen rows in perfectly typed fields; a downstream consumer that trusts the CHANNEL (typed output == safe) is steered without ever seeing a malformed value. KINSHIPS: distinct-from the wire_taint family (`proposers::wire_taint` — buffer-level code patterns: length-prefix/read-into-vec shapes at the WIRE decode sink; this rule is call-level information flow at the TOOL/QUERY composition sink — different layer, different sink, adjacent genus note mandatory); distinct-from `unvalidated-egress-url` (egress URL assembly — this is input-side read steering feeding trust decisions); kin `abuse-strike-counts-cross-site-requests` (label/provenance carried across requests — the same 'the channel is not the provenance' genus at the counting sink). Regime: tool-using agents, plugin/function-call hosts, RPC layers where untrusted text can reach ARGUMENT values while outputs are consumed as trusted structure. Anti-regimes: arguments are machine-derived constants (no taint exists); the consumer re-validates outputs against the user's own request anyway (the inheritance is redundant). Suggest-only: the taint tracking's granularity (per-argument vs per-call) is the host's design. Detector: none at landing (vocabulary-gated hard — needs call-argument provenance vocabulary; deferred). Fixture: `corpus/fixtures/b340_fixtures.rs` F4 (dual-source conflict: a value read under a steered argument poisons its typed outputs even when the same value arrives clean elsewhere — the conflict resolves to the attacker). FACE (Batch 342, harness-adapters — the HOST-SANCTION-PROVENANCE arm): sanction inputs derive from the HUMAN turns only — safeagents' Policy builds its host-allowlist context from 'The request without the model's own turns: a host the model wrote earlier is no more sourced than one it writes now' (policy.py:59-62, huggingface/safeagents @ `0de8e22d`, quoted at the pin) — model-echo NEVER self-authorizes: an agent cannot launder a host into the allowed set by having said it in an earlier turn; the taint-inheritance law above owns what a steered READ returns, THIS face owns what the SANCTION SOURCE may contain. FACE (Batch 342, harness-adapters — the AUTHORED-ONLY SCOPING arm, the per-field-class trust inversion): detectors match only AGENT-AUTHORED fields (commands, arguments, file contents, queries, URLs — the plugin channel sets `frozenset({Channel.COMMAND, Channel.ARGUMENTS, ...})` at the pin), never tool OUTPUTS, and never the model's own reasoning ('Reasoning is left out: a model's account of what it is doing is not evidence of what it does', scan.py docstring) — evidence flows ONE WAY: authored fields are the scan SURFACE, outputs are the DATA the scan protects; a scanner that reads outputs as findings (or skips authored fields for them) inverts the trust direction and misses the steered call while flagging benign results; day-one Unicode discipline (the `ascii-token-unicode-word-boundary-scan-miss` law) applies to every name-anchored detector pattern these faces seed. Batch 340 / Plan 349 / Research 381 (saintmachines/spillway @ `0fc9f55f`, Apache-2.0 — floor.py `query_entailed`, quoted byte-exact at the pin; the fixture is an original synthesis, standalone-compiled AND executed). RIDER FACE (Batch 373 / Plan 389 / Research 423, flowerornament/atlas @ 49d9ee41cca1cb8359fe28e2be13b430bba96569, MIT OR Apache-2.0 — the HELPER-OUTPUT-MEMBERSHIP arm): a helper's OUTPUT paths are re-admitted only as members of the caller's INPUT SET — the positive instance of this law at the tool-execution sink. atlas observations.rs:192-196 at the pin: every path an ast-grep run emits is stripped to its root-relative form and re-validated component-wise ('if relative .components() .any(|component| !matches!(component, Component::Normal(_)))' → the named refusal 'syntax-helper path escaped its input') — a parent, wildcard or absolute component is a named refusal, never a trusted row, so the OUTPUT inherits the INPUT SET's membership exactly as the read above inherits its arguments' taint: provenance flows through the call, and the caller's input set is the trust boundary the output must already be a member of. Count-neutral."
                 .to_string(),
             buggy_code: "/// NAIVE: outputs are trusted because the CHANNEL is typed. The
 /// arguments that selected the rows are never checked for taint —
@@ -3191,6 +3200,126 @@ entry)."
             buggy_code: "/// The naive collate: validate against the BATCH-WIDE max — a\n/// longer sibling row legitimises a malformed item's extra\n/// entries, and the failure surfaces downstream as an opaque\n/// shape mismatch naming neither the item nor the mistake.\npub fn collate(items: &[Item]) -> Result<Vec<Vec<u32>>, String> {\n    let batch_max = items.iter().map(|i| i.options).max().unwrap_or(0);\n    let mut cols = Vec::with_capacity(items.len());\n    for item in items {\n        if item.targets.len() > batch_max {\n            return Err(\"collate: batch-wide bound exceeded\".to_string());\n        }\n        let mut row = item.targets.clone();\n        row.resize(batch_max, 0);\n        cols.push(row);\n    }\n    Ok(cols)\n}\n"
                 .to_string(),
             fixed_code: "/// The fixed collate: each item against ITS OWN bound at the\n/// collect, the refusal naming the item + both counts + the\n/// required relation.\npub fn collate(items: &[Item]) -> Result<Vec<Vec<u32>>, String> {\n    let batch_max = items.iter().map(|i| i.options).max().unwrap_or(0);\n    let mut cols = Vec::with_capacity(items.len());\n    for (i, item) in items.iter().enumerate() {\n        if item.targets.len() > item.options {\n            return Err(format!(\n                \"collate_items: item {} has {} target entries but only {} marker positions; \\\n                 a target needs one entry per option\",\n                i, item.targets.len(), item.options\n            ));\n        }\n        let mut row = item.targets.clone();\n        row.resize(batch_max, 0);\n        cols.push(row);\n    }\n    Ok(cols)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── Batch 373 — the cargo-atlas transcription pair (Plan 389 / Research 423) ──
+        SecRule {
+            rule_id: "external-helper-config-pinned-invocation".to_string(),
+            sec_concept: "a helper invoked as a SUBPROCESS whose selection surface user state can steer \
+    must PIN that surface before spawn — inherited environment names that select data or inject \
+    config (the whole GIT_* family) are stripped wholesale, and the helper's own config-file \
+    surface is neutralized (--config /dev/null) — because the helper's repository/config \
+    selection belongs to the CALLER's requested root, never to whatever the invoking shell \
+    happened to carry. SOURCE (flowerornament/atlas @ \
+    49d9ee41cca1cb8359fe28e2be13b430bba96569, MIT OR Apache-2.0; clone .raw/atlas read at the \
+    pin). THE LAW, crates/atlas-lib/src/revision/store.rs:12-21 at the pin verbatim: \
+    'Repository selection belongs to the requested root, not inherited Git state. Only child \
+    environments change; concurrent callers keep their own process state.' — and the mechanism, \
+    one builder every Git/JJ invocation goes through: a walk over the PARENT environment, each \
+    name matching the prefix (starts_with(\"GIT_\")) removed via env_remove, then \
+    'command.env(\"GIT_OPTIONAL_LOCKS\", \"0\")' — wholesale prefix stripping, never a denylist of \
+    famous names; the ast-grep helper instance pins the config surface the same way \
+    (checks/policy/observations.rs:165-166): 'args([\"run\", \"--config\", \"/dev/null\", \
+    \"--pattern\", ...])' — the user's global config (hooks, aliases, textconv filters) never \
+    reaches the helper. Why it matters: an inherited GIT_DIR silently re-points a \
+    repository-scoped helper at a DIFFERENT repository than the one the caller asked about \
+    (selection theft — the output looks like it belongs to the requested root), and GIT_CONFIG_* \
+    injects behavior into every Git call the tool makes; both steer WHAT the helper reads \
+    without touching its argv. ⛔ ADJUDICATION vs the owned env-strip instances, both directions \
+    — same family (child-environment pinning), DISTINCT axis: draft/clippy_oracle.rs:260,363 \
+    strips CARGO_TARGET_DIR (keyed temp crates must not leak into the oracle's build) and \
+    domains/rustc_errors/floor.rs:797-799 strips RUSTFLAGS/RUSTC_WRAPPER/CARGO_BUILD_RUSTFLAGS \
+    (determinism of the compile oracle) — the BUILD-CONFIG axis (toolchain knobs steering the \
+    child's build behavior/output); THIS is the REPOSITORY-SELECTION/CONFIG-FILE axis (user \
+    repo state steering WHICH repository and WHICH config the helper reads). The axes compose, \
+    neither covers the other: an oracle pinned on build-config still has its repository \
+    selection stolen via an inherited GIT_DIR. Distinct-from credential-material-in-command-argv \
+    (that owns secret EXPOSURE in argv; this owns selection STEERING via env) and from \
+    shell-string-command-interpolation (the shell-parsing axis). REGIME: any \
+    repository/working-set-scoped subprocess helper spawned from a process a user shell \
+    controls (build tools invoking git/jj, linters shelling to VCS, capture/verify/materialize \
+    lanes). ANTI-REGIMES: helpers with no user-steerable selection surface (fixed argv, no \
+    ambient state consulted); environments that ARE the controlled input (a test rig \
+    deliberately setting GIT_DIR — pinning there means SETTING the expected value, and the \
+    test's expectation is the pin); porcelain wrappers whose contract IS to honor ambient Git \
+    state. UPSTREAM ANTI-EXAMPLE (recorded, never PR'd — upstream-absent fix space): at the \
+    same pin, crates/atlas-lib/src/revision/mod.rs:63 spawns 'Command::new(\"tar\")' BARE — \
+    TAR_OPTIONS from the invoking environment flows into the extraction (the --to-command \
+    env-injection class); the Git/JJ surfaces are pinned and the tar surface is not, in ONE \
+    codebase — pinning is per-helper, never per-project. REGIME CAVEAT: '--config /dev/null' is \
+    a POSIX device path with no Windows cfg in-source — a portable pin neutralizes the config \
+    surface in a platform-shaped way, it does not copy this spelling. Suggest-only (WHICH env \
+    prefixes and which config flags pin a helper is the tool's contract — a detector cannot \
+    know that GIT_* steers rather than being ambient). Detector note: none at landing — the \
+    shape (a Command::new whose builder lacks a prefix-family env walk) is invisible without \
+    knowing the helper's selection vocabulary. Fixture: `fixtures/b389_fixtures.rs` F1 (the \
+    selection-theft pin + the partial-strip tamper that still leaks the config family + the \
+    clean-env agreement + the locks-knob posture). Batch 373 / Plan 389 / Research 423 \
+    (flowerornament/atlas @ 49d9ee41cca1cb8359fe28e2be13b430bba96569, MIT OR Apache-2.0; the \
+    fixture is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "/// NAIVE: every Git invocation builds its Command bare — the invoking\n/// shell's GIT_DIR/GIT_CONFIG_* state flows into the child, and the\n/// helper reads whatever repository that state selects, not the root\n/// the caller asked about.\npub fn git_capture(root: &std::path::Path, args: &[&str]) -> std::process::Command {\n    let mut command = std::process::Command::new(\"git\");\n    command.current_dir(root);\n    for arg in args {\n        command.arg(arg);\n    }\n    command\n}\n"
+                .to_string(),
+            fixed_code: "/// The pinned invocation: repository selection belongs to the requested\n/// root, not inherited Git state — the whole GIT_ prefix family is\n/// removed and the child's locks knob is set, per-helper, before spawn.\npub fn git_capture_pinned(root: &std::path::Path, args: &[&str]) -> std::process::Command {\n    let mut command = std::process::Command::new(\"git\");\n    command.current_dir(root);\n    for (name, _) in std::env::vars_os() {\n        if name.to_string_lossy().starts_with(\"GIT_\") {\n            command.env_remove(name);\n        }\n    }\n    command.env(\"GIT_OPTIONAL_LOCKS\", \"0\");\n    for arg in args {\n        command.arg(arg);\n    }\n    command\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        SecRule {
+            rule_id: "subprocess-argument-injection-pinned-flags".to_string(),
+            sec_concept: "a caller-controlled STRING reaching a parser-style subprocess as an ARG-ARRAY \
+    element must be pinned at EVERY call site it crosses — the parser's end-of-options marker \
+    placed BEFORE the operand (--end-of-options for rev-parse), a type-forcing wrap (the \
+    '<rev>^{commit}' suffix), the '--' separator before path operands, and third-party-resolved \
+    ids format-validated before reuse — because with the pin absent the string is parsed as \
+    FLAGS, not data: a revision shaped like an option (--upload-pack=..., --config=...) is \
+    consumed/executed by the parser instead of resolved as a rev (CWE-88 on the arg-array \
+    axis). SOURCE (flowerornament/atlas @ \
+    49d9ee41cca1cb8359fe28e2be13b430bba96569, MIT OR Apache-2.0; clone .raw/atlas read at the \
+    pin). THE LAW, crates/atlas-lib/src/revision/store.rs:96-101 at the pin: every \
+    caller-chosen revision resolves through 'rev-parse --verify --end-of-options \
+    &format!(\"{named}^{{commit}}\")' — and the law is pin-at-each-call-site: the SAME triple \
+    appears at every site that consumes a caller-chosen revision (:100 the commit resolve, \
+    :147 the current-tree resolve, :153 the candidate-tree verify), the log site separates \
+    options from operands ('.args([\"log\", \"-1\", \"--format=%B\", &id, \"--\"])' :111), and \
+    the jj bridge format-checks ids it hands to git (:82-91): exactly-one line ('must resolve \
+    to exactly one commit, found {}'), then 'if !matches!(id.len(), 40 | 64) || \
+    !id.bytes().all(|byte| byte.is_ascii_hexdigit())' → 'Err(\"JJ did not return one complete \
+    Git commit id\")' — one tool's output is another tool's input only after the format gate. \
+    ⛔ ADJUDICATION vs shell_string_command, BOTH directions (mandatory — the corpus's own doc \
+    names this class): domains/sec/proposers/shell_string_command.rs:36 verbatim: 'A format! \
+    arg on a NON-shell binary stays silent (direct-invocation argument injection is a \
+    different, narrower class).' — THAT rule owns the STRING-INTERPOLATION-INTO-A-SHELL axis \
+    (sh -c / cmd /C: the shell re-parses the whole string, allowlist ≠ safety — the corpus's \
+    CWE-88 note); THIS owns the ARG-ARRAY axis (no shell, no interpolation — the flags \
+    themselves are the injection surface, because argv carries no data/flag boundary until the \
+    program's parser draws one). They compose behind a sh -c wrapper (both parsers apply) and \
+    are disjoint otherwise: an .arg()-array call with zero shell involvement is invisible to \
+    shell_string_command and is exactly this rule's surface. Distinct-from \
+    untrusted-archive-extract-paths (extracted-NAME traversal, not argv flags); \
+    distinct-from externally-authored-edits-by-id-not-counted-index (that owns ADDRESSING into \
+    an API; this owns FLAG POSITION in a child argv). REGIME: any subprocess parser invoked \
+    with caller-controlled string operands — VCS revisions across git/jj/hg, branch/file \
+    names into log/ls-tree/diff, ids resolved by one tool and consumed by another. \
+    ANTI-REGIMES: operands typed by the caller's own API (a validated Revision newtype — the \
+    gate happened at the type boundary); data the tool documents AS flags (a caller MEANING \
+    --exec passes an option legitimately); parsers without an end-of-options marker (the pin \
+    then takes the type-forcing wrap or a stdin/path channel — the law is the pin, not one \
+    spelling). Suggest-only (the marker spelling and the id format are per-tool contracts). \
+    Detector note: none at landing — shell_string_command's shell-literal gate deliberately \
+    stays silent on non-shell binaries, and an arg-array detector would need each tool's \
+    option grammar to tell a flag-shaped REV from a real flag. Fixture: \
+    `fixtures/b389_fixtures.rs` F2 (the flag-shaped-rev consumption pin + the \
+    pin-once-second-site tamper + the plain-rev agreement + the jj two-line and non-hex \
+    refusals). Batch 373 / Plan 389 / Research 423 (flowerornament/atlas @ \
+    49d9ee41cca1cb8359fe28e2be13b430bba96569, MIT OR Apache-2.0; the fixture is an original \
+    synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the caller's revision string goes into the argv raw — a rev\n/// shaped like a flag (--upload-pack=..., --config=...) is consumed as\n/// an OPTION, the log site has no `--` before its operands, and the jj\n/// bridge forwards the first line of whatever it read, unvalidated.\npub fn resolve_revision(root: &std::path::Path, rev: &str) -> std::process::Command {\n    let mut command = std::process::Command::new(\"git\");\n    command.current_dir(root);\n    command.arg(\"rev-parse\");\n    command.arg(rev);\n    command\n}\n\npub fn jj_id_forwarded(output: &str) -> String {\n    output.lines().next().unwrap_or_default().to_owned()\n}\n\npub fn log_commit(directory: &std::path::Path, id: &str) -> std::process::Command {\n    let mut command = std::process::Command::new(\"git\");\n    command.arg(\"--git-dir\").arg(directory);\n    command.args([\"log\", \"-1\", \"--format=%B\"]);\n    command.arg(id); // no trailing `--`: an id shaped like an option is parsed\n    command\n}\n"
+                .to_string(),
+            fixed_code: "/// The pinned resolve: --verify + --end-of-options BEFORE the operand +\n/// the ^{commit} wrap — the caller's string is parsed as a rev or\n/// refused, never as a flag. The log site ends options before the\n/// operands; ids that crossed another tool pass the format gate\n/// (exactly one, 40-or-64 hex) first. Every site that consumes a\n/// caller-chosen revision carries the triple — pin-at-each-call-site.\npub fn resolve_revision(root: &std::path::Path, rev: &str) -> std::process::Command {\n    let mut command = std::process::Command::new(\"git\");\n    command.current_dir(root);\n    command.args([\"rev-parse\", \"--verify\", \"--end-of-options\"]);\n    command.arg(format!(\"{rev}^{{commit}}\"));\n    command\n}\n\npub fn jj_id_validated(output: &str) -> Result<String, String> {\n    let ids: Vec<&str> = output.lines().collect();\n    if ids.len() != 1 {\n        return Err(format!(\n            \"revision must resolve to exactly one commit, found {}\",\n            ids.len()\n        ));\n    }\n    let id = ids[0];\n    if !matches!(id.len(), 40 | 64) || !id.bytes().all(|byte| byte.is_ascii_hexdigit()) {\n        return Err(\"JJ did not return one complete Git commit id\".to_string());\n    }\n    Ok(id.to_owned())\n}\n\npub fn log_commit(directory: &std::path::Path, id: &str) -> std::process::Command {\n    let mut command = std::process::Command::new(\"git\");\n    command.arg(\"--git-dir\").arg(directory);\n    command.args([\"log\", \"-1\", \"--format=%B\"]);\n    command.arg(id);\n    command.arg(\"--\"); // options end before the operands\n    command\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },

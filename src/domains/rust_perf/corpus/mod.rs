@@ -9,7 +9,20 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 380 entries across 15 categories as of Batch 376 (+2: caching ×2 —
+//! 382 entries across 15 categories as of Batch 373 (+2: io ×2 —
+//! `child-exchange-concurrent-bounded-drain` (suggestion-only: a child that
+//! receives a request AND produces output needs its pipes drained concurrently
+//! with the write, each stream take(limit+1)-bounded, the child killed on the
+//! first pipe failure, a Drop guard killing on every path; serial
+//! write-then-read deadlocks past the OS pipe buffer) +
+//! `serialize-under-cap-refuses-before-spawn` (suggestion-only: budget
+//! enforced DURING serde via a cap-checking Write impl so oversize refuses
+//! mid-serialize before the child spawns — landed DISTINCT at authoring vs
+//! B274 admission-before-work + `entries_58` reserve-commit accounting).
+//! flowerornament/atlas @ 49d9ee41 MIT OR Apache-2.0 — landed OUT OF BATCH
+//! ORDER (374/375/376 landed first; the number was allocated at claim
+//! 2026-11-19, the predecessor lane's lease lapsed unlanded, the takeover
+//! landed it late). Prior: Batch 376 (+2: caching ×2 —
 //! `snapshot-state-kv-prefix-consistency-drop-invalid` (suggestion-only: a
 //! snapshot of joint (state, KV-rows) memory held beside a live cache must be
 //! VALIDATED at restore time against what the cache now holds — a snapshot
@@ -951,13 +964,14 @@ mod entries_86;
 mod entries_87;
 mod entries_88;
 mod entries_89;
+mod entries_90;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 380 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 382 entries
 /// (Batch 375, 2026-11-20, Plan 391 / Research 425 round 2: +5 — the laya
 /// round-2, the staged unread-sweep candidates, `entries_88`,
 /// NandhaKishorM/laya @ `416dd9ed` Apache-2.0, still the remote tip:
@@ -1332,6 +1346,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_87::b374_rules());
     entries.extend(entries_88::b375_rules());
     entries.extend(entries_89::b376_rules());
+    entries.extend(entries_90::b389_rules());
     Corpus::new(entries)
 }
 
