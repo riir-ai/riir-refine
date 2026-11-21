@@ -1,0 +1,17 @@
+# Plan 396 — graphicle transcription batch (rust_perf + sec)
+
+**Status:** STAGED — plan-first, unclaimed; claim by appending the `**Claimed:**` lease line (48 h expiry) before the first corpus edit.
+
+Distill record: `.research/430_graphicle_code_graph_engine_distill.md` · Source PIN `b0bb41407d1ffe863221181112656c28c483046c` (Apache-2.0, tip 2026-11-21) — RE-CLONE + RE-PIN at T0 (fast-moving; tip moved the day of the verdict).
+
+- [ ] T0: re-clone `.raw/graphicle` + re-pin; verify every Research 430 quote at the NEW pin (per-row anchors re-derived by grep -n); T0b unread residue: `retrieve.rs`, `serve_*`, `graph.rs` body, `vtab.rs`, `unicode15.rs`, `hooks_runtime.rs`, `snapshot.rs`, `cluster.rs`, `extract*/` walkers
+- [ ] T1: dedup re-verification at post-rebase HEAD (the R1 rule must read the STAGED `wal-bulk-write-defers-auto-checkpoint-growth-keyed-valve` state at authoring time — landed vs still-staged decides R1's form)
+- [ ] T2a: R1 — the WAL second-instance feed: fold `wal_starvation.py` ("with a reader always in flight, a PASSIVE autocheckpoint never resets the WAL") + the remedy trio (`journal_size_limit` 64 MiB cut-back, the `CHECKPOINT_WAIT` elevated-busy-timeout checkpoint window with restore, `WAL_CHECKPOINTS_BUSY` counters, the Postgres `pg_stat_wal` face) into the staged codegraph R2's authoring as the second engine instance; if the valve rule authoring is far off, stage the checkpoint-window atom as its own `wal-checkpoint-elevated-busy-window-restore` candidate decision
+- [ ] T2b: R2 — `io-worker-count-measured-platform-derate-not-parallelism` (concurrency/measurement; the M3-Pro 0.44s@4-6 vs 0.67s@12-16 basis; mandatory in-rule adjudication vs entries_62 `online-cost-fit-thread-ladder-reopen-hysteresis` + entries_06; face-or-rule decision recorded either way)
+- [ ] T2c: R3 — `egress-resolve-pinned-address-validate` (sec InputValidation; resolve host → check EVERY resolved address against the blocked-range tables → pin the SocketAddr for the connection; metadata-hostname refusal; the `Resolver` trait seam as the fixture design; both-directions adjudication vs `unvalidated-egress-url` + the inbound rebind gate in-rule)
+- [ ] T2d: R4 — `sqlite-store-path-nofollow-parent-resolve` (sec InputValidation; parent-canonicalize + `SQLITE_OPEN_NOFOLLOW`; adjudicate vs the path-join-escape symlink faces + the files.rs listing rule)
+- [ ] T2e: R5 — no-op-rebuild digest gate: drop-or-face decision (adjacent gpu_35 kernel-side key-completeness + entries_05 build identity + the index_cache positive instance)
+- [ ] T3: fixtures per landed rule — standalone-compiled AND executed pre-entry (sec rules: the four-arm discipline; io rule: fixture threads must not depend on platform worker counts)
+- [ ] T4: gates — clippy `-D` postures, lib tests, retrieval floors, batch needles; count pins one-landing (pins_manifest + AGENTS + README + .docs heads + health_views) IF rules land; `docs:`-only commit if only faces/annotations land
+- [ ] T5: score-bench NOT owed unless clippy_lints moves (assert); freeze table NOT owed (zero clippy delta assert)
+- [ ] T6: teardown — `.raw/graphicle` removed; the Research 430 note + this plan updated with landing refs in the same commit
