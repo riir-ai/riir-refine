@@ -1,7 +1,8 @@
 # Plan 389 — cargo-atlas transcription batch (nominal Batch 373: R1–R3 + faces; R4/R5 gate at authoring)
 
-**Status:** CLAIMED 2026-11-19 (zed-m3-031cell@m3, the sprint!031-cell idle lane — Protocol H fresh-passed, boundary delta CLEAN, the seal-remake 26716c9e HISTORY backfill landed f1f3220c; the cargo gates ride an isolated CARGO_TARGET_DIR while the sibling seal-view check holds the shared tree). Staged plan-first 2026-11-19 (Research 423, delegated-owner Claude verdict AGREE round 1, session `d133eb3f-4d93-49f0-9083-b152add054c2`). Source: flowerornament/atlas @ `49d9ee41cca1cb8359fe28e2be13b430bba96569` (MIT OR Apache-2.0). Verdict: YES B− corpus, all candidates suggestion-only NotBenchable (Batch-136 annotation class); zero benchable GOAT — this is a decision-content batch, sec + rust_perf io. The cargo half awaits a free window; the claim row lands when the lane starts; the push is the arbiter.
-**Claimed:** zed-m3-031cell@m3, 1795105131, expires 2026-11-21T16:18:00+00:00
+**Status:** TAKEN OVER 2026-11-21 (zed-m3@m3 — the predecessor's 48 h lease lapsed 2026-11-21T16:18Z unlanded; T0.1–T0.3 were completed in the 031cell session per the T0 RESULTS block below; this lane resumes at Phase 1 authoring, re-verifying T0's anchors at the pin before the first corpus edit). Originally staged plan-first 2026-11-19 (Research 423, delegated-owner Claude verdict AGREE round 1, session `d133eb3f-4d93-49f0-9083-b152add054c2`). Source: flowerornament/atlas @ `49d9ee41cca1cb8359fe28e2be13b430bba96569` (MIT OR Apache-2.0). Verdict: YES B− corpus, all candidates suggestion-only NotBenchable (Batch-136 annotation class); zero benchable GOAT — this is a decision-content batch, sec + rust_perf io.
+**Lease closed:** zed-m3-031cell@m3, 1795105131, was expires 2026-11-21T16:18:00+00:00 — lapsed unlanded (T0 done in-session; Protocol H fresh-passed, boundary delta CLEAN, the seal-remake 26716c9e HISTORY backfill landed f1f3220c; the cargo gates were to ride an isolated CARGO_TARGET_DIR)
+**Claimed:** zed-m3@m3, 1795280741, expires 2026-11-23T17:05:00Z
 
 
 **T0 RESULTS (2026-11-19, zed-m3-031cell@m3):**
