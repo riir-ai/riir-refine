@@ -1,0 +1,102 @@
+# Research 427 — humanfia pair distill: QDA (agent-designed quantization recipes) + Humanize/coganchor (the agent fence)
+
+**Status:** DISTILLED — verdict AGREE-after-revise recorded 2026-11-21 (Claude reviewer session 288606cc, round 2; round 1 REVISE's three must-fixes applied: the status line itself, the Plan 508 modelless-comparator arm, the Plan 393 demotion criterion). No owner gate — the gating law gates only credential/secret deploys. Consumables filed, unclaimed: Plan 393 (batch) · riir-infer Issues 1242 + 1243 · riir-train Plan 508.
+
+## 0 TL;DR + verdicts
+
+- **QDA** (arXiv:2611.23388, "QDA: Closed-Loop LLM Quantization Design with Agents", MIT HAN Lab + NVIDIA, 2026-11-17; Li, Zhao, Han, Zhu): a coding agent designs a post-training-quantization recipe per model × precision in a closed loop — a KL-vs-anchor proxy score in minutes on held-out traces the agent never sees, a long-generation failure catch (`gencheck`, watching truncation counts), a 21-method checkpoint→checkpoint PTQ library, and a fenced command surface. Beats the best public recipe on 11/12 model×precision pairs (+0.9/+1.4/+2.2 pts avg at W4A16/W4A8/W3A16, 64 GPU-h/search); GLM-5.3-Flash 320B MoE at NVFP4 recovers 98.3% of FP8 accuracy vs NVIDIA's released 96.9%. **30 checkpoints released on HF incl. `QDA-Qwen3.8-27B` — GGUF Q4/Q6 rows servable by llama.cpp: the league model, with an agent-searched recipe.**
+- **Humanize** (`hmz`, github.com/humanfia/humanize): the agent flow harness around the loop — Python CLI + ONE Rust crate `coganchor` (41,763 LOC): Landlock file fence + loopback egress proxy + mirrored workspace + cache redirection (`walls.rs`), ptrace execve interception executing agent commands on a remote GPU host with faithful exit-status rewrite (`execproxy.rs`/`standin.rs`), supervisor.
+- **Corpus verdicts (distill skill):** qda **YES B−** — 2 rust_perf measurement-honesty transcription rules + faces — LANE-INTEL **HIGH** (riir-infer instruments + checkpoint consumption, Issues filed this session) — product-coverage: extends the measurement-honesty family (3rd tranche). humanize **YES B−** — 1 sec rule + 2 faces — no lane mapping — product-coverage: **third source of the sec agent-harness family**, its first large pure-Rust fence implementation.
+- **Research verdicts (three tracks):** track a/b **Gain** — riir-infer Issues 1242 (eval instruments) + 1243 (checkpoint consumption + calibration arms); track c **Gain, SECONDARY** — riir-train Plan 508 (on-policy own-answer KD; Path 0.5; 0.8B proof <2 GPU-h; 27B escalation named-blocked). **No Super-GOAT claimed or available:** the class has published prior art (below); the paper's contribution is the loop composition, which corroborates four shipped house mechanisms rather than adding a new primitive.
+
+## 1 Sources + provenance
+
+| source | pin | license | shape |
+|---|---|---|---|
+| github.com/humanfia/qda | `dc39a02bfd87bb2790e34001708d54ce9131e076` | Apache-2.0 | Python monorepo: `packages/qda-quant` (PTQ library + calib), `qda-kl` (KL evaluator), `qda-agent` (search loop); 665 .py files (test-heavy) |
+| github.com/humanfia/humanize | `565e12051378a72603135292c449189c9e8b64bb` | Apache-2.0 | Python CLI `src/hmz` + Rust `crates/coganchor` (41,763 LOC: fence/, transport/, cog/{walls,execproxy,standin,supervisor,shadow}) |
+
+Clones `.raw/{qda,humanize}` (shallow) removed at close; the pins above are the provenance — every quote below read at them. Models: `huggingface.co/qda-lab` (30 checkpoints / 10 models / 5 formats: W4A16, W3A16, W4A8, W4A4, GGUF); recipe provenance dataset `qda-lab/qda-recipe-inputs`. Upstream lineage (README): GPTQ, GPTAQ, AWQ, AutoRound, GSQ, QuaRot; writes compressed-tensors / ModelOpt / GGUF formats. Org-level kinship on disk: riir-ai Research 391 (KDA²) already cites `humanfia-lab/kda-datasets` — no content overlap with this pair.
+
+## 2 The QDA loop (facts, quotes at the pin)
+
+- **Commands:** `qda` (build/plan) · `kl` (score) · `gencheck` (long generations) · `qsched` (GPU queue) · `handin` (ranked submission) · `bpw` (size budget) · `wiki` (method notes). Agent = Claude Opus 5.5 in Claude Code driven by Humanize; 8 GH200 × 8 h/search; $19–75 agent tokens.
+- **KL evaluator (qda-kl):** next-token KL divergence vs the ORIGINAL model on reasoning traces the agent never sees; anchor logits computed once and cached; a candidate costs one pass; 350–990× faster than full benchmark eval. Over 44 checkpoint pairs KL picks the more accurate one **82%** of the time; layer-wise (per-layer reconstruction) error gets **73%** and ranks AWQ last of three public recipes on Qwen3.5-9B W4A16 where AWQ is actually second — per-layer metrics cannot see error accumulating across layers.
+- **Failure catch (gencheck):** proxy-promising candidates write full answers to hard problems the agent picks; **"the truncation count is the signal I watch"** — quantized models stuck in repetition loops cut off at the length limit (12 vs the anchor's 3 on 191 problems in the replayed search). The winning move of that search: distillation on the quantized model's own long answers (truncations 12→6), after own-traces calibration (KL −23% in one step, at a logged risk: "it raises ref KL: it specialises on anchor-style text").
+- **Contamination filter** (`qda-quant/tests/calib/test_contamination.py`, docstring verbatim): *"The calibration contamination filter: drop reference-prompt matches, log them, never refuse. The reference side is an index of sha256 digests only. A row is dropped when its PROMPT matches by id, by normalized text or by a 20-word window under either normalization; an answer body is never compared, so self-generated calibration is kept."* Generic-scaffolding windows exempted and recorded; multilingual no-space scripts (Thai/Devanagari/Arabic/Cyrillic) in the test arms. docs/search.md: *"Every build's calibration is filtered against the prompts KL reads; the final reading uses held-out prompts."*
+- **Library (qda-quant):** 21 PTQ methods behind ONE interface — *"every method takes a checkpoint and returns one"* → stack in any order, port-free on new architectures; GPTQ build of Qwen3.8-27B in 191 s vs llm-compressor 501 s (2.95–10.69× on 2 H100s).
+- **Fence (coganchor):** isolation levels none/sandbox/strict (bubblewrap; README warning verbatim: *"jobs it submits run as you, outside any sandbox, and can change or delete any file your account can write"*). `walls.rs`: Landlock ruleset + optional loopback proxy (the `PROXIES` env list ×6, cache redirection ×5), mirror-path rewriting, *"what is fetched into a directory taken apart after that stays out of the agent's reach, failing closed."* `execproxy.rs`/`standin.rs`: the traced process's `execve` is intercepted (ptrace), its stdio stolen via `pidfd_getfd`, the command runs on the GPU host, and the stalled exec is rewritten into `exit_group` with the REMOTE status — *"where anything fails once the exec may have been let through, the process is killed, since a stub allowed to run would exit 0 and read as success."*
+- **Results:** per-model winners vary (no public recipe wins everywhere; plain GPTQ is best on R1-Distill-Llama-8B at every precision); largest gains where public recipes sit far below BF16 (+5.2 Qwen3.5-9B W4A8; +6.1 R1-8B W3A16); tools matter — the same agent given NVIDIA ModelOpt falls 0.5–1.3 pts behind QDA and below the best public recipe at W4A8/W3A16, while picking candidates ON the test benchmarks (QDA never sees them). Checkpoints keep standard formats/kernels — zero inference overhead.
+- **Roadmap:** day-one quantization; a library that grows itself (evaluator-confirmed agent inventions join); the loop beyond weights (KV caches, sparsity, new low-bit formats).
+
+## 3 Prior-art sweep (§4) + internal-first
+
+- **Internal-first grep** (all `**/.research/*.md`): `2611\.23388` → 0 hits; `\bQDA\b|humanfia|qda-lab` → 1 hit (Research 391's kda-datasets provenance mention, §1). No prior distillation.
+- **Published prior art on the headline class:** KL-as-quantization-quality-metric is established — Fireworks.ai "Measuring LLM Quantization Quality With KL Divergence" (2024); arXiv:2505.15353 "Establishing a Scale for Kullback–Leibler Divergence" (checkpoints/quantization among its settings); practitioner posts arguing both directions ("KL shouldn't be used alone" — the failure-catch is exactly that answer). LLM-as-optimizer: OPRO (ICLR 2024), AlphaEvolve — cited by the paper itself. Agent recipe search as a class: NVIDIA ModelOpt ships an agent recipe-search skill (the paper's §4.3 baseline). **The loop composition (proxy score + behavioral catch + composable library + fence + contamination filter) is the paper's contribution; no component is novel — so no Super-GOAT claim is made here.**
+
+## 4 Dedup gate (corpus + in-stack kinships)
+
+Greps run this session over `riir-refine/src/` under both vocabularies:
+
+1. **Tuning-source contamination filter** — `held.?out|contaminat|scoring set|tuning set|eval.?set`: nearest hits are NOT the class. `adoption_gate.rs` `Decontaminator` = outcome-row dedup (never-double-file over OUTCOME rows; qda filters CALIBRATION PROMPTS against the scorer's reference digests — name-cousin, signal-diff recorded, adjudicate in-rule at authoring); `corpus_referee.rs` = bi-side DiD drift contamination; `clippy_oracle.rs` = cargo fingerprint cross-contamination; `cf_workers_ai.rs` "truncated eval set" = a cap. Grammar-not-answers owns the LAW as skill doctrine, not a corpus rule. **Zero corpus owners on the calibration-vs-scorer-reference axis.**
+2. **Proxy-promotion behavioral catch** — `proxy (score|pick|promot)|behavioral catch|survivor|repetition|truncat`: no owner. Adjacent (adjudications owed in-rule): `degenerate-output-invalidates-throughput-claim` (b369; THROUGHPUT claims vs this rule's SELECTION/PROMOTION claims — compose never merge), `unique-prompts-defeat-prefix-cache…` (measurement construction), `gate-cut-fitted-on-serving-representation` (b375; representation vs behavior). **Zero owners.**
+3. **Agent-child unsandboxed authority** — `sandbox|seatbelt|allowlist|exec.?proxy|command broker`: every hit is a clippy-lints TYPE allowlist; zero sandbox-family owners. Adjacent: the spillway/safeagents egress lineage (`unvalidated-egress-url` = URL choice; `egress-control-bypass-flag` = control DEFEAT; `credential-material-in-command-argv` = secret EXPOSURE; `shell-string-command-interpolation` = INJECTION) and opal R2 `agent-code-static-boundary-diagnostics-never-gate` (b367; diagnostics-vs-sandbox POSTURE — this rule owns the fence-CONSTRUCTION axis: the ABSENCE of scoping on an unsupervised agent child). **Unowned.**
+
+**In-stack kinships (recorded as corroboration — never a Gain trigger per §1.55):** the lossy-surface promotion law already bans aggregate-only gates (riir-infer Bench 007: "aggregate PPL is disqualified by the lossy-surface rule"); the golden Δ-NLL + argmax-flip frozen-read census IS QDA's proxy-score instrument in audit form (riir-infer Issues 959 / 1188, Bench 1215); `adoption_gate` (live in Cargo.toml, verified this session) = the "library that grows itself" mechanic (evidence-gated intake, active-set demote/readmit); the calibration-gate skill = the pre-registered-bar search discipline. QDA externally replicates the lossy-surface law's premise at MIT HAN + NVIDIA scale: an aggregate proxy ranks right 82% of the time and STILL misses repetition loops — select by end-to-end behavior, promote per family.
+
+## 5 Ranked candidates
+
+| # | pattern | source site | grade | notes |
+|---|---|---|---|---|
+| 1 | `tuning-source-contamination-filter-vs-scorer-reference` | qda-quant `calib/contamination.py` (+ tests) | B− | rust_perf measurement-honesty, suggest-only, NotBenchable-by-domain. Digest + normalized-text + 20-word-window arms; scaffolding exemption (recorded, never dropped); answer bodies never compared (self-generated data survives); drop+log, never refuse; multilingual no-space-script windows as fixture arms |
+| 2 | `proxy-selection-runs-behavioral-catch-on-survivors` | qda docs/search.md (gencheck) + blog §3 | B− | rust_perf measurement-honesty, suggest-only. Staged admission ladder {proxy → behavioral catch on SURVIVORS → gold on finalists}; truncation/repetition count the watched signal; four claim classes {gold-good, proxy-good+gen-bad, proxy-bad+gen-good, both-bad} counted, never pooled |
+| 3 | `agent-child-unsandboxed-account-authority` | humanize coganchor | B− | sec, suggest-only. DEFECT = a harness spawning an agent CLI/agent-driven command with full account authority (the README warning); FIX posture = the fence (filesystem scope + egress proxy env + scratch redirection, fail-closed). Faces folded in-notes: scratch-fail-closed (`expanded` — fetched content outside granted paths stays out) + remote-status-standin (`standin.rs` — a stub that may run reads exit-0-as-success → kill). UPSTREAM: n/a — decision-content transcription, the "fix" IS the source's shipped design; mined as content, never a PR |
+| 4 | cached-anchor content-addressed scoring cache | qda-kl | C+ face | Compute-once golden-rule instance — the corpus caching family owns the genus; positive-instance face on rule 2's notes, never a new rule |
+| 5 | recipe = typed checkpoint→checkpoint DAG | qda-quant | C+ note | Composition algebra (memoizable content-addressed prefixes, typed non-commuting ordering, idempotence collapse) — real design content, no riir-refine consumer; rides riir-infer Issue 1242 T4 as a note |
+
+**Yield estimate:** 3 rules after ~50% falsification (2 rust_perf + 1 sec) + count-neutral faces. **Nominal Batch 377, Plan 393** (batch number re-read at claim time — sibling lanes land batches continuously).
+
+## 6 Path 0 + adversarial panel (both advocates ran; merged)
+
+| Component | No-GD advocate | Model-based advocate | Disposition |
+|---|---|---|---|
+| KL-vs-anchor ranked selection | extractable selection instrument; fidelity = a rate with Wilson LB95, benchable; Report-the-Floor comparator = the incumbent per-layer/per-family metrics | — | riir-infer Issue 1242 T1 |
+| Truncation/repetition census | countable axes, eval-first + report-only runtime arm | instrument #7 — "closes a real blind class: frozen-read Δ-NLL flat while generations loop" | riir-infer Issue 1242 T2 |
+| Cached-anchor single-pass scoring | content-addressed cache; G1 bit-identity + loud stale refusal; Issue-940 determinism binds (KL crosses a selection decision); tokenizer-scope typed abstain | — | riir-infer Issue 1242 T1 |
+| Recipe composition algebra | typed DAG, memoization, commutation typing, idempotence collapse | — | Issue 1242 T4 (note) |
+| Proxy break-even `f̄ > 1 − [c_g(V−F) − c_p·V]/L` | closed form; typed verdict SHIP-PROXY/DIRECT/UNDECIDABLE | — | Issue 1242 T3 |
+| Layer-wise-vs-KL ordering | select-aggregate / promote-per-family synthesis | — | kinship + the gates above |
+| Own-traces calibration | — | item 1: EXL3/Q8 lanes; ref-KL floor on a held-out non-anchor slice (the paper's own logged anchor-specialization risk); 27B trace-gen on the Mac, ≤1B fully on the 4090 | riir-infer Issue 1243 T3–T4 |
+| Scale search (clip on real stats + e2e KL scale tuning ×3) | — | item 3: cheapest/highest-confidence; 1–4 GPU-h | riir-infer Issue 1243 T5 |
+| **On-policy own-answer KD** | calibration-refresh is the modelless face; the GRADIENT half has none | item 2: THE training item; 0.8B <2 GPU-h proof; 27B infeasible (no autograd plumbing in the ternary/GGUF forward; 20–60 GPU-h + engineering) | **riir-train Plan 508 (Path 0.5, SECONDARY)** |
+| FP8-aware scale search / MoE router-weighted Hessians | watch | watch (no FP8 lane on Ada; no MoE PTQ lane — DSpine qwen3.8 the future candidate) | watch rows, recorded here |
+| 64-GPU-h closed-loop search agent | no-build: box envelope + profit axis | no-build (their #9: "the paper already publishes the winning moves — apply them manually, ~6–15 GPU-h") | **DISCARDED — auditable:** compute envelope (24 GB box) + published moves; ceiling = a thin scripted grid over the known axes (= Issue 1243 b/c scope) |
+| Checkpoint averaging | weight-space soup, ≈0 GPU-h, census-gated | low priority | Issue 1243 T6 |
+| Fence / scheduler / 4-command surface | doctrine kinship (grammar-not-answers) + rig-run policy (NotBenchable-by-domain) | — | corpus rule #3 (sec) + kinship |
+
+Discard audit: the no-build row carries a mechanism-level reason (envelope + published moves), not a class hand-wave. Coordinator spot-checks (advocate facts are arguments, not evidence): HF model list VERIFIED (30 models incl. QDA-Qwen3.8-27B W4A16; docs/published.md GGUF rows "Qwen3.8-27B | Q4 · Q6" — the model-based advocate's initial "nothing to consume" CORRECTED by this check); `adoption_gate` live in Cargo.toml VERIFIED; golden_nll / family-ablate census lanes VERIFIED (Bench 1215/1216).
+
+## 7 Verdicts
+
+- **qda: YES B− corpus / LANE-INTEL HIGH / product-coverage: measurement-honesty family 3rd tranche.** Lane-intel artifacts: riir-infer Issues 1242 + 1243 filed THIS session; the league model exists as a consumable GGUF with an agent-searched recipe — the frozen-read census adjudicates adoption per family, never aggregate.
+- **humanize: YES B− corpus / no lane mapping / product-coverage: third source of the sec agent-harness family** (0sec/spillway/safeagents + opal R2 lineage) and its first large pure-Rust fence implementation. Design-intel side-note (no action): coganchor's remote-exec shape (the agent's process stays put; commands execute remotely through intercepted execve with a mirrored workspace) is an alternative topology to our agent-mail rig-run lane — recorded for the infra lane's next look, never routed as corpus.
+- **Research routing:** primary note HERE (fusion priority #1 — the self-evolve corroboration + the corpus batch); consumables filed riir-infer (issues) + riir-train (Plan 508, SECONDARY track per serving-envelope fit — the mechanism sits outside every hot path and its consumer is weak until a quant-production window arms).
+
+## 8 Filings (this commit)
+
+- riir-refine: this note (427) + Plan 393 + the queue row (2026-11-21); `.research/.highwater` 426→427, `.plans/.highwater` 392→393.
+- riir-infer: Issue 1242 (KL-anchor ranked selection + gencheck census + cached anchors + break-even estimator) + Issue 1243 (GGUF checkpoint consumption + own-traces calibration + scale search + checkpoint averaging); `.issues/.highwater` 1241→1243. **Committed `56ed0e7a`.**
+- riir-train: Plan 508 (own-answer KD; Path 0.5; secondary); `.plans/.highwater` 507→508. **Committed `d25e4be69`.**
+- `dual_allocation_gate` RUN CLEAN on all three repos this session (0/0/0 each).
+
+## 9 Honest caveats
+
+- Young fast-moving repos (paper v1 2026-11-17; HF models updated "1 day ago"; qda-kl/docs still thin in places): **re-clone + re-pin at batch T0** (Plan 393 T0.1); quotes above read at the pinned shas.
+- **Single-source accuracy figures** — their benchmarks, their harness, unreplicated by a second party. Issue 1243(a)'s frozen-read census is our own replication instrument for exactly one artifact (the Q4 GGUF of the league model).
+- Python sources; fixtures are ORIGINAL Rust reproductions (the transcription law) — no source code pasted into any corpus entry.
+- **UNREAD residue:** qda-quant solver bodies (solve.py, Hessian cores), qda-kl internals beyond docs, coganchor `fence/{landlock,proxy,wrap}.rs` + `supervisor.rs` + `netproxy.rs` bodies — rule #3's fixture quotes `walls.rs`/`standin.rs` heads only; re-read at T0.2 before authoring.
+- Hardware honesty: paper numbers are H100/GH200-class; no cross-box transfer; every in-stack number quotes bench_preflight PROVENANCE + GPU exclusivity per house law.
+- This session (m3) is docs/issues/plan-only; the batch (Plan 393) and census runs (Issue 1243a) route to amo/bmo per the box law.
+- **Round-2 verdict lesson (recorded per the reviewer's closing note):** a path/artifact citation added to a filed plan or issue needs a size or type check BEFORE it lands — the round-2 advisory named `Qwen3.8-27B-DFlash2-Q4_K_M.gguf` as the incumbent comparator without checking its 1.14 GB size (the five-layer DFlash2 drafter head, riir-train Plan 369:278), and the reviewer's verification caught the false-green before commit. Coordinator spot-check discipline applies to the authoring session's own edits, not only to advocate-reported facts.
+
+Session: zed-m3-qda-distill, epoch 1795223132
