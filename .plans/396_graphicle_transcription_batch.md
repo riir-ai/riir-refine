@@ -1,6 +1,7 @@
 # Plan 396 — graphicle transcription batch (rust_perf + sec)
 
-**Status:** STAGED — plan-first, unclaimed; claim by appending the `**Claimed:**` lease line (48 h expiry) before the first corpus edit.
+**Status:** CLAIMED (amo-idle-i656@amo) — T0 re-clone/re-pin/verify starting; claim-lease check clean 2026-11-21.
+**Claimed:** amo-idle-i656@amo, 1795289354, expires 2026-11-23T19:29:14+00:00
 
 Distill record: `.research/430_graphicle_code_graph_engine_distill.md` · Source PIN `b0bb41407d1ffe863221181112656c28c483046c` (Apache-2.0, tip 2026-11-21) — RE-CLONE + RE-PIN at T0 (fast-moving; tip moved the day of the verdict).
 
