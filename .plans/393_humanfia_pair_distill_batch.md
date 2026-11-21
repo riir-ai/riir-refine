@@ -1,13 +1,14 @@
 # Plan 393 — the humanfia pair distill batch (qda + humanize → 3 transcription rules; nominal Batch 377)
 
-**Status:** FILED — claim with a lease line before the first corpus edit (claim-lease check first, katgpt-rs Issue 943 discipline). T0.1 CLAIMED (re-clone + re-pin, lease below); T0.2+ open. Companion: Research 427 (the verdict, dedup evidence, Path 0 table).
-**Claimed:** zed-393-t01@amo, 1795224851, expires 2026-11-23T01:34:11+00:00
+**Status:** FILED — claim with a lease line before the first corpus edit (claim-lease check first, katgpt-rs Issue 943 discipline). T0.1 DONE 2026-11-21 (re-clone + re-pin + Apache-2.0 verified + zero drift); T0.2+ open. Companion: Research 427 (the verdict, dedup evidence, Path 0 table).
+**Lease closed:** zed-393-t01@amo — T0.1 delivered same session (claim record: zed-393-t01@amo, epoch 1795224851, was expires 2026-11-23T01:34:11+00:00)
 
 **Pre-registered proof path (ungoat law):** all three rules are suggestion-only, NotBenchable-by-domain (the metric-mismatch/annotation class, Batch-136 precedent) — the proof IS the fixture + falsifier + in-rule adjudication set below, plus the standing gates (standalone compile+execute pre-entry, pins_manifest, score-bench). No perf bars exist for this batch; any promotion beyond suggestion-only is out of scope by construction.
 
 ## Phase 0 — re-pin + re-verify
 
 - [ ] T0.1 rm stale `.raw` clones; re-clone shallow at the pinned shas (qda `dc39a02bfd87bb2790e34001708d54ce9131e076`, humanize `565e12051378a72603135292c449189c9e8b64bb`); verify Apache-2.0; record any upstream drift since 2026-11-21
+  - DONE 2026-11-21 zed-393-t01@amo: no stale qda/humanize clones existed (removed at close per Research 427 §1; `.raw/` holds only sibling lanes `bbtree`/`mozilla-heal` — untouched); re-cloned shallow, checked-out HEAD == pin on BOTH; Apache-2.0 LICENSE verified at both pins; drift ZERO since 2026-11-21 (ls-remote HEAD == pin on both default branches at re-clone time); clones live at `.raw/{qda,humanize}` for T0.2, rm at T3.4
 - [ ] T0.2 re-read the UNREAD residue (Research 427 §9): qda-quant `calib/contamination.py` body + solver entry, qda-kl internals, coganchor `fence/{landlock,proxy,wrap}.rs` + `supervisor.rs`; quote every rule's anchor verbatim at the pin
 - [ ] T0.3 re-run the three dedup greps (Research 427 §4) at authoring HEAD; re-adjudicate any sibling rows landed meanwhile (LIVE-STATE check — sibling batches land continuously)
 
