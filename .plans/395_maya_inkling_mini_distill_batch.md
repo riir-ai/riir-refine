@@ -1,6 +1,7 @@
 # Plan 395 — maya-inkling-mini kernel_opt transcription batch
 
-**Status:** staged plan-first 2026-11-21 (verdict Research 429; cargo half awaits a free window — claim row lands when the lane starts)
+**Status:** claimed 2026-11-21T20:53Z (zed-m3-maya@m3 — the cargo half executing; verdict Research 429)
+**Claimed:** zed-m3-maya@m3, 1795294384, expires 2026-11-23T20:53:04Z
 
 Source: alesha-pro/maya-inkling-mini @ `be849daa81790b7d12b74ba9e2f7b78ed4ef43cd` (single squashed commit, MIT). Module-scoped: `src/ik2/` + the two INKLING2 docs only. Expected yield 2–3 rules + 3–4 faces (Research 429 §Ranked); all suggestion-only NotBenchable-by-domain, `bench_spec: None`.
 
