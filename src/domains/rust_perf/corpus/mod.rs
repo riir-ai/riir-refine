@@ -9,7 +9,28 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 384 entries across 15 categories as of Batch 377 (+2: concurrency ×2 —
+//! 386 entries across 15 categories as of Batch 378 (+2: measurement-honesty ×2 —
+//! `tuning-source-contamination-filter-vs-scorer-reference` (suggestion-only:
+//! a tuning/optimization loop filters its source against the scorer's
+//! reference BEFORE the loop reads it — digest-index + normalized-text +
+//! 20-word-window under both normalizations, drop+log never refuse,
+//! answers never compared, structural exemptions only, frequency exempts
+//! nothing; the grammar-not-answers doctrine's build-side instrument;
+//! adjudicated vs the `adoption_gate` Decontaminator + `corpus_referee` `DiD`
+//! in-rule both directions) + `proxy-selection-runs-behavioral-catch-on-
+//! survivors` (suggestion-only: the staged admission ladder {proxy →
+//! behavioral catch on SURVIVORS → gold on finalists}; per-domain
+//! cut/loop counts against the original as the paired control, counted
+//! never pooled; the end-anchored loop detector; the four claim classes
+//! counted; adjudicated vs degenerate-output (THROUGHPUT vs SELECTION),
+//! gate-cut-representation (representation vs behavior) in-rule + the
+//! two compose kinships) — the humanfia pair distill (the QDA agent
+//! loop: qda @ dc39a02b + humanize @ 565e1205, both Apache-2.0; the MIT
+//! HAN Lab + NVIDIA paper arXiv:2611.23388), quotes byte-verified at the
+//! pins; Plan 393 / Research 427, `entries_92` — the batch's sec half
+//! (agent-child-unsandboxed-account-authority) lands in
+//! `src/domains/sec/corpus.rs`, same commit.
+//! Prior: 384 entries across 15 categories as of Batch 377 (+2: concurrency ×2 —
 //! `sync-async-twin-duplication` (suggestion-only, the write-once controlflow
 //! family seed: a `_sync`/`_async` name-suffix pair PLUS ≥2 duplicated
 //! control-flow statements is a hand-maintained drift surface — one body,
@@ -984,13 +1005,21 @@ mod entries_88;
 mod entries_89;
 mod entries_90;
 mod entries_91;
+mod entries_92;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 384 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 386 entries
+/// (Batch 378, 2026-11-22, Plan 393 / Research 427: +2 — the humanfia pair
+/// distill, qda @ `dc39a02b` + humanize @ `565e1205` both Apache-2.0
+/// (arXiv:2611.23388), clones read at the pins, `entries_92`: measurement-
+/// honesty ×2 — `tuning-source-contamination-filter-vs-scorer-reference`
+/// and `proxy-selection-runs-behavioral-catch-on-survivors` — both
+/// suggestion-only and honestly `NotBenchable` with `bench_spec: None`;
+/// prior: 384 entries
 /// (Batch 377, 2026-11-22, Plan 394 / Research 428: +2 — the colorless
 /// write-once controlflow family seed, veecore/colorless-rs @ `b5db6b95`
 /// MIT OR Apache-2.0 (+ZLIB), clone re-created at the batch T0 (HEAD ==
@@ -1373,6 +1402,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_89::b376_rules());
     entries.extend(entries_90::b389_rules());
     entries.extend(entries_91::b394_rules());
+    entries.extend(entries_92::b393_rules());
     Corpus::new(entries)
 }
 

@@ -281,6 +281,17 @@
 //! BATCH ORDER (374/375/376 landed first; the number was allocated at
 //! claim 2026-11-19, the predecessor lane's lease lapsed unlanded, the
 //! takeover landed it late), 80→82.
+//!
+//! Batch 378 (2026-11-22, Plan 393 / Research 427): the humanfia pair's
+//! sec half — `agent-child-unsandboxed-account-authority` (the
+//! coganchor fence-construction posture: the spawn-shape predicate
+//! {open-input task spec × autonomy grant} vs trusted tooling and
+//! interactive shells, the faces scratch-fail-closed +
+//! remote-status-standin folded in-notes, the family's third source
+//! and first large pure-Rust fence), humanfia/humanize @ `565e1205` +
+//! humanfia/qda @ `dc39a02b` both Apache-2.0, 82→83. The batch's
+//! `rust_perf` half lands in `rust_perf/corpus/entries_92.rs`, same
+//! commit.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -3324,6 +3335,23 @@ entry)."
             family: SecFamily::InputValidation,
         },
 
+        // ══ Batch 378 (2026-11-22) — the humanfia pair: the coganchor ══
+        // ══ fence-construction posture (Plan 393 / Research 427).     ══
+        // ══ ONE suggest-only InputValidation entry; fixtures          ══
+        // ══ b393 F3. The batch's rust_perf half (2 measurement-       ══
+        // ══ honesty rules) lands in rust_perf/corpus/entries_92.rs.   ══
+        // ── agent-child-unsandboxed-account-authority (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "agent-child-unsandboxed-account-authority".to_string(),
+            sec_concept: "a harness spawns an agent-driven child — a program whose command vocabulary is NOT closed (its inputs include an open task specification the spawner did not enumerate, and it runs under an autonomy grant: per-command approval absent) — with the invoking account's FULL authority: no filesystem scope, no egress shape, no scratch redirection; the defect is the fence's ABSENCE on a spawn shape that cannot be enumerated ahead of time, and the fix posture is fence CONSTRUCTION at spawn: scoped filesystem grants (what is granted is what is there as the wall is drawn — an entry made later in a carved-out directory stays out, failing closed), the egress proxy environment (the proxy variables pointed at the fence's own listener and NO_PROXY emptied — an exported NO_PROXY would send named hosts around the wall), scratch redirection (the shared temp dirs and the build caches pointed into the child's own scratch, removed with the session), and a grant that cannot be held is REFUSED, never widened — the child does not run unfenced while the caller believes it held. THE SOURCE'S OWN DEFECT-SIDE WARNINGS, verbatim at the pins: qda README.md:65-66: '**Warning:** the search agent runs without asking for approval, and every job it starts runs under your user account. Read [agent search](docs/search.md) before running it on a shared machine.' — and qda docs/search.md:141-144: '**Warning.** The agent runs with approvals bypassed. At `isolation.level: none` (the default) the build and command jobs it submits run as you, outside any sandbox, and can change or delete any file your account can write.' — the fence is shipped beside the warning (isolation levels none/sandbox/strict, docs/search-config.md: the jobs run in bubblewrap, 'the work directory writable, the run's judge/, the reference data and $HOME hidden, no network'); humanize/coganchor is the fence's Rust IMPLEMENTATION (walls.rs: Landlock ruleset + the loopback proxy; wrap.rs:9-11 verbatim: 'A step that fails is a program that does not run, never one that runs with less of the wall than was asked for'; wrap.rs:69-70 verbatim: 'Refused rather than run without it: a program the fence was meant to hold, run unfenced, would be one reaching whatever it liked while the flow believed it held.'; expanded() at wrap.rs:163-182: 'What is granted is what is there as this is asked: an entry made later in a directory that was taken apart is in nothing granted, and so out of reach -- the fence failing close.'; walls.rs:10-11 verbatim: 'what is fetched into a directory taken apart after that stays out of the agent's reach, failing closed.'; walls.rs overrides(): TMPDIR/TMP/TEMP + the five CACHES redirected into the scratch and the six PROXIES pointed at the loopback listener with NO_PROXY EMPTIED — 'Emptied rather than removed: a `NO_PROXY` somebody exported would otherwise send the hosts it names around the proxy, into a wall.'), and humanize's own docs carry the same two-sided honesty (docs/user/security.md:10-13 verbatim: 'Nothing an agent does is put to you for approval. Every flow's agents run with approvals bypassed... What holds an agent back is what its flow declares, below.' + :164-169: '**A grant that cannot be held is refused, not widened.**'). THE FACES folded in-notes (count-neutral): (a) SCRATCH-FAIL-CLOSED — the carve-out algebra: content fetched into a directory taken apart when the wall is drawn is outside every grant, and a fetched artifact landing outside granted paths stays out (fail-closed by construction, not by review; Landlock only allows, so a carve-out is held by granting what is AROUND it, taken apart down to the path — a carve-out that cannot be held so is a program that does not run); (b) REMOTE-STATUS-STANDIN — a stand-in stub parked at an intercepted exec may run reads and exit 0, which reads as SUCCESS: coganchor standin.rs:47-50 verbatim: 'Where the stub's path cannot be planted the process stays where it was, and is released from there; where anything fails once the exec may have been let through, the process is killed, since a stub allowed to run would exit 0 and read as success.' — a stand-in whose completion is unknown must be KILLED, never left to read as success. ⛔ THE SPAWN-SHAPE PREDICATE (bounded, product-name-free — the plan's pre-registered demotion criterion ANSWERED): the class separates from trusted tooling by TWO structural properties of the SPAWN SHAPE, not the child's identity: (1) OPEN-INPUT — the child's inputs include a task specification the spawner did not enumerate (a goal prompt / task file / free-form instruction), vs a trusted tool's CLOSED verb grammar (cargo build/test/clippy — every invocation enumerable at authoring time); (2) AUTONOMY GRANT — per-command approval is absent for the child's own follow-on spawns (a bypassed-approvals posture), vs a user-initiated interactive shell where the human IS the per-command approver by construction. Both present = the fence-construction posture applies; either absent and the spawn is ordinary tooling (a closed-verb tool with no autonomy grant is cargo-class even when it shells out; an approved interactive shell is the user's own authority). The predicate's bound is carried honestly: it keys on the SPAWNER's declaration shape (what the parent hands the child and what it switched off), not on the child's internals — a parse-only pass reads the spawn site, never the agent loop. ⛔ ADJUDICATION vs the family, both directions: opal R2 `agent-code-static-boundary-diagnostics-never-gate` (B367) owns the DIAGNOSTICS-vs-SANDBOX posture (a scan of generated code that observes and never gates); THIS owns the fence-CONSTRUCTION axis (the ABSENCE of scoping on an unsupervised agent child — the sandbox IS the fix there, composed: the diagnostics watch what the fence admits); `egress-control-bypass-flag` (B342) owns the CONTROL-DEFEAT axis (a flag that routes around a policy the deployment operates); THIS owns the ABSENCE-of-controls axis (no egress shape exists to defeat — the fix constructs one); `credential-material-in-command-argv` (B342) owns secret EXPOSURE in argv; THIS owns authority SCOPING (what the child may touch at all — compose: the fence's private-env law also keeps the credentials out of the child's hands); `shell-string-command-interpolation` (B350) owns the INJECTION axis (a caller string parsed as flags); THIS owns the AUTHORITY axis (whatever the child executes, its reach is scoped) — injection is one vector the fence contains, not the class. REGIME: any harness lane that spawns an open-input + autonomy-granted child (agent flow runners, agent-driven CI lanes, batch agent orchestration, remote task runners). ANTI-REGIMES: the two predicate absences above (closed-verb tooling; per-command-approved interactive shells); children already forked INSIDE a fence the parent drew (the posture is satisfied — the fixture's all-safe arm). Suggest-only (WHICH fence backend and HOW the grants are spelled is the harness's design — Landlock/Seatbelt/bubblewrap namespaces, cgroups, container boundaries are all valid spellings; a detector cannot price the fence's strength). Detector note: none at landing — the shape (a spawn site whose command vocabulary is open) needs the spawner's declaration surface a parse-only pass cannot bind; the predicate above is the review checklist. Fixture: `fixtures/b393_fixtures.rs` F3 (the full-authority arm reads and writes past every scope it was never granted; the fence-construction arm's grants refuse the out-of-scope write fail-closed; the trusted-tooling and interactive-shell arms run unfenced CORRECTLY; the tampered arm — a fence that widens an unholdable grant instead of refusing — reds). Batch 378 / Plan 393 / Research 427 (github.com/humanfia/humanize @ 565e12051378a72603135292c449189c9e8b64bb + github.com/humanfia/qda @ dc39a02bfd87bb2790e34001708d54ce9131e076, both Apache-2.0 — coganchor is the sec agent-harness family's THIRD source (0sec/spillway/safeagents + opal lineage) and its first large pure-Rust fence; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the harness spawns the agent-driven runner with the\n/// invoking account's full authority — no scope, no egress shape, no\n/// scratch. The runner takes an OPEN task spec and runs with\n/// approvals bypassed; whatever it (or the model driving it) decides\n/// to execute reaches every file and host the account can reach.\npub fn run_agent_task(task_file: &std::path::Path, home: &std::path::Path) -> std::process::Command {\n    let mut command = std::process::Command::new(\"task-runner\");\n    command.arg(format!(\"--task={}\", task_file.display()));\n    command.arg(\"--approvals=bypassed\"); // the autonomy grant\n    command.env(\"HOME\", home); // the account's whole home: settings,\n    // keys, every project — all readable, all writable\n    command.env_remove(\"NO_PROXY\"); // inherited network, unshaped\n    command\n}\n"
+                .to_string(),
+            fixed_code: "/// The fence-construction posture: the same child, scoped at spawn.\npub struct Fence {\n    read: Vec<std::path::PathBuf>,\n    write: Vec<std::path::PathBuf>,\n    scratch: std::path::PathBuf,\n    proxy_port: u16,\n}\n\nimpl Fence {\n    /// The grants are worked out BEFORE the fork and refused, never\n    /// widened: a carve-out the wall cannot hold is a program that\n    /// does not run.\n    pub fn prepare(grants: Grants) -> Result<Fence, String> {\n        let scratch = mkdtemp_0700(\"agent-fence-\")?;\n        // what is granted is what is there as the wall is drawn: the\n        // carve-out is taken apart now; an entry made later stays out\n        let expanded = expand_grants_around_carve_outs(&grants)?\n            .ok_or(\"a carve-out this wall cannot hold\")?;\n        Ok(Fence { read: expanded.read, write: expanded.write, scratch, proxy_port: start_loopback_proxy()? })\n    }\n\n    /// The child's environment: scoped HOME contents, the scratch as\n    /// its temp, the caches redirected into the scratch, the egress\n    /// proxy pointed at the fence's listener — NO_PROXY EMPTIED, not\n    /// removed (an exported NO_PROXY would send named hosts around\n    /// the proxy).\n    pub fn child(&self, task_file: &std::path::Path) -> std::process::Command {\n        let mut command = std::process::Command::new(\"task-runner\");\n        command.arg(format!(\"--task={}\", task_file.display()));\n        command.arg(\"--approvals=bypassed\");\n        command.env(\"HOME\", &self.scratch); // a home of its own\n        command.env(\"TMPDIR\", &self.scratch);\n        for (name, usual) in CACHES {\n            let at = usual.expanduser();\n            if !self.write.iter().any(|w| at.starts_with(w)) {\n                command.env(name, self.scratch.join(\"cache\").join(name.to_lowercase()));\n            }\n        }\n        let proxy = format!(\"http://127.0.0.1:{}\", self.proxy_port);\n        for name in PROXIES {\n            command.env(name, &proxy);\n        }\n        command.env(\"NO_PROXY\", \"\"); // emptied: the hosts it named\n        command.env(\"no_proxy\", \"\"); // would reach around the wall\n        command\n    }\n}\n\nconst CACHES: [(&str, &str); 5] = [\n    (\"XDG_CACHE_HOME\", \"~/.cache\"),\n    (\"UV_CACHE_DIR\", \"~/.cache/uv\"),\n    (\"npm_config_cache\", \"~/.npm\"),\n    (\"PIP_CACHE_DIR\", \"~/.cache/pip\"),\n    (\"GOCACHE\", \"~/.cache/go-build\"),\n];\nconst PROXIES: [&str; 6] = [\n    \"HTTPS_PROXY\",\n    \"HTTP_PROXY\",\n    \"ALL_PROXY\",\n    \"https_proxy\",\n    \"http_proxy\",\n    \"all_proxy\",\n];\n\nstruct Grants {\n    read: Vec<std::path::PathBuf>,\n    write: Vec<std::path::PathBuf>,\n    carve_outs: Vec<std::path::PathBuf>,\n}\n\nstruct Expanded {\n    read: Vec<std::path::PathBuf>,\n    write: Vec<std::path::PathBuf>,\n}\n\nfn expand_grants_around_carve_outs(_grants: &Grants) -> Result<Option<Expanded>, String> {\n    // Landlock only allows: a grant holding a carve-out is taken\n    // apart down to the path; a carve-out that cannot be held so is\n    // None — REFUSED, never widened.\n    Ok(None)\n}\n\nfn mkdtemp_0700(_prefix: &str) -> Result<std::path::PathBuf, String> {\n    Err(\"fixture stand-in\".to_string())\n}\n\nfn start_loopback_proxy() -> Result<u16, String> {\n    Err(\"fixture stand-in\".to_string())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+
     ]
 }
 
@@ -4776,6 +4804,82 @@ mod tests {
         assert!(
             clamp_tail_error_term::detect(&rule.fixed_code, &fixed).is_empty(),
             "batch-370: detector must stay silent on its own fixed fixture"
+        );
+    }
+
+    /// Batch 378 (the humanfia pair's sec half, Plan 393 / Research 427,
+    /// humanfia/humanize @ 565e1205 + humanfia/qda @ dc39a02b, both
+    /// Apache-2.0): ONE suggest-only `InputValidation` rule on the
+    /// fence-construction axis — the spawn-shape predicate answered
+    /// in-rule, never `FIXABLE_SEC`, no detector at landing.
+    #[test]
+    fn batch378_rules_present_families_and_provenance() {
+        let all = entries();
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == "agent-child-unsandboxed-account-authority")
+            .unwrap_or_else(|| panic!("batch-378 rule missing from corpus"));
+        assert_eq!(r.family, SecFamily::InputValidation, "batch-378 family");
+        for needle in [
+            "Batch 378 / Plan 393 / Research 427",
+            "565e1205",
+            "dc39a02b",
+            "Apache-2.0",
+            "Suggest-only",
+            "Detector note: none at landing",
+        ] {
+            assert!(
+                r.sec_concept.contains(needle),
+                "batch-378 concept needle {needle:?} missing"
+            );
+        }
+        // the spawn-shape predicate: both structural properties named,
+        // the demotion criterion answered (no product names)
+        for needle in ["OPEN-INPUT", "AUTONOMY GRANT", "CLOSED verb grammar"] {
+            assert!(
+                r.sec_concept.contains(needle),
+                "batch-378 predicate needle {needle:?} missing"
+            );
+        }
+        // the faces folded in-notes
+        assert!(
+            r.sec_concept.contains("SCRATCH-FAIL-CLOSED")
+                && r.sec_concept.contains("REMOTE-STATUS-STANDIN"),
+            "batch-378 faces missing"
+        );
+        // the family adjudications both directions
+        for needle in [
+            "agent-code-static-boundary-diagnostics-never-gate",
+            "egress-control-bypass-flag",
+            "credential-material-in-command-argv",
+            "shell-string-command-interpolation",
+        ] {
+            assert!(
+                r.sec_concept.contains(needle),
+                "batch-378 adjudication {needle:?} missing"
+            );
+        }
+        // the fence laws quoted at the pins
+        for needle in [
+            "A step that fails is a program that does not run",
+            "Refused rather than run without it",
+            "a stub allowed to run would exit 0 and read as success",
+            "Nothing an agent does is put to you for approval",
+            "A grant that cannot be held is refused, not widened",
+        ] {
+            assert!(
+                r.sec_concept.contains(needle),
+                "batch-378 fence-law quote {needle:?} missing"
+            );
+        }
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC.contains(&r.rule_id.as_str()),
+            "batch-378 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        // both halves parse
+        assert!(
+            syn::parse_file(&r.buggy_code).is_ok() && syn::parse_file(&r.fixed_code).is_ok(),
+            "batch-378 buggy/fixed must both parse"
         );
     }
 }
