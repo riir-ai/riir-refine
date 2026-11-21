@@ -1,6 +1,7 @@
 # Plan 394 — the colorless-rs family-seed batch (R1 sync-async twins + R2 drop-or-keep; nominal Batch 378)
 
 **Status:** STAGED — unclaimed (claim-before-edit; 48 h lease from the claim push; the push is the arbiter)
+**Claimed:** zed-m3@m3, 1795283407, expires 2026-11-23T17:50:07Z
 **Source:** veecore/colorless-rs @ `b5db6b95cf2f18efbb12fabe5709ac003fcde622` (verdict pin; re-clone + re-pin at T0 — fast-moving, zero publish history). Research 428 is the controlling verdict.
 **Batch number:** nominal **378** (376 = Plan 387 anemll, LANDED 2026-11-21; 377 = Plan 393 humanfia, staged) — RE-DERIVE at landing HEAD from the score_history tail per convention.
 
