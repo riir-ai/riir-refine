@@ -9,7 +9,25 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 382 entries across 15 categories as of Batch 373 (+2: io ×2 —
+//! 384 entries across 15 categories as of Batch 377 (+2: concurrency ×2 —
+//! `sync-async-twin-duplication` (suggestion-only, the write-once controlflow
+//! family seed: a `_sync`/`_async` name-suffix pair PLUS ≥2 duplicated
+//! control-flow statements is a hand-maintained drift surface — one body,
+//! both colors via maybe_async/async-generic/a Colored<C> trait deletes the
+//! twin; the single-statement delegation wrapper is the anti-regime;
+//! distinct-from `blocking-sleep-in-async` in-rule — call-site runtime defect
+//! vs repo-shape) + `box-dyn-future-in-hot-path-colorless` (suggestion-only:
+//! a per-call `Box::pin(..)` → `Pin<Box<dyn Future>>` on a hot poll path pays
+//! an allocation per call where the inline generic future pays zero (census
+//! 256+ vs 0 at 256 steps); keep-the-box anti-regimes bounded — recursive
+//! futures, dyn-trait object boundaries, deliberate compile-time size
+//! control) — the colorless write-once controlflow distill, veecore/colorless-rs
+//! @ b5db6b95 MIT OR Apache-2.0 (+ZLIB), clone re-created at the batch T0
+//! (HEAD == pin verified, the tip had NOT moved), quotes byte-verified at
+//! the pin; the source is pre-crates.io alpha with a RELAXED IMPLICIT
+//! DESTRUCTION model — the rules cite the PROBLEM PATTERNS and their
+//! remedies, never the library; Plan 394 / Research 428, `entries_91`.
+//! Prior: Batch 373 (+2: io ×2 —
 //! `child-exchange-concurrent-bounded-drain` (suggestion-only: a child that
 //! receives a request AND produces output needs its pipes drained concurrently
 //! with the write, each stream take(limit+1)-bounded, the child killed on the
@@ -965,13 +983,20 @@ mod entries_87;
 mod entries_88;
 mod entries_89;
 mod entries_90;
+mod entries_91;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 382 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 384 entries
+/// (Batch 377, 2026-11-22, Plan 394 / Research 428: +2 — the colorless
+/// write-once controlflow family seed, veecore/colorless-rs @ `b5db6b95`
+/// MIT OR Apache-2.0 (+ZLIB), clone re-created at the batch T0 (HEAD ==
+/// pin verified), `entries_91`: concurrency ×2 — `sync-async-twin-duplication`
+/// and `box-dyn-future-in-hot-path-colorless` — all suggestion-only and
+/// honestly `NotBenchable` with `bench_spec: None`; prior: 382 entries
 /// (Batch 375, 2026-11-20, Plan 391 / Research 425 round 2: +5 — the laya
 /// round-2, the staged unread-sweep candidates, `entries_88`,
 /// NandhaKishorM/laya @ `416dd9ed` Apache-2.0, still the remote tip:
@@ -1347,6 +1372,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_88::b375_rules());
     entries.extend(entries_89::b376_rules());
     entries.extend(entries_90::b389_rules());
+    entries.extend(entries_91::b394_rules());
     Corpus::new(entries)
 }
 
