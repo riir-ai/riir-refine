@@ -1,5 +1,5 @@
 {
-  "ane_rules": 13,
+  "ane_rules": 21,
   "clippy_lints": {
     "rules": 120
   },
@@ -16,8 +16,8 @@
   "rust_perf": {
     "benchable": 142,
     "categories": 15,
-    "notbenchable": 245,
-    "rules": 387
+    "notbenchable": 247,
+    "rules": 389
   },
   "sec": {
     "rules": 84

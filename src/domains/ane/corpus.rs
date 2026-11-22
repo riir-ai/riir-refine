@@ -25,6 +25,11 @@
 //!   the V8 hybrid prefill + Core AI port notes + the two-pinned diff
 //!   `117ded62..fe8de185` proving the `v8_prefill` docs NEW since the 09-30
 //!   verdict pin).
+//! - `ddalcu/mlx-serve` @ `96311b26` (MIT; the Batch 399 ANE wave — the
+//!   `docs/reference.md` "ANE prefill rules" + media-offload + share-table
+//!   sections and the gotchas incidents they cite; Research 432 §Queue
+//!   named this surface "the ane domain's next seed", the Batch 398 T0 pin
+//!   still the tip at this batch's T0).
 
 // Uniform `r#"..."#` raw-string style is deliberate for the data table —
 // several shapes embed double quotes in their comments (the eval_fixtures
@@ -39,6 +44,9 @@ use crate::domains::ane::{AneDomain, AneFamily, AneRule};
 const LC_ANE: &str = "liquidcodec-ane @ 177f902 (lc_ane.py)";
 const BESH: &str = "beshkenadze/nemotron-3.5-asr-streaming-0.6b-coreml-ane-stream README @ 3dabd79";
 const ANEM: &str = "Anemll/anemll-forge @ fe8de185 (v8-gpu-ane-prefill branch; re-pinned at the batch T0 past the 912925f verdict pin)";
+const MLXS: &str = "ddalcu/mlx-serve @ 96311b26 (docs/reference.md; the Batch-398 T0 pin, tip unmoved at this batch's T0)";
+const MLXSG: &str = "ddalcu/mlx-serve @ 96311b26 (docs/gotchas/engine-mlx.md)";
+const MLXSM: &str = "ddalcu/mlx-serve @ 96311b26 (docs/gotchas/models-media.md)";
 const ANNOTATION: &str = "suggestion-only, NotBenchable-by-domain (the win metric lives in the CoreML/ANE runtime; no validator on this box hosts it) — measure on the target host before adopting";
 
 #[must_use]
@@ -816,8 +824,13 @@ impl Tensor {
                  granularity — the units' overlap; A9 is the per-unit call shape under any pipeline). \
                  {ANNOTATION}. Source: {ANEM} (research/v8_prefill/PREFILL_RESEARCH.md:404-405, \
                  :179-187; the stall: COREAI_PORT_NOTES.md context-ladder section, the \
-                 DRAFT_GAP_MS fix)."
-            )),
+                 DRAFT_GAP_MS fix). FACE (Batch 399, the free-width face, count-neutral; \
+                 ddalcu/mlx-serve @ 96311b26 docs/reference.md, MIT): a runtime whose rows up \
+                 to its free width cost what a small batch does gives the batch width a FLOOR \
+                 before any cliff tuning — \"a program object runs one call at a time, and up to \
+                 64 rows cost what 8 do\": batch to the free width (64) first, THEN tune past \
+                 it against this rule's measured cliff. Compose: the free width is the cliff \
+                 search's starting bound, never a replacement for the cliff measurement.")),
         },
         // ── A10 (B) — concurrent same-function calls corrupt silently ──────
         AneRule {
@@ -1211,6 +1224,865 @@ impl Package {
                  failures with typed runtime errors (handle them at load, no gate needed); packages \
                  far inside any measured envelope with a pinned format range. {ANNOTATION}. Source: \
                  {ANEM} (FEEDBACK_ANE_MULTIFUNCTION_MEMORY.md §4)."
+            )),
+        },
+
+        // ── Batch 399 wave (Research 432 §Queue slice 2 — the mlx-serve ANE seed) ──
+        // ── M1 (B+ LEAD) — the fp16 range scale folds into the LINEAR operand ───
+        AneRule {
+            rule_id: "ane-fp16-range-scale-folds-into-linear-operand".to_string(),
+            ane_concept: "a split/seam accelerator graph is fp16 end to end, so a partial-sum \
+                          range guard must SCALE — and the fold lands on the LINEAR operand of \
+                          the fused product (multiplied back on read), never on the operand \
+                          sitting under a nonlinearity and never on the output alone"
+                .to_string(),
+            trigger: "an accelerator (ANE/CoreML-class) offload seam whose fused product \
+                      (silu(gate)*up-class) feeds a reduction whose partial sums can peak far \
+                      past the fp16 max — the seam plans its weight copies and its parity probe"
+                .to_string(),
+            buggy_code: r#"// Split MLP offload: ANE holds gate/up channels + the down conv, GPU
+// the complement; partials ADD at the seam. No range scale anywhere:
+// the graph computes fp16 throughout, and the down-conv partial sum
+// peaks at ~1.7M on real latents while fp16 maxes at 65_504 —
+// saturation to INF from block 36, then NaN; the video renders BLACK.
+// The parity probe misses it: per-block cos reads 0.99999 on probe
+// inputs that never reach the saturating amplitude.
+fn split_mlp_offload(gate: &[f16], up: &[f16], down_w: &[f16]) -> Vec<f16> {
+    let act: Vec<f16> = gate.iter().zip(up).map(|(g, u)| g * u).collect();
+    let mut out = vec![0f16; act.len()];
+    for (o, a) in out.iter_mut().zip(&act) {
+        *o = dot_f16(down_w, a); // partial peaks ~1.7M > 65_504: INF, NaN
+    }
+    debug_assert!(cos_ratio(&out, gpu_reference()).abs() > 0.99); // probe-blind
+    out
+}
+
+fn dot_f16(_w: &[f16], _a: &f16) -> f16 {
+    f16::ZERO
+}
+
+fn cos_ratio(_a: &[f16], _b: &[f16]) -> f16 {
+    f16::ONE
+}
+
+fn gpu_reference() -> Vec<f16> {
+    Vec::new()
+}"#
+                .to_string(),
+            fixed_code: r#"// FIXED: the range scale rides the LINEAR operand's weight copy
+// AT BUILD TIME — `up` is linear into silu(gate)*up, so folding 1/256
+// there scales the whole product exactly (a power of two is exact in
+// fp16: no mantissa change, only the exponent), and the read-back
+// multiplies it out. Scaling `gate` is WRONG (it sits under the
+// nonlinearity — the product stops being the scaled one); scaling the
+// down-conv output alone is WRONG (the partial already saturated).
+const OUT_PLANE_SCALE_LOG2: i32 = -8; // 2^-8 = 1/256, folded into `up`
+
+fn build_up_copy(up_host: &[f16]) -> Vec<f16> {
+    let s = f16::from(2u8).powi(OUT_PLANE_SCALE_LOG2);
+    up_host.iter().map(|u| *u * s).collect() // build-time, once per weight
+}
+
+fn split_mlp_offload_scaled(
+    gate: &[f16],
+    up_copy: &[f16], // the scaled copy
+    down_w: &[f16],
+) -> Vec<f16> {
+    let act: Vec<f16> = gate.iter().zip(up_copy).map(|(g, u)| g * u).collect();
+    let mut out = vec![0f16; act.len()];
+    for (o, a) in out.iter_mut().zip(&act) {
+        *o = dot_f16(down_w, a); // partial now peaks ~1.7M/256 < 65_504
+    }
+    let back = f16::from(2u8).powi(-OUT_PLANE_SCALE_LOG2);
+    out.iter().map(|v| *v * back).collect() // multiply back ON READ
+}
+
+/// The probe discipline: range headroom is invisible to cos on probe
+/// inputs — the parity gate runs amplitude probes PAST the real peak.
+fn parity_with_amplitude_probes(out: &[f16], reference: &[f16]) -> bool {
+    cos_ratio(out, reference) > f16::from_f32(0.99)
+        && amplitude_probe(out, reference, 16.0) // 16x the real amplitude
+}
+
+fn amplitude_probe(_out: &[f16], _reference: &[f16], _factor: f32) -> bool {
+    true
+}"#
+                .to_string(),
+            family: AneFamily::Numerics,
+            notes: Some(format!(
+                "THE MEASURED CLASS: the ANE MLP offload on H3 gave 1.24x and an all-zero video; \
+                 the program computes in fp16 and H3's fc2 partial peaks at ~1.7M (fp16 max \
+                 65_504): INF, then NaN; per-block parity read cos 0.99999 on probes that never \
+                 reached the saturating amplitude; Krea had been silently losing precision (cos \
+                 vs GPU 0.996 → 0.9993 after the fix). \"A correct-looking image is not evidence \
+                 of range headroom.\" THE LAW, verbatim: \"The ANE graph is fp16 END TO END, so a \
+                 partial-sum seam must SCALE — folded into the `up` copy at build time, \
+                 multiplied back on read — exact: per-row int8 puts it in the row scale, and `up` \
+                 is linear into silu(gate)*up. Scaling `gate`, under a nonlinearity, or fc2 alone \
+                 is wrong.\" OPERAND-PLACEMENT is the decision content: the fold's operand must be \
+                 LINEAR INTO THE PRODUCT (the fused output scales exactly); the nonlinearity-side \
+                 operand and the output alone both break the scaling identity. KINSHIPS (all \
+                 adjudicated, merge refused): \
+                 ane-fp16-norm-pow2-prescale-overflow (this corpus) owns the OVERFLOW pole on \
+                 NORM STATISTICS (x² of a residual stream) with a scale-invariant output and NO \
+                 read-back — THIS owns the partial-sum/product pole with a read-back multiply; \
+                 constant-scale-folded-into-upload-copy (kernel gpu_04, B242) folds a LoRA \
+                 alpha/rank scale into the upload copy for DISPATCH ELIMINATION (perf motive, \
+                 no range constraint) — THIS folds for RANGE (the numerics motive) and adds the \
+                 placement law the perf fold never needed; \
+                 fp16-subnormal-product-power-of-two-rescale + hi-lo-split-pow2-prescale (rust_perf, \
+                 B352) own the UNDERFLOW pole on GEMM operands — THIS the overflow pole at a \
+                 partial-sum seam; masked-in-place-field-prescale-other-operand (kernel gpu_98) \
+                 cancels a PER-PASS BIT OFFSET through the other operand — a bit-alignment axis, \
+                 not a range axis. Regime: fp16 end-to-end accelerator graphs with fused \
+                 nonlinearity products feeding reductions (ANE/CoreML-class; never needed on \
+                 f32 hosts). ANTI-REGIME: the scale factor not a power of two in fp16 (mantissa \
+                 rounds — the exactness claim dies); a graph whose fused operand is NOT linear \
+                 into the read product (place the scale on the true linear input or widen the \
+                 accumulator instead). {ANNOTATION}. Sources: {MLXS} (ANE prefill rules, the \
+                 OUT_PLANE_SCALE bullet); the incident: {MLXSM} (\"The ANE seam is fp16 end to \
+                 end, and H3's DiT rendered black\"); the probe discipline (16x amplitude probes): \
+                 {MLXSG} (\"What the ANE build taught\")."
+            )),
+        },
+
+        // ── M2 (B+) — the load bill is the runtime COPY's shape, not the shard ──
+        AneRule {
+            rule_id: "ane-load-bills-runtime-copy-shape-not-shard-bytes".to_string(),
+            ane_concept: "an accelerator load-admission gate bills the engine's RUNTIME footprint \
+                          — the transformed weight copy (a sub-byte pack's int8 copy GROWS), each \
+                          slot's KV at the top context, and the build-time transient peak — never \
+                          the on-disk shard bytes, which under-admit and swap inside a ranked \
+                          request with nothing logged"
+                .to_string(),
+            trigger: "an accelerator model-load gate (or a media-offload build gate) sizing \
+                      admission from the pack/shard bytes on disk, while the runtime will hold \
+                      a converted copy, per-slot KV at the top context, and a compile transient"
+                .to_string(),
+            buggy_code: r#"// Admission sized from the SHARD bytes on disk. Three blind spots:
+// (1) the runtime copies weights to int8 — a 4-bit pack's int8 copy
+//     GROWS (~1.8x its linears), so shard bytes UNDER-bill the copy;
+// (2) KV is held per slot AT THE TOP CONTEXT — shard bytes carry none;
+// (3) the ANE build's transient peak (f32 scratch during compile).
+// The total-RAM gate alone admitted 6.8 GB on a 32 GB box beside a
+// 14.7 GB pack and swapped ~380 MB inside the ranked request, with
+// nothing logged.
+fn admit_model(pack_shard_bytes: u64, free_ram: u64) -> bool {
+    pack_shard_bytes + KV_STAGING < free_ram // shard bytes != runtime bytes
+}
+
+const KV_STAGING: u64 = 0; // "KV? that's runtime, figure it out later""#
+                .to_string(),
+            fixed_code: r#"// FIXED: the bill names the runtime shapes. The int8 copy is
+// billed PER MODEL from the conversion plan (not the shard); KV is
+// billed at the TOP context per slot; the build peak (hidden*ffn
+// scratch in f32) is billed against what is available NOW under a
+// swap floor. A bill past the headroom refuses BY NAME.
+const SWAP_FLOOR_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+struct LoadBill {
+    int8_copy_bytes: u64,    // from the conversion plan, NOT the shard
+    kv_top_context_bytes: u64, // per slot, at the top context rung
+    build_peak_bytes: u64,   // 4 * hidden * ffn * sizeof::<f32>() class
+}
+
+fn bill(pack: &Pack, plan: &ConvertPlan, slots: usize, top_ctx_rows: usize) -> LoadBill {
+    LoadBill {
+        // a 4-bit pack's linears GROW ~1.8x when copied to int8 —
+        // the plan knows the per-linear shapes, the shard does not
+        int8_copy_bytes: plan.converted_bytes(pack),
+        kv_top_context_bytes: plan.kv_bytes_per_slot(top_ctx_rows) * slots as u64,
+        build_peak_bytes: plan.build_peak_bytes(),
+    }
+}
+
+fn gate_allows(b: &LoadBill, free_ram_now: u64, wired_floor: u64) -> Result<(), String> {
+    let available = free_ram_now.saturating_sub(wired_floor);
+    let total = b.int8_copy_bytes + b.kv_top_context_bytes;
+    if total > available {
+        return Err(format!(
+            "load refused: copy+KV {total} > available {available} (shard bytes were smaller)"
+        ));
+    }
+    if b.build_peak_bytes > available.saturating_sub(SWAP_FLOOR_BYTES) {
+        return Err("load refused: build transient would cross the swap floor".into());
+    }
+    Ok(())
+}"#
+                .to_string(),
+            family: AneFamily::Lifecycle,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim: \"The media gate bills the BUILD PEAK too \
+                 (mediaGateRefusal: total-RAM bill, then int8 copy + buildPeakBytes = 4 x hidden \
+                 x ffn x f32 against what is available now under a 4 GB SWAP_FLOOR_BYTES). The \
+                 total-RAM gate alone admitted 6.8 GB on a 32 GB M1 Pro beside a 14.7 GB pack \
+                 and swapped ~380 MB inside the ranked request with nothing logged.\" And the \
+                 load gate: \"the gate and the preflight bill the int8 copies and each slot's KV \
+                 at the top context (load_bytes), not the pack's shards.\" THE GROWTH LAW: the \
+                 runtime copy of a sub-byte pack is LARGER than the shard — \"a 4-bit pack \
+                 therefore grows (~1.8x its linears)\" and \"ANE copy stays int8, billed per \
+                 model (engineBillBytes + gateAllows, headroom 12 GB)\"; the bill implementation \
+                 reads shard headers and RE-BILLS the linears the conversion names \
+                 (w8a8.residentBytes + expectBilled, the arm asserting resident bytes against \
+                 the bill). Loading peaks at the CONVERTED size, not packed-plus-copy (the \
+                 struct loaders convert then drop the shard keys). Distinct-from (all \
+                 adjudicated): batch-load-admission-sized-from-files-refuses-past-the-hard-budget \
+                 (B274) owns admission SIZED FROM FILES (metadata, nothing read) — THIS is the \
+                 pole it must be paired with: when the runtime TRANSFORMS what it loaded, the \
+                 file-sized bill is the under-bill, and the transformed shape is the billable; \
+                 gpu-residency-summed-beyond-process-and-cgroup-accounting (B367) dedups a \
+                 measured FOOTPRINT by owner — THIS derives the bill from the conversion PLAN \
+                 before anything is resident; one-program-many-functions-accelerator-service-memory \
+                 (B358) bills PER LOADED PROGRAM at the accelerator service — THIS bills the \
+                 load-time copy + KV + transient at the host gate; \
+                 budget-room-from-constructed-artifact-not-configured-cap (B375) derives budget \
+                 room from the CONSTRUCTED artifact's true size — kin in motive, but THAT corrects \
+                 a configured cap vs built rows, THIS replaces the shard proxy with the runtime \
+                 shape class entirely. ANE-side notes: sub-byte ANE weights are a NO-GO on the \
+                 compile path (int4/sub-byte constexpr forms fail on macOS 26.x aned, bisected) \
+                 so the copy is int8 by construction and the growth is structural; probe convs \
+                 need ROWS>=32. Regime: accelerator load/build admission gates (ANE/CoreML, \
+                 NPU containers, quantized-pack loaders). ANTI-REGIME: a runtime that serves \
+                 shards in place with no conversion and no per-slot KV (the shard IS the \
+                 footprint — then file sizing is exact); budgets with an external hard floor \
+                 already carried per-shape. {ANNOTATION}. Sources: {MLXS} (the engine section's \
+                 Loading bullet + the ANE prefill rules' build-peak + int8 bullets + the w8a8 \
+                 \"The bill\" bullet); the int8 no-go: {MLXSG} (\"What the ANE build taught\")."
+            )),
+        },
+
+        // ── M3 (B+) — the compile-cache cap is volume-derived, pruned by lineage ──
+        AneRule {
+            rule_id: "ane-compile-cache-cap-volume-derived-lineage-pruned".to_string(),
+            ane_concept: "an accelerator compile cache's byte cap is DERIVED FROM THE LIVE VOLUME \
+                          (min(configured, free - reserve)) and pruned by lineage before bytes, \
+                          never evicting the in-flight build set — a fixed cap above free space \
+                          is no cap and ships SILENT PARTIAL COVERAGE, and evicting the loading \
+                          model's entries recompiles into an eviction thrash"
+                .to_string(),
+            trigger: "a compile-artifact cache (ANE programs, tuned kernels, graphs) whose byte \
+                      cap is a configured constant and whose eviction is LRU-only — on a small \
+                      disk or a share sweep, coverage decays boot over boot"
+                .to_string(),
+            buggy_code: r#"// The cap is a fixed constant and eviction is plain LRU. Two measured
+// failures: (1) a fixed cap above the disk's free space is no cap —
+// a full disk ships SILENT PARTIAL COVERAGE, advertised as ready: 19/64
+// (coverage fell 112 -> 29 programs/boot over one night; 49 GB in an
+// evening); (2) LRU evicts the model STILL LOADING: with two layouts of
+// one model over the cap, every cold store evicted the loading model's
+// entries, which recompiled and evicted more — a thrash loop.
+const CAP_GB: u64 = 40; // configured; the volume's free space unread
+
+fn prune(cache: &mut Cache) {
+    while cache.bytes() > CAP_GB * GB {
+        // plain LRU: the oldest entry, whatever it belongs to
+        let victim = cache.lru_oldest().expect("non-empty");
+        cache.remove(victim); // may be the model currently building
+    }
+}
+
+struct Cache;
+
+impl Cache {
+    fn bytes(&self) -> u64 {
+        0
+    }
+
+    fn lru_oldest(&self) -> Option<EntryId> {
+        None
+    }
+
+    fn remove(&mut self, _id: EntryId) {}
+}
+
+struct EntryId;
+const GB: u64 = 1024 * 1024 * 1024;"#
+                .to_string(),
+            fixed_code: r#"// FIXED: the cap is min(configured, volume free + cache - reserve);
+// the prune drops the group's OTHER VARIANTS first (a share sweep once
+// stacked 7.9 GB for five values), then LRU; the set being built is
+// never evicted. A free-disk floor refuses the build BY NAME, and
+// coverage converges across boots via the cache (in-session retries
+// after a full disk are futile — the compiler service holds its budget
+// for the connection's lifetime).
+const CONFIGURED_CAP_GB: u64 = 40;
+const DISK_RESERVE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const BUILD_FLOOR_BYTES: u64 = 1024 * 1024 * 1024; // refused by name below
+
+fn effective_cap(volume_free: u64, cache_bytes: u64) -> u64 {
+    // a fixed cap above free space was no cap: a full disk ships
+    // silent partial coverage (the ready: N/M under-count is the tell)
+    CONFIGURED_CAP_GB * GB
+        .min(volume_free + cache_bytes)
+        .saturating_sub(DISK_RESERVE_BYTES)
+}
+
+fn prune_lineage(cache: &mut Cache, building_group: GroupId) {
+    let cap = effective_cap(volume_free("/private/tmp"), cache.bytes());
+    // 1) same-group OTHER variants first (stale shares/shapes),
+    // 2) then LRU past the cap,
+    // 3) NEVER the in-flight build set.
+    cache.drop_other_variants_of(building_group);
+    while cache.bytes() > cap {
+        match cache.lru_oldest_not_in(building_group) {
+            Some(id) => cache.remove(id),
+            None => break, // nothing evictable: refuse the next build
+        }
+    }
+}
+
+fn volume_free(_path: &str) -> u64 {
+    0
+}
+
+struct Cache;
+
+struct GroupId;
+
+struct EntryId;
+
+const GB: u64 = 1024 * 1024 * 1024;
+
+impl Cache {
+    fn bytes(&self) -> u64 {
+        0
+    }
+
+    fn drop_other_variants_of(&mut self, _g: GroupId) {}
+
+    fn lru_oldest_not_in(&self, _g: GroupId) -> Option<EntryId> {
+        None
+    }
+
+    fn remove(&mut self, _id: EntryId) {}
+}
+
+fn preflight_build(volume_free: u64) -> Result<(), String> {
+    if volume_free < BUILD_FLOOR_BYTES {
+        return Err(format!(
+            "ANE build refused: free disk {volume_free} < floor {BUILD_FLOOR_BYTES}"
+        ));
+    }
+    Ok(())
+}"#
+                .to_string(),
+            family: AneFamily::Lifecycle,
+            notes: Some(format!(
+                "THE MEASURED CLASS: coverage fell 112 to 29 programs per boot over one night, \
+                 the server advertised ready: 19/64 and ran an A/B at 30% coverage; 49 GB of \
+                 cache in an evening; a share sweep stacked 7.9 GB for five values of one group; \
+                 with two layouts of one model over the cap, every cold store evicted entries of \
+                 the model still loading, which then recompiled and evicted more. THE LAWS, \
+                 verbatim: \"A fixed cap above free space was no cap: a full disk ships SILENT \
+                 PARTIAL COVERAGE (ready: N/M under-count is the tell)\"; \"The prune drops the \
+                 group's other variants first and never evicts the set being built\"; cap = \
+                 \"min(MLX_SERVE_ANE_CACHE_CAP_GB 40, volume free + cache - CACHE_DISK_RESERVE \
+                 8 GB)\"; \"A compile session's budget is the INTERNAL free disk at boot \
+                 (~260 MB/program); in-session retries are futile — a cold build CONVERGES \
+                 across boots\"; \"When ANE compiles fail bare, check disk first.\" STAGING NOTES \
+                 (the lifecycle ring around the cache): killed-server staging leaks 8-20 GB/boot \
+                 and is reaped by pid-marker ownership on first create (the framework owns \
+                 $TMPDIR/<identifier>); compile INPUTS are deleted after load but the COMPILED \
+                 artifacts must stay — the compiler service demand-reads them for the \
+                 connection's lifetime (deleting a live program's staging is unsafe; only \
+                 weights blob + MIL text are deletable post-load). KINSHIPS (adjudicated): \
+                 reserve-then-commit-capacity-accounting (kernel entries_58, B242-sccache) owns \
+                 RESERVE-then-commit capacity accounting at store time — THIS derives the cap \
+                 from live volume state and orders the EVICTION (lineage first, in-flight \
+                 protected); budget-room-from-constructed-artifact-not-configured-cap (B375) \
+                 corrects a configured cap against the CONSTRUCTED artifact's true size — THIS \
+                 corrects it against the EXTERNAL volume (the disk is the constraint, not the \
+                 artifact); vanished-entry-tolerant-eviction-panic-else (B343-sccache) owns the \
+                 eviction ERROR classes (peer NotFound vs panic) — THIS the eviction ORDER and \
+                 the cap derivation; derived-cache-throwaway-version-reset-recovery (B359-ajika) \
+                 owns discard-and-recompute recovery — the converge-across-boots clause is that \
+                 posture applied to compile coverage; persistent-cache-teardown-needs-second-witness \
+                 owns teardown witness, not cap derivation. Regime: compile-artifact caches \
+                 (ANE programs, Metal/CUDA tuned kernels, ML graph caches) on volumes the build \
+                 does not own. ANTI-REGIME: caches on a volume dedicated to them (the cap IS \
+                 the volume); LRU correctness proven under the real dual-layout load. \
+                 {ANNOTATION}. Sources: {MLXS} (the engine section's Compile-cache bullet + the \
+                 ANE prefill rules' disk/lineage/session bullets); the incidents: {MLXSG} \
+                 (\"The compile budget is the internal free disk, and a killed server leaks its \
+                 staging\")."
+            )),
+        },
+
+        // ── M4 (B+) — the plane row-pitch grid: compiles fine, fails EVERY eval ──
+        AneRule {
+            rule_id: "ane-plane-row-pitch-grid-refused-at-plan-time".to_string(),
+            ane_concept: "an accelerator plane/tile whose per-channel row pitch misses its byte \
+                          grid compiles silently and fails EVERY evaluation — the shape grid is \
+                          checked and the row count FLOORED at plan time with a typed refusal, \
+                          never trusted to compile-time or eval-time signals"
+                .to_string(),
+            trigger: "a split/offload planner computing tile or share row counts whose byte pitch \
+                      (rows x dtype width) must sit on the accelerator's grid — the share \
+                      parameter straddles a rounding line"
+                .to_string(),
+            buggy_code: r#"// The share parameter picks the row split directly. rows = 16 mod 32
+// (e.g. 0.35 of a 6144-row plane) COMPILES silently — then fails EVERY
+// eval ("Program Inference error"), and the per-chunk fallback recomputes
+// the whole layer on the GPU: the v2 share-0.35 collapse measured BELOW
+// the off arm, with no compile-time or load-time error anywhere.
+fn split_rows(plane_rows: usize, share: f64) -> usize {
+    let rows = (plane_rows as f64 * share) as usize;
+    rows // 2150: pitch 2150*2 = 4300 bytes — off the 64-byte grid
+}
+
+fn compile_tile(_rows: usize) -> Program {
+    Program // compiles fine
+}
+
+struct Program;"#
+                .to_string(),
+            fixed_code: r#"// FIXED: the grid is a PLAN-TIME check. The row count floors to the
+// alignment the pitch demands (rows*2 bytes on a 64-byte grid == rows
+// % 32 == 0) and BOTH emitters refuse an off-grid row count BY NAME —
+// compile-acceptance is never evidence (off-grid compiles fine, then
+// fails every eval).
+const GRID_BYTES: usize = 64;
+const DTYPE_BYTES: usize = 2;
+const ROW_MULTIPLE: usize = GRID_BYTES / DTYPE_BYTES; // 32
+
+const fn floor_rows_to_grid(rows: usize) -> usize {
+    rows - (rows % ROW_MULTIPLE)
+}
+
+fn split_rows_checked(plane_rows: usize, share: f64) -> Result<usize, String> {
+    let raw = (plane_rows as f64 * share) as usize;
+    let rows = floor_rows_to_grid(raw);
+    if rows == 0 {
+        return Err("split refused: share floors to zero rows".into());
+    }
+    if raw != rows {
+        // both emitters refuse by name — never let an off-grid shape
+        // reach the compiler
+        return Err(format!(
+            "split refused: {raw} rows off the {ROW_MULTIPLE}-row grid (pitch must sit on {GRID_BYTES}B)"
+        ));
+    }
+    Ok(rows)
+}
+
+struct Program;"#
+                .to_string(),
+            family: AneFamily::GraphShape,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim: \"fp16 plane row pitch must be equivalent 0 mod 32 \
+                 — off-grid tiles compile fine then fail EVERY eval ('Program Inference error'; \
+                 the v2 share-0.35 collapse). aneShareRows floors to 32; both C emitters refuse \
+                 by name.\" And the incident: \"share 0.35 measured below the off arm. Cause: an \
+                 fp16 plane's per-channel pitch (rows x 2 bytes) must sit on a 64-byte grid; \
+                 rows == 16 mod 32 compile silently and fail every eval, and the per-chunk \
+                 fallback recomputed on the GPU.\" THE GRID IDENTITY: rows x dtype-width on a \
+                 64-byte grid equals rows % 32 for fp16 — the byte grid and the row multiple are \
+                 ONE constraint stated in two units; keep the dtype width IN the constant so a \
+                 dtype change re-derives the grid. THE FAILURE SHAPE is the class: \
+                 compile-acceptance and eval-failure are SPLIT — the compiler accepts the shape, \
+                 every evaluation fails, and the fallback silently eats the win (the measured \
+                 arm read WORSE than off). THE LAW: plan-time floor + typed refusal at BOTH \
+                 emitters; never a compile-time or load-time trust. KINSHIPS (adjudicated): \
+                 ane-int8-matmul-shape-silent-wrong-gate (this corpus, A4) owns the silent-WRONG \
+                 shape class (quantized matmul computes near-zero/wrong with NO error — the \
+                 defense is a host-reference gate); THIS owns the silent-FAIL shape class \
+                 (compiles, then every eval errors — the defense is the plan-time grid floor); \
+                 both are \"compile-success is not serve-correctness\" but the failure signal \
+                 differs (wrong data vs loud eval error) and so does the defense (reference gate \
+                 vs grid floor); align-64-false-sharing (kernel entries_gpu_02 class) aligns \
+                 CACHE LINES on the host — a different grid (L1 line vs eval-plane pitch), a \
+                 different cost (shuffling vs every-eval failure); pow2-block-alignment (kernel) \
+                 aligns for mask arithmetic — likewise. Regime: accelerator tile/share planners \
+                 whose row counts feed compiled programs (ANE/CoreML-class; any accelerator \
+                 with an eval-side pitch grid). ANTI-REGIME: shapes already floored upstream \
+                 with a refusal at the same grid; accelerators that reject off-grid shapes at \
+                 compile time with a typed error (the compiler IS the check — then only the \
+                 floor-for-usability half applies). {ANNOTATION}. Sources: {MLXS} (ANE prefill \
+                 rules, the pitch bullet); the incident: {MLXSG} (\"The share 0.35 'tiling cliff' \
+                 was every eval failing\")."
+            )),
+        },
+
+        // ── M5 (B) — the split share is calibrated per silicon, never interpolated ──
+        AneRule {
+            rule_id: "ane-split-share-per-silicon-never-interpolated".to_string(),
+            ane_concept: "a split/offload share's optimum is PER SILICON and PER WORKLOAD — the \
+                          analytic solve is only the SEED for a once-per-model calibration whose \
+                          result STICKS as a lineage tag, an explicit override is NEVER cached as \
+                          calibrated, and a share change needs its own A/B (never interpolation)"
+                .to_string(),
+            trigger: "a host/accelerator split ratio (channel share, layer split, CPU/GPU \
+                      partition) whose value is derived from a formula or copied across chips, \
+                      and a compiled artifact is keyed by the value"
+                .to_string(),
+            buggy_code: r#"// The share is solved per request (or copied from another chip), and
+// every re-solve RECOMPILES the program set: the share straddled a
+// rounding line, so per-request re-solve recompiled + pruned the whole
+// set on every request size and on probe jitter. Measured optima:
+// M4 0.85/0.60/0.45 per model; M3 Ultra 0.35; 0.50 REGRESSES on M4 —
+// interpolation across chips is wrong by construction.
+fn share_for(request: &Request) -> f64 {
+    // re-solve per request: probe jitter moves the answer, the answer
+    // keys compiled artifacts, artifacts recompile + evict per request
+    solve_share(request.size).unwrap_or(0.45)
+}
+
+fn solve_share(_size: usize) -> Option<f64> {
+    None
+}
+
+struct Request;
+
+impl Request {
+    fn size(&self) -> usize {
+        0
+    }
+}"#
+                .to_string(),
+            fixed_code: r#"// FIXED: the analytic solve is the SEED, clamped; calibration runs
+// ONCE per model on real tiles (the GPU fed the dtype the workload
+// really sees) and the result STICKS as the compiled set's lineage tag;
+// an explicit override tags PLAIN and is never reused as calibrated;
+// unknown silicon keeps the seed; the plateau is ~6% wide, so landing
+// near is enough — never interpolate across chips.
+const SEED_CLAMP: (f64, f64) = (0.25, 0.85);
+
+enum ShareTag {
+    Calibrated(f64),  // reused by every later build of the set
+    Plain(f64),       // an explicit override or an uncalibrated seed: never reused
+}
+
+fn solve_seed(ane_tflops: f64, gpu_tflops: f64) -> f64 {
+    let s = ane_tflops / (ane_tflops + gpu_tflops); // s* = A / (A + G)
+    s.clamp(SEED_CLAMP.0, SEED_CLAMP.1)
+}
+
+fn calibrate_once(model: &Model, seed: f64, probe: &Probe) -> ShareTag {
+    if probe.explicit_override.is_some() {
+        // "--ane-split always wins" — and is never cached as calibrated
+        return ShareTag::Plain(probe.explicit_override.unwrap());
+    }
+    let share = balance_two_timings(model, seed, probe.dtype_of_stream());
+    ShareTag::Calibrated(share) // the set's `calibrated share=X` lineage tag
+}
+
+struct Model;
+
+struct Probe {
+    explicit_override: Option<f64>,
+    dtype_of_stream: fn() -> &'static str,
+}
+
+fn balance_two_timings(_m: &Model, _seed: f64, _dtype: &str) -> f64 {
+    0.45
+}"#
+                .to_string(),
+            family: AneFamily::Placement,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim: \"The ANE split's optimum is per SILICON \
+                 (ane.defaultShare; M4 channel 0.45 → 311/304, 0.50 regresses; M3 Ultra 0.45 = \
+                 nothing, 0.35 +8.5%/+13.7%). A share change needs its own A/B, never \
+                 interpolation.\" And the calibration law: \"The LM prefill share is a \
+                 per-silicon table because the seam races a live decode; a denoise step is a \
+                 batch job, and its optimum is per (chip, workload). Balance point s* = A / \
+                 (A + G) ... That solve is only the SEED ... Calibration runs ONCE per model: \
+                 every later build reuses the share of its most recently used compiled set \
+                 (ane.cachedShare, the entry's `calibrated share=X` lineage tag; an explicit \
+                 share or an uncalibrated seed tags plain `share=X` and is never reused; a \
+                 build-time cache hit re-tags the entry). A re-solve per build recompiled + \
+                 pruned the whole set on every request size and on probe jitter.\" THE FOUR \
+                 SUB-LAWS: (1) per-silicon-per-workload table, never interpolated (the same \
+                 formula lands 0.85/0.60/0.45 across models on ONE chip); (2) solve-once-then-
+                 stick (the tagged-share cache — and the artifact-keying parameter is resolved \
+                 ONCE per model, never per request: per-request re-solve thrashes the compile \
+                 cache through M3's eviction path); (3) the override/cached distinction (an \
+                 explicit share is a Plain tag — an operator's number must not masquerade as a \
+                 measured one on later builds); (4) the seed's honest fallback (unknown silicon \
+                 keeps 0.45; the plateau is ~6% wide, so landing near is enough — precision \
+                 beyond the plateau is waste). MEASUREMENT POSTURE: \"Judge a calibrated share in \
+                 a boot WITHOUT a cold compile: the requests after one run 3-5% slow for a \
+                 while.\" KINSHIPS (adjudicated): ane-split-calibration-fit-bandwidth-interference-term \
+                 (this corpus, B376) owns the WITHIN-op calibration FIT T(s) = max(A, G + u x A) \
+                 with the argmin search — THIS owns the share's LIFETIME (per-silicon table, \
+                 solve-once-stick, override-vs-cached tags, never-interpolate); \
+                 measured-round-cost-spec-controller (kernel, B398) owns a measured per-bucket \
+                 table with contamination guards — same measured-table law, different axis \
+                 (round cost per shape vs split share per silicon); \
+                 per-generation-plan-table-unmeasured-generation-fallback (kernel, B376-anemll) \
+                 owns the unmeasured-generation fallback — THIS's unknown-silicon 0.45 seed is \
+                 that law's instance; launch-heuristic-pinned-to-calibration-arch (kernel) pins \
+                 a heuristic to the calibration arch — kin in the per-arch posture. Regime: \
+                 host/accelerator split ratios keying compiled artifacts. ANTI-REGIME: shares \
+                 with no compiled artifact downstream (re-solving is cheap, no thrash); a single \
+                 chip family with the workload mix pinned. {ANNOTATION}. Sources: {MLXS} (the \
+                 ANE prefill rules' per-silicon bullet + the \"Media offload share\" section)."
+            )),
+        },
+
+        // ── M6 (B) — a full-activation adapter makes the partial split ineligible ──
+        AneRule {
+            rule_id: "ane-full-activation-adapter-declines-split".to_string(),
+            ane_concept: "an adapter (LoRA-class) summed at forward from the FULL activation makes \
+                          a partial accelerator split INELIGIBLE — the block declines to the GPU \
+                          whole until the adapter is folded into the snapshot; a fused-projection \
+                          consumer of the same full activation declines the same way"
+                .to_string(),
+            trigger: "an eligibility check for a partial accelerator offload (channels or rows \
+                      split across engines) on a block that carries a forward-time adapter, or \
+                      whose projections are fused into one weight the split would half-own"
+                .to_string(),
+            buggy_code: r#"// The split eligibility check reads only the weights being split.
+// The LoRA is applied AT FORWARD by summing over the FULL activation —
+// but the split hands the accelerator only half of it, so the adapter's
+// sum reads an activation the split never makes whole. Result: wrong
+// deltas on every split block.
+fn block_eligible(weights: &Weights, split: &Split) -> bool {
+    // only checks the split's own byte/shape budget — never asks what
+    // else READS the full activation at forward
+    split.fits(weights)
+}
+
+struct Weights;
+
+struct Split;
+
+impl Split {
+    fn fits(&self, _w: &Weights) -> bool {
+        true
+    }
+}"#
+                .to_string(),
+            fixed_code: r#"// FIXED: eligibility asks EVERY forward-time consumer of the FULL
+// activation. An adapter summed at forward declines the block (the GPU
+// runs it whole until the adapter is folded into the snapshot); a
+// fused multi-projection weight the split would half-own declines too.
+fn block_eligible(weights: &Weights, split: &Split, adapter: Option<&Adapter>) -> Eligibility {
+    if adapter.is_some() {
+        // the adapter's sum reads the FULL activation — half never
+        // leaves the accelerator program: decline until folded
+        return Eligibility::Declined("adapter summed at forward from the full activation");
+    }
+    if weights.projections_fused() && split.partitions_projection_inputs() {
+        // combined-proj archs stay GPU: the fused weight is one forward
+        // consumer the split cannot half-serve
+        return Eligibility::Declined("fused projections read the full activation");
+    }
+    if split.fits(weights) {
+        Eligibility::Eligible
+    } else {
+        Eligibility::Declined("split does not fit the block's budget")
+    }
+}
+
+enum Eligibility {
+    Eligible,
+    Declined(&'static str),
+}
+
+struct Weights;
+
+impl Weights {
+    fn projections_fused(&self) -> bool {
+        false
+    }
+}
+
+struct Split;
+
+impl Split {
+    fn fits(&self, _w: &Weights) -> bool {
+        true
+    }
+
+    fn partitions_projection_inputs(&self) -> bool {
+        false
+    }
+}
+
+struct Adapter;"#
+                .to_string(),
+            family: AneFamily::GraphShape,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim: \"A LoRA-attached block DECLINES (aneBlockEligible \
+                 in both): the adapter is summed at forward from the FULL activation, half of \
+                 which never leaves the ANE program. Turbo binds blocks.N.mlp.fc1/fc2, so H3's \
+                 fast path is GPU-only until the LoRA is folded into the int8 snapshot.\" And the \
+                 fused-consumer instance: \"combined-proj archs stay GPU\" (a fused qkv/z \
+                 projection is one forward consumer of the full input — the split half-owns it \
+                 and cannot serve it). The w8a8 layer carries the SAME law on the GPU side: \
+                 \"with an adapter attached the plain GEMM is split instead (forwardPair)\" — the \
+                 stacked/interleaved fusion that serves the adapter-free path is REPLACED by the \
+                 split form when an adapter attaches. THE LAW: eligibility is a property of the \
+                 block's FULL-ACTIVATION CONSUMERS, not of the split's own budget — enumerate \
+                 every forward-time reader of the whole activation (adapters, fused \
+                 projections, residual taps) and decline on any one the split cannot half-serve; \
+                 the remedy is not a smaller split, it is FOLDING the consumer into the snapshot \
+                 (adapter into the int8 snapshot) and re-eligibility. Clean (no corpus owner): \
+                 the nearest kin are the split/fusion families in kernel_opt, none of which \
+                 owns the adapter-vs-split eligibility axis. Regime: split-offload planners over \
+                 adapter-carrying or fused-projection blocks. ANTI-REGIME: adapters applied to \
+                 the SPLIT portion only (the split owns the whole consumer); adapters pre-folded \
+                 at load (the snapshot is whole again — re-check eligibility after the fold). \
+                 {ANNOTATION}. Sources: {MLXS} (the Media offload section's LoRA bullet + the \
+                 GDN fused-conv bullet + the w8a8 Fused-weights bullet)."
+            )),
+        },
+
+        // ── M7 (B-) — the deep-K reduction chunks in-graph past the cliff ──
+        AneRule {
+            rule_id: "ane-deep-k-reduction-chunked-in-graph".to_string(),
+            ane_concept: "a single accelerator conv/matmul whose reduction dim K runs deep pays \
+                          a measured cliff — K is CHUNKED IN-GRAPH into slabs past the cliff \
+                          width, ONE compiled tile width carries every chunk, and tails run the \
+                          host GPU"
+                .to_string(),
+            trigger: "an accelerator program whose down-projection/conv K width runs thousands \
+                      of inputs deep (a large-FFN model's down conv) compiled as one operator"
+                .to_string(),
+            buggy_code: r#"// The down conv compiles as ONE operator with its natural K:
+// a single K=17408 conv runs at 4.3 TFLOPS on the accelerator —
+// a 2.6x cliff under the engine's 11.8 TFLOPS rate.
+fn build_down_conv(k: usize) -> Program {
+    compile_conv(/* out */ 1, /* K */ k) // one deep operator
+}
+
+fn compile_conv(_out: usize, _k: usize) -> Program {
+    Program
+}
+
+struct Program;"#
+                .to_string(),
+            fixed_code: r#"// FIXED: K is chunked IN-GRAPH into slabs (partial sums carried
+// between chunks), past the measured cliff width (~4.6k inputs) —
+// ONE compiled tile width serves every chunk (a second width is a
+// second program set: disk + compile time), and the tail chunk that
+// does not fill a slab runs the host GPU instead.
+const K_CHUNK: usize = 4_600; // past the measured cliff
+
+fn build_down_conv_chunked(k: usize) -> Program {
+    // one tile width for every chunk — the graph carries the partial
+    // sums between slabs; the accumulator add is exact in fp32
+    compile_conv_chunked(/* K */ k, /* chunk */ K_CHUNK)
+}
+
+fn compile_conv_chunked(_k: usize, _chunk: usize) -> Program {
+    Program
+}
+
+struct Program;"#
+                .to_string(),
+            family: AneFamily::GraphShape,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim: \"A single deep-K ANE conv is a 2.6x cliff: K-chunk \
+                 past ~4.6k inputs in-graph; ONE compiled tile width (denseMLPMaybeAne), tails \
+                 run GPU.\" And the numbers: \"A single K=17408 down conv runs at 4.3 TFLOPS; \
+                 K-chunking into slabs restores 11.8.\" THE THREE SUB-LAWS: (1) chunk IN-GRAPH \
+                 (the graph carries partial sums between slabs — not a host-side loop over \
+                 separate programs, which re-pays the per-call gap the ane-prediction-gap rule \
+                 owns); (2) ONE tile width (every chunk compiles into the same program set — a \
+                 width per chunk class is disk + compile time for no rate); (3) tails run GPU \
+                 (the ragged last slab is the host's, never a second accelerator shape). \
+                 Regime: accelerator graph builders over large-FFN/down-projection operators \
+                 (ANE/CoreML-class; the cliff width is per-engine — re-measure, the ~4.6k is ONE \
+                 engine generation's). ANTI-REGIME: K inside the cliff width (one operator is \
+                 faster — chunking pays the accumulator adds); hosts where the in-graph partial \
+                 carry is unsupported (fall back to operator splits and measure). Clean (no \
+                 corpus owner; the deep-K axis is new — the closest kernel kin are the split-K \
+                 GEMM families, which split for OCCUPANCY on GPU, not for an engine-rate cliff \
+                 on an accelerator graph). {ANNOTATION}. Sources: {MLXS} (ANE prefill rules, \
+                 the staging/deep-K bullet); the numbers: {MLXSG} (\"What the ANE build taught\")."
+            )),
+        },
+
+        // ── M8 (B-) — I/O planes shared per shape class within a unit ──
+        AneRule {
+            rule_id: "ane-io-planes-shared-per-shape-class".to_string(),
+            ane_concept: "an accelerator unit's I/O planes are SHARED across its shape classes — \
+                          evals are serial, so one plane per class-role (not per shape) bounds the \
+                          footprint (3 surfaces replace 224) and binding memsets nothing"
+                .to_string(),
+            trigger: "an accelerator unit (program set) whose every shape class binds its own \
+                      fresh I/O surfaces, multiplying the resident footprint by the shape count"
+                .to_string(),
+            buggy_code: r#"// Every shape class binds fresh I/O planes: N shapes x input/output
+// planes each, all resident for the unit's lifetime. On a 224-shape
+// unit the plane bill alone ran ~32 GB.
+struct Unit {
+    planes: Vec<Surfaces>, // one Surfaces per shape class
+}
+
+struct Surfaces;
+
+impl Surfaces {
+    fn bind(&mut self, input: &[f16]) {
+        // fresh bind, fresh zero-fill
+        zero_fill();
+        copy(input);
+    }
+}
+
+fn zero_fill() {}
+
+fn copy(_input: &[f16]) {}"#
+                .to_string(),
+            fixed_code: r#"// FIXED: evals are SERIAL (the concurrency contract — see
+// ane-concurrent-same-function-silent-corruption for what happens when
+// that is violated), so ONE plane per class-role is shared across the
+// unit's shape classes: 3 surfaces replace 224, and the bind COPIES
+// over the previous contents (memset at bind is paid nowhere).
+struct UnitShared {
+    // role-keyed, shape-shared: input, output, scratch
+    planes: Roles<Surfaces>,
+}
+
+struct Roles<T> {
+    input: T,
+    output: T,
+    scratch: T,
+}
+
+impl UnitShared {
+    fn eval(&mut self, input: &[f16], shape: Shape) {
+        // copy OVER the plane (no memset): evals are serial, so the
+        // previous eval's contents are dead by construction
+        copy_into(&mut self.planes.input, input);
+        run_program_for(shape, &self.planes);
+    }
+}
+
+struct Surfaces;
+
+struct Shape;
+
+fn copy_into(_dst: &mut Surfaces, _src: &[f16]) {}
+
+fn run_program_for(_shape: Shape, _planes: &Roles<Surfaces>) {}"#
+                .to_string(),
+            family: AneFamily::Lifecycle,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim: \"ANE I/O planes shared per SHAPE CLASS within a \
+                 unit (evals serial; 3 surfaces replace 224; never memset at bind).\" And the \
+                 bill: \"evals are serial, so I/O planes are shared per shape class (bill 32 → \
+                 20 GB).\" THE PREMISE IS THE CONCURRENCY CONTRACT: sharing is legal BECAUSE \
+                 evals are serial — the previous eval's plane contents are dead by construction, \
+                 so the bind COPIES over them and memsets nothing (the memset is paid at every \
+                 bind under the naive shape). The concurrency rule (\"another side of the same \
+                 constraint\" (ane-concurrent-same-function-silent-corruption, A10) owns the \
+                 corruption when two evals overlap; THIS owns the footprint win the serial \
+                 contract buys. KINSHIPS (adjudicated): dual-bank-scratch-retention-per-round-class \
+                 (kernel entries_gpu_138, B379) retains PER-CLASS scratch banks and swaps the \
+                 active bank on class flip — THAT separates classes with disjoint row regimes \
+                 into banks; THIS shares ONE set of role planes ACROSS classes because the \
+                 evals serialize (the axis flips: bank-per-class vs plane-shared-across-classes; \
+                 the discriminator is whether the class transitions INTERLEAVE — they do not \
+                 here, evals are serial); scratch-bank-isolates-one-shot-operands-from-hot-cache \
+                 (kernel) isolates one-shot operands — a residency-class axis, not a shape-class \
+                 axis. Regime: accelerator program sets evaluated serially over many shape \
+                 classes. ANTI-REGIME: concurrent evaluation of the unit (the planes race — see \
+                 A10; give each in-flight eval its own surfaces); shape classes whose lifetimes \
+                 overlap (streams/slots — per-slot planes, then share across shapes within the \
+                 slot). {ANNOTATION}. Sources: {MLXS} (ANE prefill rules, the I/O planes bullet); \
+                 the bill: {MLXSG} (\"The share 0.35 'tiling cliff' was every eval failing\")."
             )),
         },
     ]

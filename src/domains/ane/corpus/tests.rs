@@ -24,13 +24,15 @@ fn seed_corpus_round_trips() {
 fn seed_corpus_has_expected_entry_count() {
     let corpus = build_ane_seed_corpus();
     // Plan 377 seed: Research 409's six candidates (R1–R6) + Batch 376: the
-    // Research 421 anemll branch-delta wave (A4/A1/A8/A9/A10/A6/A7). Hard-pinned
+    // Research 421 anemll branch-delta wave (A4/A1/A8/A9/A10/A6/A7) + Batch
+    // 399: the mlx-serve ANE seed wave (M1–M8, Research 432 §Queue slice 2).
+    // Hard-pinned
     // the flat-key way (the dist_gates precedent — the manifest key is
     // FLAT, `ane_rules: N`, so there is no nested count() read):
     // `scripts/pins_manifest.py` reconcile-checks this count against the
     // committed manifest at every posture, so a drift reds the gate —
     // never a silent count change.
-    assert_eq!(corpus.entries.len(), 13);
+    assert_eq!(corpus.entries.len(), 21);
 }
 
 #[test]
@@ -412,4 +414,211 @@ fn batch376_faces_present() {
     let notes = restructure.context_notes().expect("restructure notes");
     assert!(notes.contains("forward substitution"));
     assert!(notes.contains("scatter_nd"));
+}
+
+// ── Batch 399 arms (the mlx-serve ANE seed wave, M1–M8) — each arm asserts
+// the rule's decision content on a synthetic instance (the fixture-executed-
+// before-entry discipline at corpus scale).
+
+/// M1: the fold lands on the LINEAR operand; the nonlinearity-side operand
+/// and the output alone are wrong places; the read-back multiplies out; the
+/// probe carries amplitude probes past the real peak.
+#[test]
+fn m1_range_scale_folds_into_linear_operand() {
+    let corpus = build_ane_seed_corpus();
+    let m1 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-fp16-range-scale-folds-into-linear-operand")
+        .expect("M1 present");
+    // the scale identity: folding 1/256 into `up` scales silu(gate)*up
+    // exactly (a power of two in fp16 — exact by exponent, no mantissa
+    // change), and the read-back multiplies out. f32 stands in for the
+    // arithmetic (the IDENTITY is dtype-exact for any pow2); the fp16
+    // bound stays the literal the source names.
+    let (gate, up) = (300.0_f32, 440.0_f32); // a saturating-range product
+    let fold = 1.0_f32 / 256.0;
+    let scaled_product = gate * (up * fold); // linear in up: scales exactly
+    let unscaled = gate * up;
+    let round_trip = scaled_product * 256.0_f32;
+    assert!(
+        scaled_product < 65_504.0,
+        "the fold must clear the fp16 max"
+    );
+    assert!(
+        unscaled > 65_504.0_f32 * 2.0,
+        "the unfolded partial saturates"
+    );
+    assert_eq!(round_trip, unscaled, "fold + read-back is the identity");
+    assert!(m1.fixed_code.contains("OUT_PLANE_SCALE_LOG2"));
+    assert!(m1.fixed_code.contains("amplitude_probe"));
+    let notes = m1.context_notes().expect("M1 notes");
+    assert!(notes.contains("~1.7M"));
+    assert!(notes.contains("all-zero video"));
+    assert!(notes.contains("ane-fp16-norm-pow2-prescale-overflow"));
+    assert!(notes.contains("constant-scale-folded-into-upload-copy"));
+}
+
+/// M2: the bill names the runtime shapes — the converted copy (which GROWS
+/// from a sub-byte pack), KV at the top context, and the build peak — and
+/// refuses by name.
+#[test]
+fn m2_load_bill_names_runtime_shapes() {
+    let corpus = build_ane_seed_corpus();
+    let m2 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-load-bills-runtime-copy-shape-not-shard-bytes")
+        .expect("M2 present");
+    // the growth arithmetic: a 4-bit pack's int8 copy grows ~1.8x its linears
+    let shard_linears = 1_000_u64;
+    let int8_copy = (shard_linears as f64 * 1.8) as u64;
+    assert!(int8_copy > shard_linears, "the copy GROWS past the shard");
+    assert!(m2.fixed_code.contains("build_peak_bytes"));
+    assert!(m2.fixed_code.contains("SWAP_FLOOR_BYTES"));
+    assert!(m2.fixed_code.contains("refused"));
+    let notes = m2.context_notes().expect("M2 notes");
+    assert!(notes.contains("6.8 GB"));
+    assert!(notes.contains("~1.8x"));
+    assert!(notes.contains("batch-load-admission-sized-from-files-refuses-past-the-hard-budget"));
+}
+
+/// M3: the cap is min(configured, volume-derived); the prune is
+/// lineage-then-bytes with the in-flight set protected; the disk floor
+/// refuses by name.
+#[test]
+fn m3_cache_cap_volume_derived_in_flight_protected() {
+    let corpus = build_ane_seed_corpus();
+    let m3 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-compile-cache-cap-volume-derived-lineage-pruned")
+        .expect("M3 present");
+    // the cap arithmetic: a fixed 40 GB cap on a volume with 10 GB free
+    // is no cap — the effective cap must shrink to the volume
+    let configured = 40_u64 * 1024 * 1024 * 1024;
+    let volume_free = 10_u64 * 1024 * 1024 * 1024;
+    let reserve = 8_u64 * 1024 * 1024 * 1024;
+    let effective = configured.min(volume_free).saturating_sub(reserve);
+    assert_eq!(effective, 2 * 1024 * 1024 * 1024, "the volume binds");
+    assert!(m3.fixed_code.contains("drop_other_variants_of"));
+    assert!(m3.fixed_code.contains("lru_oldest_not_in"));
+    assert!(m3.fixed_code.contains("BUILD_FLOOR_BYTES"));
+    let notes = m3.context_notes().expect("M3 notes");
+    assert!(notes.contains("112 to 29") || notes.contains("112 \u{2192} 29"));
+    assert!(notes.contains("ready: 19/64"));
+    assert!(notes.contains("reserve-then-commit-capacity-accounting"));
+}
+
+/// M4: the pitch grid identity (rows x 2 bytes on a 64-byte grid == rows
+/// % 32); the off-grid shape is refused at plan time by name.
+#[test]
+fn m4_pitch_grid_floored_and_refused_at_plan_time() {
+    let corpus = build_ane_seed_corpus();
+    let m4 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-plane-row-pitch-grid-refused-at-plan-time")
+        .expect("M4 present");
+    // the grid identity: 64-byte grid / 2-byte dtype == 32-row multiple;
+    // 2150 rows (the 0.35-of-6144 class) floors to 2144? No — 2150 is
+    // off-grid (2150 % 32 = 6) and must be REFUSED, not silently kept.
+    let rows = 2_150_usize;
+    assert_eq!(rows % 32, 6, "the off-grid shape the compiler accepted");
+    assert!(m4.fixed_code.contains("ROW_MULTIPLE"));
+    assert!(m4.fixed_code.contains("split_rows_checked"));
+    let notes = m4.context_notes().expect("M4 notes");
+    assert!(notes.contains("fail EVERY eval"));
+    assert!(notes.contains("ane-int8-matmul-shape-silent-wrong-gate"));
+}
+
+/// M5: the seed clamp bounds the solve; the calibrated tag is distinct from
+/// the plain (override) tag; the plateau is wide enough that near lands.
+#[test]
+fn m5_share_solved_once_sticks_never_interpolated() {
+    let corpus = build_ane_seed_corpus();
+    let m5 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-split-share-per-silicon-never-interpolated")
+        .expect("M5 present");
+    // the balance seed: s* = A / (A + G); A = 11.8, G = 4.0 → ~0.75
+    let (a, g) = (11.8_f64, 4.0_f64);
+    let s = a / (a + g);
+    assert!((0.25..=0.85).contains(&s), "the solve lands in the clamp");
+    // the plateau: within ~6% of the optimum, the timing difference is noise
+    let optimum = 0.85_f64;
+    assert!((optimum - 0.80).abs() < 0.06, "landing near is enough");
+    assert!(m5.fixed_code.contains("ShareTag::Calibrated"));
+    assert!(m5.fixed_code.contains("ShareTag::Plain"));
+    let notes = m5.context_notes().expect("M5 notes");
+    assert!(notes.contains("never interpolation"));
+    assert!(notes.contains("ane-split-calibration-fit-bandwidth-interference-term"));
+}
+
+/// M6: an adapter summed at forward from the FULL activation declines the
+/// split; fused projections decline the same way.
+#[test]
+fn m6_full_activation_adapter_declines_split() {
+    let corpus = build_ane_seed_corpus();
+    let m6 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-full-activation-adapter-declines-split")
+        .expect("M6 present");
+    // the arithmetic premise: the split makes only part of the activation
+    // resident on the accelerator — an adapter summing the FULL activation
+    // reads a vector the split never makes whole
+    let total = 512_usize;
+    let on_accelerator = 512 * 45 / 100; // the 0.45 share
+    assert!(on_accelerator < total, "half never leaves the program");
+    assert!(m6.fixed_code.contains("Declined"));
+    assert!(m6.fixed_code.contains("projections_fused"));
+    let notes = m6.context_notes().expect("M6 notes");
+    assert!(notes.contains("aneBlockEligible"));
+    assert!(notes.contains("forwardPair"));
+}
+
+/// M7: the deep-K cliff arithmetic — chunking restores the engine rate;
+/// one tile width; tails are the GPU's.
+#[test]
+fn m7_deep_k_chunked_in_graph() {
+    let corpus = build_ane_seed_corpus();
+    let m7 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-deep-k-reduction-chunked-in-graph")
+        .expect("M7 present");
+    // the measured cliff: one K=17408 operator at 4.3 TFLOPS vs chunked 11.8
+    let (deep_rate, chunked_rate) = (4.3_f64, 11.8_f64);
+    assert!(chunked_rate / deep_rate > 2.5, "the cliff is ~2.6x");
+    assert!(17408 / 4600 >= 3, "the K chunks into slabs");
+    assert!(m7.fixed_code.contains("K_CHUNK"));
+    assert!(m7.fixed_code.contains("compile_conv_chunked"));
+    let notes = m7.context_notes().expect("M7 notes");
+    assert!(notes.contains("4.3 TFLOPS"));
+    assert!(notes.contains("~4.6k"));
+}
+
+/// M8: role planes shared across shape classes because evals are serial;
+/// the bind copies over (no memset).
+#[test]
+fn m8_io_planes_shared_per_shape_class() {
+    let corpus = build_ane_seed_corpus();
+    let m8 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-io-planes-shared-per-shape-class")
+        .expect("M8 present");
+    // the footprint arithmetic: 3 role planes replace one-per-shape
+    let shapes = 224_usize;
+    let per_shape_planes = 2_usize;
+    let naive = shapes * per_shape_planes;
+    assert_eq!(naive, 448, "the naive bill the sharing collapses");
+    assert!(m8.fixed_code.contains("Roles<"));
+    assert!(m8.fixed_code.contains("copy_into"));
+    let notes = m8.context_notes().expect("M8 notes");
+    assert!(notes.contains("never memset at bind"));
+    assert!(notes.contains("ane-concurrent-same-function-silent-corruption"));
+    assert!(notes.contains("dual-bank-scratch-retention-per-round-class"));
 }
