@@ -1,6 +1,7 @@
 # 398 — mlx-serve transcription batch (kernel_opt + rust_perf + sec)
 
-**Status:** STAGED — unclaimed (claim per the lease law; the push is the arbiter). Research 432 is the controlling verdict. **RETURN VISIT: Research 274 / Batch 242 landed 31 rules @ `1015f78` (2026-10-14) — this batch is the DELTA batch; every candidate below survived the B242 dedup re-run (coordinator-verified 2026-11-22).**
+**Status:** CLAIMED (zed-f50f3819@m3) — T0 in flight 2026-11-23. Research 432 is the controlling verdict. **RETURN VISIT: Research 274 / Batch 242 landed 31 rules @ `1015f78` (2026-10-14) — this batch is the DELTA batch; every candidate below survived the B242 dedup re-run (coordinator-verified 2026-11-22).**
+**Claimed:** zed-f50f3819@m3, 1796463200, expires 2026-11-25T18:00:00+00:00
 
 ## Source
 
