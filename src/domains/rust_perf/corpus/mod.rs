@@ -9,7 +9,16 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 386 entries across 15 categories as of Batch 378 (+2: measurement-honesty ×2 —
+//! 387 entries across 15 categories as of Batch 398 (+1: the mlx-serve delta's `rust_perf` half —
+//! `prefix-commit-priced-worthiness-typed-outcome` (caching, suggestion-only
+//! NotBenchable-by-model: the hot prefix cache's COMMIT side prices worthiness
+//! ITSELF — `MIN_CANCELLED_COMMIT_TOKENS` 256, chat-template prologues are
+//! "reusable" only in a worthless sense — and the commit outcome is TYPED
+//! (`CommitStatus`: ok / disk-only / kept-resident / declined — a budget decline that
+//! exits via plain return logged "committed N/M" while a 122k agent session
+//! cold-prefilled ~95k tokens per retry; the loud-verdict doctrine's second
+//! instance); ddalcu/mlx-serve @ 96311b26 MIT, Plan 398 / Research 432,
+//! `entries_93`). Prior: Batch 378 (+2: measurement-honesty ×2 —
 //! `tuning-source-contamination-filter-vs-scorer-reference` (suggestion-only:
 //! a tuning/optimization loop filters its source against the scorer's
 //! reference BEFORE the loop reads it — digest-index + normalized-text +
@@ -1006,6 +1015,7 @@ mod entries_89;
 mod entries_90;
 mod entries_91;
 mod entries_92;
+mod entries_93;
 
 #[cfg(test)]
 mod tests;
@@ -1403,6 +1413,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_90::b389_rules());
     entries.extend(entries_91::b394_rules());
     entries.extend(entries_92::b393_rules());
+    entries.extend(entries_93::b398_rules());
     Corpus::new(entries)
 }
 

@@ -1963,6 +1963,7 @@ mod entries_gpu_158;
 mod entries_gpu_159;
 mod entries_gpu_16;
 mod entries_gpu_160;
+mod entries_gpu_161;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2185,6 +2186,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_158::entries());
     entries.extend(entries_gpu_159::entries());
     entries.extend(entries_gpu_160::entries());
+    entries.extend(entries_gpu_161::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2830,6 +2832,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-group-epilogue-deferred-between-mma-bursts",
             "minifloat-normal-code-shift-bias-diff-decode",
             "f16-upcast-at-foreign-graph-translation",
+            // Batch 398 +1 (Plan 398 / Research 432, ddalcu/mlx-serve @
+            // 96311b26 MIT): the accidental graph-wide dtype promotion
+            // from a constant's/loader's dtype (two incidents; the
+            // oracle passes — only the width differs).
+            "constant-materializes-in-activation-dtype",
             "row-count-invariant-bits-split-keyed-on-weight-shape",
             "strided-interleave-split-ordered-merge-serial-reference",
             "gqa-head-position-row-packing-keys-read-once",
@@ -3357,6 +3364,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shader-shape-cutover-keys-on-resource-block-ratio",
             "same-input-folded-transform-memo-per-build",
             "speculation-scheduler-break-even-flip",
+            // Batch 398 +1 (Plan 398 / Research 432, ddalcu/mlx-serve @
+            // 96311b26 MIT): the speculation gate's DENOMINATOR law.
+            "specdec-gate-metric-normalized-by-drafts-per-round",
+            "specdec-gate-threshold-arch-normalized",
+            "specdec-gate-sticky-decline-tail-match-re-enable",
+            // Batch 398 +1 (same batch, the LEAD): the IOGPU
+            // interactivity-preemption dispatch budget.
+            "io-gpu-preemption-dispatch-budget",
+            // Batch 398 +1 (same batch): the verify-width routing laws
+            // (named scalars / supported-width list / fp32-dequant truth).
+            "verify-width-named-scalars-supported-width-list",
             "new-syntax-family-enumerates-every-keyed-surface",
             "one-time-dense-repack-keyed-sync-publish",
             "sustained-load-drift-interleave-protocol",
@@ -3943,6 +3961,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "issue-latency-priced-mad-cost-model",
             "autotune-fidelity-synthetic-carries-producer-params",
             "per-generation-plan-table-unmeasured-generation-fallback",
+            // Batch 398 +1 (Plan 398 / Research 432, ddalcu/mlx-serve @
+            // 96311b26 MIT): the measured round-cost speculation
+            // controller — the per-(width × KV bucket) measured table +
+            // EV plan + contamination guards; rides K beside its B242
+            // table-family sibling.
+            "measured-round-cost-spec-controller",
             // Batch 265 +1 (vllm #61497): the per-launch autotuner-key
             // rebuild memoized away (launch_autotuned, the SSD prefill
             // host-overhead lead).
@@ -4275,6 +4299,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // both-operand pair form + gpu_102's pow2-prescale + B242's
             // other-operand prescale.
             "fp32-input-hi-lo-two-fp16-mma-columns",
+            // Batch 398 +1 (Plan 398 / Research 432, ddalcu/mlx-serve @
+            // 96311b26 MIT): the MXU/NAX exactness-scoping law
+            // (tile-scoped so the op stays exact, error matched to
+            // stock, bar relative).
+            "mxu-op-exactness-scoping",
         ],
     ),
     // O: IR strength reduction (10 rules; Batch 268 +1: constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers (the splash wave — a local array indexed under a RUNTIME loop bound leaves registers; the compile-time capacity bound under #pragma unroll with a zero guard keeps every word in a register, same output); Batch 201 +1: the single-pass continuation scan (the two-phase prompt-lookup scan replaced by the one endpoint pass); Batch 195 +2: the io32

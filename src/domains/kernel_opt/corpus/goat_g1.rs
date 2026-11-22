@@ -89,7 +89,7 @@ use crate::domains::kernel_opt::KernelRule;
 #[must_use]
 pub fn expected_corpus_files() -> Vec<String> {
     let mut names = vec!["entries_popcorn".to_string()];
-    for n in 1..=160 {
+    for n in 1..=161 {
         if n < 10 {
             names.push(format!("entries_gpu_{n:02}"));
         } else {
@@ -243,7 +243,7 @@ pub fn extracted_census() -> G1Census {
 /// `corpus` module precisely so the `pub(super)` per-file builders are
 /// reachable — this is the attribution the whole-corpus `build_corpus()` path
 /// cannot provide.
-// plan 329 integration: the batch! macro expansion reads as 160 body
+// plan 329 integration: the batch! macro expansion reads as 161 body
 // lines but is one declarative list — the allow is the fix, not a split.
 #[allow(clippy::too_many_lines)]
 fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
@@ -379,6 +379,7 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
         entries_gpu_158,
         entries_gpu_159,
         entries_gpu_160,
+        entries_gpu_161,
         entries_gpu_37,
         entries_gpu_36,
         entries_gpu_01,
@@ -1304,7 +1305,7 @@ mod tests {
     #[test]
     fn expected_corpus_files_cover_all_batches() {
         let names = expected_corpus_files();
-        assert_eq!(names.len(), 161); // popcorn + gpu_01..160 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues; B380 REPAIRED the B379 miss — entries_gpu_159 landed without arming the census (both lists blind together, the comparison stayed green) and 160 joined here, the B354/B357 class, B362 precedent)
+        assert_eq!(names.len(), 162); // popcorn + gpu_01..161 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues; B380 REPAIRED the B379 miss — entries_gpu_159 landed without arming the census (both lists blind together, the comparison stayed green) and 160 joined here, the B354/B357 class, B362 precedent; B398 continues — 161 joined at landing)
         assert_eq!(names[0], "entries_popcorn");
         assert!(names.contains(&"entries_gpu_09".to_string()));
         assert!(names.contains(&"entries_gpu_10".to_string()));

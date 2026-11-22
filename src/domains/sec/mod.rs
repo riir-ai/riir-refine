@@ -91,6 +91,20 @@ pub enum SecFamily {
     /// state other threads, C libraries, or the kernel touch without any
     /// application lock. Added APPEND-ONLY.
     ProcessState,
+    /// Discovery-fed egress trust (Batch 398 — the mlx-serve distill,
+    /// Research 432): zero-config discovery (mDNS/Bonjour advertisement
+    /// browse, Docker label walks, orchestrator endpoint watches) feeding
+    /// an EGRESS/proxy target selection without an ownership or pairing
+    /// proof — the advertisement plants a destination the client then
+    /// streams request bodies to. Distinct from `InputValidation`
+    /// (untrusted sizes/paths into sinks; here the untrusted datum is a
+    /// DISCOVERY ADVERTISEMENT selecting a NETWORK destination for the
+    /// user's own payloads) and from the cors/browser-reachable family
+    /// (inbound browser-origin gates on a LISTENER; this is the OUTBOUND
+    /// peer trust). The fix vocabulary: pairing PSK echoed on the
+    /// discovered surface, first-use consent, peer allowlist, ownership
+    /// proof. Added APPEND-ONLY.
+    DiscoveryEgress,
 }
 
 impl SecFamily {
@@ -108,6 +122,7 @@ impl SecFamily {
             Self::SensitiveData => "sensitive-data",
             Self::TrustedImpl => "trusted-impl",
             Self::ProcessState => "process-state",
+            Self::DiscoveryEgress => "discovery-egress",
         }
     }
 }
