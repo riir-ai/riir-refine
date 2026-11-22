@@ -1962,6 +1962,7 @@ mod entries_gpu_157;
 mod entries_gpu_158;
 mod entries_gpu_159;
 mod entries_gpu_16;
+mod entries_gpu_160;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2183,6 +2184,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_157::entries());
     entries.extend(entries_gpu_158::entries());
     entries.extend(entries_gpu_159::entries());
+    entries.extend(entries_gpu_160::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -3738,11 +3740,18 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lazy-rollback-journaled-window-replay-replaces-eager-state-snapshots",
         ],
     ),
-    // H: MoE dispatch + backward pass (43 rules; Batch 335 +1: counting-sort-route-permute-one-kernel (the mxfp4-int8-m5 3d060c6 one-kernel route permute — histogram + prefix sums + fetch-add slots emit (pos, tok, esorted, off, tstart); 'One kernel instead of argsort / argsort / take / segments'; rows independent so within-segment order changes no result, Plan 344 / Research 373);  Batch 297 +1: moe-tokens-per-expert-block-m-cap (the vLLM #60504 routing-arithmetic tile ladder, Plan 303 / Research 338); Batch 281 +1: sentinel-id-skip-shrinks-work-set-zero-unowned-rows (the #26631 sentinel-skip op contract — skip-and-zero, shrunk-set re-bound, uniform exit, the NOT_SUPPORTED adoption boundary, Plan 285 / Research 318); Batch 268 +2: moe-lone-tile-register-gemv-uniform-tile-kind (the splash wave — an expert's lone ≤2-row tile runs a lane-per-column register GEMV, all of one expert's tiles one tile kind, per-row independence the precondition) + moe-unverified-rows-route-zero-experts-dense-shape (the splash wave — rows past a lane's verify count route ZERO experts while every kernel keeps its dense shape, rows priced by expected committed tokens per cost); Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
+    // H: MoE dispatch + backward pass (44 rules; Batch 380 +1: expert-miss-computes-on-cpu-overlap-gpu-cache (the maya-inkling-mini 8-GB tier, Plan 397 / Research 429 §Delta — the per-miss lane dispatcher prices the CPU pool lane against the PCIe copy lane by WHOEVER IS FREE FIRST ('a miss: the CPU's or the link's, whichever is free first', ik2_main.cu:3498-3499 at e819852f) with both prices measured AS THEY RUN (online EMAs, :3664), the computed expert's blocks riding the copy stream later ('lazy', :309-310), still-arriving slots diverted to the CPU instead of the GPU waiting (:3492-3493), the copy admission bounded per call and in flight so a narrow link is never queued up (:3501-3502), a compute-only miss taking NO cache slot (:3509); measured 40-43 tok/s vs llama.cpp 12.5 on their 8-GB 5070 Laptop — provenance, never a bar); Batch 335 +1: counting-sort-route-permute-one-kernel (the mxfp4-int8-m5 3d060c6 one-kernel route permute — histogram + prefix sums + fetch-add slots emit (pos, tok, esorted, off, tstart); 'One kernel instead of argsort / argsort / take / segments'; rows independent so within-segment order changes no result, Plan 344 / Research 373);  Batch 297 +1: moe-tokens-per-expert-block-m-cap (the vLLM #60504 routing-arithmetic tile ladder, Plan 303 / Research 338); Batch 281 +1: sentinel-id-skip-shrinks-work-set-zero-unowned-rows (the #26631 sentinel-skip op contract — skip-and-zero, shrunk-set re-bound, uniform exit, the NOT_SUPPORTED adoption boundary, Plan 285 / Research 318); Batch 268 +2: moe-lone-tile-register-gemv-uniform-tile-kind (the splash wave — an expert's lone ≤2-row tile runs a lane-per-column register GEMV, all of one expert's tiles one tile kind, per-row independence the precondition) + moe-unverified-rows-route-zero-experts-dense-shape (the splash wave — rows past a lane's verify count route ZERO experts while every kernel keeps its dense shape, rows priced by expected committed tokens per cost); Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
         &[
+            // Batch 380 +1 (Plan 397 / Research 429 §Delta, the maya-inkling-mini
+            // 8-GB tier): the expert-miss lane dispatcher — the CPU pool lane
+            // vs the PCIe copy lane priced by free-first comparison of the
+            // lanes' cumulative busy-until times, both prices online EMAs;
+            // the computed blocks follow lazily under in-flight + per-call
+            // bounds; a compute-only miss evicts nothing.
+            "expert-miss-computes-on-cpu-overlap-gpu-cache",
             // Batch 354 +1 (Plan 364 / Research 398): the sgl-muse-mega
             // expert-weight L2 prefetch — one otherwise-idle warp per CTA
             // reads the PREVIOUS step's routing ids (the binding's last
