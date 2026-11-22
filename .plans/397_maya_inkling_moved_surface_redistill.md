@@ -1,7 +1,7 @@
 # Plan 397 — maya-inkling-mini moved-surface re-distill (Batch NNN, 4090 lane)
 
 **Status:** STAGED unclaimed 2026-11-22 (verdict YES B−, Research 429 §Delta; nominal Batch number re-derives at landing; 4090-lane execution posture — CUDA fixtures/cells run on the 4090, authoring/gates per the box-state law).
-**Claimed:** zed-m3-maya-redistill@m3, epoch 1795355438, expires 2026-11-24T13:50:38Z
+**Claimed:** zed-m3-maya-redistill@m3, 1795355438, expires 2026-11-24T13:50:38Z
 
 Source: alesha-pro/maya-inkling-mini, delta pin `be849daa` (B379's pin) → `e819852f822479af783638a467bfdfe2ed6882ec` (tip 2026-11-22). MIT (code); weights Apache-2.0 (never mined). Provenance: Project Maya v1.1.70 (mw00) ← Strata (Niko1221); most offered upstream in mw00/project-maya#1095. Delta content: RTX-3090 resident run (128 tok/s plain / 150–210 with the official drafter / 2,742 prefill / 344K FP8-KV context vs llama.cpp 57), specdec with the official DSpark drafter as default, dual-GPU EP + CUDA 13 + Windows, the 8-GB tier, the VRAM resident guard.
 
