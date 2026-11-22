@@ -1,6 +1,6 @@
 # Batch 400 — the mvm (Magni VM) distill → kernel_opt corpus
 
-**Status:** LANDED — `feat: batch 400` commit + push (T0–T8 done; the lease folds in the landing commit)
+**Status:** LANDED — `feat: batch 400` `7276a68945e1` + push (T0–T8 done; lease closed); the maintained binary REBUILT post-landing (build: == HEAD, re-linked at ~/.cargo/bin/cargo-refine; the /opt/homebrew 0.5.0 Cellar shadow disclosed — brew-tap lane, not touched)
 **Claimed:** zed-m3-mvm-b400, 1795381511, expires 2026-11-25T21:05Z
 
 Executing the staged mvm distill verdict (snapshot row 2026-11-21, session
@@ -63,10 +63,12 @@ ml-explore/mlx tree stay unclaimed after it.
       record: the landing, the honest drops, the riders, the gate
       receipts, the dedup evidence, the license posture).
 - [x] T7 — teardown: `.raw/mvm` REMOVED at close.
-- [x] T8 — landing: commit `feat: batch 400: ...` + push; snapshot LANDED
+- [x] T8 — landing: commit `feat: batch 400: ...` + push (`7276a68945e1`); snapshot LANDED
       row in the same commit; `dual_allocation_gate` + `numbering_gate`
-      clean; binary rebuild NOT owed (corpus-only delta — no rulewright
-      source touched, disclosed).
+      clean; binary rebuilt post-landing at the release set (build: ==
+      HEAD, re-linked) — the B356/B399 follow-through precedent (kernel_opt
+      + rust_perf are both in the shipped set); the /opt/homebrew Cellar
+      0.5.0 shadow disclosed (PATH-order leaves it live on bare `cargo-refine`).
 
 Standing gates this batch does NOT owe (pre-registered): score-bench /
 freeze-table regeneration (zero clippy_lints delta); outbound-PR lane (license
