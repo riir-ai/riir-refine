@@ -9,7 +9,12 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 387 entries across 15 categories as of Batch 398 (+1: the mlx-serve delta's `rust_perf` half —
+//! 389 entries across 15 categories as of Batch 399 (+2: the mlx-serve ANE seed's `rust_perf` half,
+//! `entries_94`; Batch 400 count-NEUTRAL — +1 FACE note-only on `entries_74`
+//! `writeclass-share-partition-inflight-writes`: the mvm admission-FIFO
+//! measured instance, a 47k-task record 100-300 ms head-of-line at 1.9 µs/task,
+//! host per-class budgets shed 38% of serve — Plan 400 / Research 435,
+//! Bobliuuu/mvm @ 60c42deb Magni-license transcription-only); prior Batch 398 (+1: the mlx-serve delta's `rust_perf` half —
 //! `prefix-commit-priced-worthiness-typed-outcome` (caching, suggestion-only
 //! NotBenchable-by-model: the hot prefix cache's COMMIT side prices worthiness
 //! ITSELF — `MIN_CANCELLED_COMMIT_TOKENS` 256, chat-template prologues are
