@@ -1,0 +1,225 @@
+{
+  "format_version": 1,
+  "digest": "de09306af862b4e400765b0c855c22c66ea397faeccc7c1c3d7ff8821495cc20",
+  "composed_at_head": "972a59596f9b",
+  "composition_session": "zed-m3-i242-t1prep",
+  "sample_anchor": {
+    "freeze": "v1 (amo-idle-i242-preflight 2026-11-21)",
+    "digest": "a5ad3f9fba066fa15e5867779a1a0c09e154726ab922afca22d679212a5506f4",
+    "selection_stability_note": "re-derivation at HEAD 972a59596f9b reproduces the identical 30 ids (clippy 120 / rust_perf 389 / kernel_opt 1112 unique ids; hash top-10 unchanged in all three domains) — the v1 freeze stands; no re-freeze needed"
+  },
+  "composition_law": "prose-only <=200-word descriptions of trigger + fix shape + regime/anti-regime decision content, composed from the corpus entries at composed_at_head; no code blocks; no rule id inside the description text; no verbatim entry sentences >8 words",
+  "verification": "mechanical (word count <=200 recounted, anchor exists, id near anchor, id-leak, distinctive-token presence) + semantic spot-checks (measured numbers grepped at their entries: eager-pointer 1903.70x/5414.62x/21353.90x, bufread 3.63x/3.00x/2.77x + 10892, byte-flag 2.62x/2.94x/2.10x, work-removed 15x/1.33x, smallvec <=8, retain bench 1K..1M, regex bench 10/100/1K, clippy pairs read at anchors)",
+  "rows": [
+    {
+      "rule_id": "doc_lazy_continuation",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:765",
+      "words": 164,
+      "description": "Trigger: inside a doc comment, a line forming a blockquote begins with the greater-than marker, and the next doc-comment line continues the paragraph without its own marker. The unmarked line is read as a continuation of the quote even though the author likely meant plain body text (or the reverse), and the documentation linter flags this ambiguity. The lines sit above a function declaration; no executable code participates. Fix shape: give the continuation line the same leading marker (greater-than plus a space) so every line of the quote is marked explicitly. The remedy edits comment text only — the code under it stays byte-identical, so compilation cannot be affected. The invariant is the document's content: identical words in identical order, still one quoted paragraph; only the quoting becomes explicit, removing the ambiguity the linter reported. A fresh engineer spots the shape by scanning doc comments for a marked quote line immediately followed by an unmarked prose line rather than a blank line or code.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "needless_bool",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:277",
+      "words": 159,
+      "description": "Trigger: a boolean-typed expression built as an if/else where one branch yields the literal true and the other yields the literal false. The condition guards which literal is produced, so the entire conditional evaluates to exactly the condition itself — or to its negation when the branches are ordered the opposite way. The surrounding function returns bool, making the redundancy visible in the return position; the same shape can appear wherever a bool value is produced. Fix shape: delete the conditional and put the condition expression (or its negation, matching the original branch order) in its place. The invariant preserved is the truth table: for every possible input the produced boolean is unchanged, since choosing between two constants via a condition is definitionally the condition. Nothing else in the function changes; control flow around the expression, side conditions, and types are untouched. A fresh engineer recognizes the shape by looking for a conditional whose both arms are boolean constants.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "filter_next",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:350",
+      "words": 169,
+      "description": "Trigger: an iterator chain where a filter call carrying a predicate is immediately followed by a next call that takes the first yielded item. The pattern searches a sequence for its first element satisfying the predicate, but it expresses the search as two separate adapter steps; the intermediate filtered iterator exists only to be drained once. It typically appears in a function returning an Option of the element type. Fix shape: collapse the two steps into the single find adapter, passing it the same predicate closure. The invariant preserved is the result: find consumes the iterator in the same order and returns the first matching element wrapped in Some, or None when nothing matches — exactly what the two-step spelling produced. Element type, borrow mode (owned or by reference, including closure double-derefs for reference items), and laziness all stay as they were; no extra pass over the data occurs. A fresh engineer recognizes it by spotting filter directly adjacent to next on the same chain with nothing in between.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "unnecessary_lazy_evaluations",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:313",
+      "words": 161,
+      "description": "Trigger: a terminal method on an Option or Result that takes a closure to compute the fallback — the lazily-evaluating variant such as unwrap_or_else (likewise or_else, map_or_else, ok_or_else) — where the closure argument computes something trivially cheap: a constant literal, a field copy, or any expression with no side effects and no reference to captured local variables. Because evaluating the fallback eagerly costs essentially nothing and cannot fail or observe state, the deferred-closure machinery buys nothing. Fix shape: switch to the eager sibling method that takes the value directly — unwrap_or_else with a constant becomes unwrap_or with that constant, and the same substitution applies across the or_else-family pairs. The invariant preserved is the value semantics: on the Some/Ok path the inner value is returned exactly as before, and on the empty path the same fallback value is produced; the closure body is moved out verbatim. A fresh engineer spots a fallback closure that ignores its (empty) argument list and captures nothing.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "cast_lossless",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:746",
+      "words": 176,
+      "description": "Trigger: a primitive numeric value converted with a cast-as expression to a type that can represent every value of the source — for example widening a small unsigned integer to a much larger unsigned or signed type, where the standard library provides a From implementation for exactly that pair. The target type is known from an explicit annotation, typically a function's return type or an annotated local binding. Casting is the unchecked, lossy-capable spelling even though nothing can actually be lost, which hides the intent and bypasses the compiler's guarantee. Fix shape: replace the cast with a From-based conversion, calling the target type's from constructor on the operand — e.g. a byte widened to a 64-bit unsigned becomes a call to the 64-bit type's from with the operand as argument. The invariant preserved is the numeric value: both spellings produce the identical number, and adopting From lets the compiler itself prove losslessness, refusing to compile if the pair ever stops being representable. A fresh engineer recognizes a cast whose source type fits entirely inside the target.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "needless_range_loop",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:182",
+      "words": 176,
+      "description": "Trigger: a for loop that iterates a plain numeric range from zero up to a collection's length while the loop body uses the loop variable solely as an index into that same collection — reading (or writing) the element at the indexed position and doing nothing else with the index. The index adds no information beyond which element is being visited, so the loop is a hand-rolled iteration over the collection itself. Fix shape: iterate the collection directly — bind each element in the loop header instead of indexing, or express the whole body as an iterator adapter chain; in the summation case the entire loop and accumulator collapse into a single iterator sum call. The invariant preserved is the visited sequence and its order: exactly the same elements are processed, first to last, and any accumulated result is unchanged. Only when the index is genuinely needed (offset access, paired collections, mutation by index) does the range form stay. A fresh engineer spots a range-of-length loop whose body's only use of the counter is bracket indexing.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "unnecessary_map_or",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:344",
+      "words": 156,
+      "description": "Trigger: an Option's map_or combinator invoked with the literal false as its default argument and a predicate-style closure as the mapping — the whole call asks whether the option holds a value satisfying the predicate, answering false when it holds none. The false default makes the call a boolean membership test dressed up as a mapping with a fallback; Result's equivalent with a false default has the same reading. Fix shape: replace the two-argument combinator with the purpose-built predicate method — is_some_and for Option (is_ok_and for Result) — passing the same closure unchanged. The invariant preserved is the answer: the call still yields false for an absent value and exactly the closure's verdict for a present one; truth-table-identical for every input. Arguments order does not matter because the default was a constant. A fresh engineer recognizes the shape by spotting a boolean-returning call whose fallback argument is the constant false and whose closure returns a boolean.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "map_or_identity",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:1315",
+      "words": 169,
+      "description": "Trigger: a call to the map_or combinator on an Option or Result where the mapping closure ignores any transformation and simply returns its own input unchanged — the identity function written inline as a one-parameter closure whose body is that bare parameter. The call therefore means: hand me the inner value if there is one, otherwise this default; the mapping step does nothing and exists only to reach the fallback behavior. Fix shape: delete the identity closure and the mapping step entirely, folding the call into the plain terminal method that unwraps with a default — unwrap_or for this shape (unwrap_or_else only if the fallback genuinely needs lazy evaluation, which a constant default does not). The invariant preserved is the outcome: the success path still yields the contained value and the failure path still yields the default, bit-identically. The receiver stays Option or Result as before; no borrow or type changes. A fresh engineer spots a closure whose body is exactly its lone parameter, sitting in a fallback-taking combinator.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "match_bool",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:289",
+      "words": 171,
+      "description": "Trigger: a match expression whose scrutinee is a boolean and whose patterns are the boolean literals themselves — one arm pattern-matching true, the other false, each with its own result expression. Using pattern matching to case-split on a plain bool is a heavyweight spelling of a two-way conditional; the match adds exhaustiveness machinery where a simple branch suffices. The same shape appears wherever a value is selected by a boolean, in return position or a binding. Fix shape: rewrite the match as an if/else — the true arm's pattern and body become the if condition and consequent, the false arm's body becomes the else branch, preserving each arm's result expression verbatim. The invariant preserved is the selected value: for a true scrutinee the first arm's result, for a false scrutinee the second's, exactly as before; a wildcard-armed variant maps the same way by negating the condition. Types, ownership of the scrutinee, and surrounding code are untouched. A fresh engineer recognizes any match whose arm patterns are only the two boolean constants.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "manual_repeat_n",
+      "entry_anchor": "src/domains/clippy_lints/corpus.rs:1169",
+      "words": 164,
+      "description": "Trigger: a collection-building expression that produces an unbounded repeat iterator of one value and then truncates it to a length — the repeat constructor chained with a take of a count, usually immediately collected into a Vec or similar container. The two-step spelling exists only because the repeat adapter alone cannot express an exact length; the take exists purely to bound it. Fix shape: replace the two chained constructors with the purpose-built repeat_n constructor, passing the value and the count as its two arguments, keeping any collect (or other consumer) exactly as it was. The invariant preserved is the produced sequence: n copies of the same value in the same order, so every downstream consumer sees an identical collection; the element type and the count expression are carried over verbatim. The combined form also communicates the exact-length intent and avoids composing a theoretically infinite iterator. A fresh engineer spots repeat immediately followed by take in the same chain with the count as take's argument.",
+      "domain": "clippy_lints"
+    },
+    {
+      "rule_id": "eager-pointer-collect-lazy-fetch",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_05.rs:136",
+      "words": 184,
+      "description": "Fires when a full scan builds a HashMap holding every entry's pointer (say HashMap<usize, &Node> over a dense Vec) just to serve a few random reads — the O(N) scan-and-hash build runs before touching the K entries actually needed. The remedy deletes the index build entirely and reads the needed entries directly from the store, which is itself the direct-access path. The win is two-part: the O(N) build is eliminated AND the scan no longer floods the cache and evicts the very pages the subset reads — working-set residency is the load-bearing half (at N=1M with 32-byte nodes the scan streams ~32 MB past the cache). Measured ParetoDominant 3/0/0 at 100K/300K/1M stores, 1903.70x/5414.62x/21353.90x faster, allocations one to zero (bytes 35.7 MB to 0 at N=1M). Regime: subset ratio K/N far below one, one-shot or sparse access. Anti-regimes: at K near N the build amortizes away, and when the SAME subset is read repeatedly the lazy form is expected tie-to-slower — a persistent index (the sort-key-cache rule) is the right shape instead. Distinct from collect-avoidance (allocation staging) and from accessor-re-expansion rules (those re-expand accessors, not index materialization before a subset read).",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "watchdog-deadline-moves-on-command-progress",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_41.rs:815",
+      "words": 189,
+      "description": "Fires on a watchdog whose deadline is set once at a command's commit and never moves — it bounds the command's WHOLE length. A multi-part command (GPU stretch, host step, GPU stretch — a streamed prefill) whose every part finishes within the timeout but whose whole runs far past it gets given up on mid-progress, and the restart drops every session's RAM cache. The remedy makes the deadline a timeout after the command's LAST progress: armed at commit, then moved at each host step — both when the GPU work preceding the step finishes and when the step itself returns. A sequence guard is load-bearing: progress from any OTHER command moves nothing. No single stretch may exceed the timeout — one long host step with no boundary inside it is still given up on, and a command without host steps is bounded as before. Regime: multi-part GPU-plus-host pipelines, streamed prefills, chunked IO with per-chunk progress. Anti-regimes: genuinely atomic commands (no internal progress points); progress without forward motion — a heartbeat while stuck would deaden the watchdog, so progress must be observed work completing. NotBenchable: a liveness law, decision content.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "bufread-scan-in-buffer-scratch-fragment",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_30.rs:183",
+      "words": 196,
+      "description": "Fires on record-at-a-time reading from a BufRead that allocates a fresh heap Vec per record through read_until, paying read_until's copy machinery even when each record sits complete inside the reader's internal buffer. The remedy drains complete records zero-copy: loop over fill_buf slices, scan for the terminator, split_at, and lend borrowed record slices to the consumer; only the fragment spanning a buffer boundary is copied — into ONE scratch Vec cleared and reused across records and prepended to the next buffer's records — with consume(used) advancing the reader and an unterminated tail counting as a final record. Invariants: identical record census; the allocation count collapses to one reused buffer (a single allocation is reused for each line), only the boundary fragment paying std's copy path. Measured ParetoDominant 3/0/0 — 3.63x/3.00x/2.77x at 1K/16K/262K records; allocations 10892 → 0 at 262K. Regime: many small or medium records from any BufRead (files, sockets, decompressed streams) where records are much smaller than buffer capacity. Anti-regimes: records larger than the buffer (the fragment path dominates — back to read_until semantics); one-shot whole-file reads; consumers needing OWNED records anyway — only the per-record Vec churn is removable, via a reused scratch with clear().",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "saturating-f2i-cast-proven-range-to-int-unchecked",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_48.rs:55",
+      "words": 185,
+      "description": "Fires on a hot-loop float-to-int `as` cast whose operand range is already proven in-range — a pre-clamped input, bounded index arithmetic, or a preceding assert — where every iteration still executes the full saturating-conversion machinery (llvm.fptosi.sat / .fptoui.sat: NaN and overflow checks plus a clamp select) that the C build's plain fptosi/cvttss2si never pays. The remedy, when the truncated value provably fits the target integer type, replaces `as` with to_int_unchecked — one conversion instruction, the saturation dead work gone. The caller owns the proof obligations — the operand must be finite and its truncation in range — the invariant is named at the site, often pinned by a debug_assert over the range, and carried as a SAFETY comment so a future edit that breaks the range breaks the contract, not merely a bound. Behavior is identical while the proof holds — the fixture asserts the same outputs. Suggest-only: the healer never auto-applies an unsafe rewrite, mirroring the source's two-gate validation. Anti-regime (hard): a range that is not proven keeps the `as` cast forever — saturation is the correct semantics where overflow or NaN is possible.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "batch-reserve-monotonic-counters-offload-bulk",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_59.rs:43",
+      "words": 195,
+      "description": "Fires when a batch of items takes N per-item synchronized reservations of consecutive monotonic counter identities (packet nonces, request ids) — one lock trip per item on the sending thread, so N packets cost N serialized trips. The remedy reserves the whole batch in ONE bound-checked operation: the count is checked_add-ed onto the counter and the end filtered against a hard limit (a named limit constant with replay-window headroom); overflow or past-limit refuses the entire batch loudly, minting nothing — admission precedes any mint, unlike the per-item path's mid-batch death. The reservation is an immutable value (first counter and length fixed at mint time) sharing no mutable state with the owner: the owner splits it into disjoint contiguous sub-ranges and each worker completes its items on any thread in any order without re-consulting the counter — the result depends only on key, own counter, bytes, so completion order cannot change any result. Regime precondition: a receiver tolerating gaps and reorder (a replay window). Anti-regimes: gap-free strict-order receivers; per-item feedback into the shared object; validity gated by exact assignment order. Serial-side saving is trivial bookkeeping; the value is parallel throughput — NotBenchable by the single-process validator.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "byte-flag-table-masked-run-scan",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_65.rs:30",
+      "words": 199,
+      "description": "Fires on a hand-rolled scanner that classifies every byte through a predicate chain (several unpredictable branches per byte) and walks each class run byte by byte — hand-rolled lexers and pre-tokenizers. The remedy classifies once per BYTE VALUE into a const-eval 256-entry u8 flag table (compile-time eval — zero runtime init; flags partition the byte space, coverage asserted) and completes each class run with ONE masked-prefix scan: the first byte whose table flags miss the mask — the longest prefix where every byte carries at least one — as a 4-byte-unrolled scalar loop with non-panicking bounds; the token kind's run mask picks the class set, and a packed dispatch byte can fold the fast-path decision into the same table. Invariant: identical token census — the fixture asserts agreement across 0..=255 plus block edges. Measured ParetoDominant 3/0/0 — 2.62x/2.94x/2.10x at 1K/16K/262K, alloc-free both arms. Regime: byte-oriented scanners with per-byte-decidable classes and class-pure runs; the win scales with run length. Anti-regimes: delimiter-dense input; classes not per-byte decidable (multi-byte UTF-8 — classify per character); one-shot short scans where a match chain beats table indirection. Regime-complementary with the SWAR block-skip sibling — that owns long pure-class blocks, this short mixed-class runs; never merged.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "retain-inplace",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_02.rs:21",
+      "words": 154,
+      "description": "Fires when a Vec is filtered by collecting a NEW one — data.iter().filter(...).collect() over a slice or Vec, allocating a fresh Vec to hold the surviving elements. The remedy filters IN PLACE with Vec::retain: the signature changes to accept &mut Vec, retain drops non-matching elements inside the existing buffer, no second allocation and no copy-out, and the surviving elements keep their relative order in a single pass. Invariant: exactly the same survivors in the same order; measured through the rule's own bench spec (1K to 1M elements) where the collect's fresh allocation is the axis removed. Regime: the caller can hand over mutable ownership of the Vec (it owns the data or holds &mut). Anti-regime implied by the signature change: when the input is only a borrowed slice and an owned filtered result is genuinely needed elsewhere, the collect shape is forced — the fix applies where the mutated Vec is the consumed result.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "work-removed-build-is-not-a-valid-lower-bound",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_84.rs:305",
+      "words": 195,
+      "description": "Fires on a perf bound or speedup claimed from a comparison arm that does LESS work — a debug build skipping dequantization for the profile run, a graph-off profile timed as the step, an isolated kernel standing in for the live path. Removing work from an arm changes code generation, so the timing measures a different program whose time bounds nothing about the arm doing the work. The remedy: a bound is valid only when both arms' executed-work census matches — count the logical operations the run performed (rows dequantized, tiles stepped, frames decoded) beside the timing; a census mismatch refuses the claim loudly instead of reporting a speedup. Paired clauses: a graph-off profile is a valid per-kernel breakdown, never a valid step-time bound — time the graph replay itself; the removed-work lower bound must be the LIVE path's removed work, never the isolated kernel's (provenance: a sparse attention measured 15x isolated fell to 1.33x live). Regime: profile-guided fixing, quantized-serving comparisons, JIT/AOT pairs, any lower-bound headline. Anti-regimes: arms equal by construction (an A/B pair over the same function — census trivially equal); breakdowns explicitly labeled as not-bounds. NotBenchable: a measurement-verdict property no latency validator hosts.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "regex-hoist-lazylock",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_02.rs:407",
+      "words": 123,
+      "description": "Fires when Regex::new runs inside a function on every call — the pattern is a constant but the regex is parsed and compiled (an expensive NFA build) again each invocation, e.g. a validator calling Regex::new(...).unwrap() then is_match on each input. The remedy hoists construction into a static LazyLock<Regex>: the regex compiles once, lazily, on first use (thread-safe initialization, no startup cost), and every call afterwards only matches. Invariant: matching behavior is byte-identical — only the construction moves. Measured through the rule's own bench spec (10/100/1K calls) where the per-call compile amortizes to zero. Regime: any hot or repeated path constructing the same constant regex per call; a static holds ONE pattern, so per-input dynamic patterns are a different, cache-shaped problem, not this fix.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "smallvec-stack",
+      "entry_anchor": "src/domains/rust_perf/corpus/entries_02.rs:161",
+      "words": 190,
+      "description": "Fires on a Vec::new() whose length is small and bounded in practice (typically eight or fewer) — the empty Vec heap-allocates on first push even when only a couple of elements ever land in it. The remedy branches on the bound: for n at or under the typical bound, write into a fixed-size stack array ([T; 8] indexed up to n, or an ArrayVec/SmallVec with inline capacity) and read back over the written prefix; above the bound, keep the heap Vec — both arms consume the same values in the same order. Measured through the rule's own bench spec; the placement law is the entry's rider: when a transform's maximum emission arity is a compile-time constant, that constant IS the capacity of record — the capacity tracks it, so a longer sequence bumps it in the same commit as the change — and the consuming iterator keeps one-slot lookahead (yield the head, park the tail in one Option slot), composing with the callback-emit rule whose target is that stack buffer. Anti-regime built into the shape: counts beyond the bound fall back to the heap arm, so unbounded growth stays correct.",
+      "domain": "rust_perf"
+    },
+    {
+      "rule_id": "boot-identity-hash-read-once",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_146.rs:40",
+      "words": 176,
+      "description": "When a boot or load path has two components that each hash the same immutable artifact bytes—typically one computes a content digest to key a prepared cache, and a second subsystem such as a session or checkpoint store re-hashes the whole pack from disk for its own integrity identity after earlier reads evicted the page cache—the bytes are read and hashed twice. The remedy threads the digest the first hash produced to the second consumer: the cache-open path retains the pack digest it was keyed with, and the second component takes that stored value instead of re-hashing, falling back to its own single read when no cache is open. One hash per byte per boot; the uncached path still reads exactly once. Regime: any boot where two components independently hash the same immutable bytes (cache key, integrity identity, provenance pin). Anti-regime: consumers needing a different hash function; mutable content, where a cached key would not stay valid. Correctness-shaped, not a timing claim—pinned hermetically by a poisoned store that errors on a second read plus digest equality.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "same-input-gemv-segments-single-launch",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_07.rs:173",
+      "words": 172,
+      "description": "Several small GEMV projections consuming the same quantized input vector (for example qkv plus gate and auxiliary heads, or gate+up, or q+k+v) that launch one kernel per projection sit on the kernel-launch latency floor: launch overhead dominates once the projections have few output rows, and profiling attributed hundreds of launches per token. The remedy groups all same-input GEMVs into ONE multi-segment launch: a segment is a weights pointer plus output pointer plus a row-count descriptor, at most 4 segments per launch, so tiny projections ride along with the large one at near-zero marginal cost. Unused segment slots are padded by reusing segment 0's pointers with a zero row count—nothing matches those rows, so the padding pointers are never dereferenced. Caller invariant: every segment shares the same input dimension. Positioning: the generic middle between N separate launches sharing one upload and a bespoke fused-pair kernel—this batches arbitrary same-input segments with no bespoke kernel. Caveat (anti-regime): an occupancy grid cap riding along was measured refuted—the batching itself is the win, not any grid cap.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "walk-terminating-fill-for-unused-buffer-capacity",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_157.rs:264",
+      "words": 198,
+      "description": "A device buffer whose consumer index-walks it—each entry decodes either as interior (continue at listed children) or as leaf (stop)—is poisoned by every byte the live content does not fill: fresh zero fill and stale bytes from a previous occupant are both hazardous, because in such encodings the zero bit-pattern decodes as a valid interior node whose children are nodes 0 and 1, so a walk landing in the tail cycles forever. The remedy fills all unused capacity with a walk-terminating sentinel constructed from the encoding—a leaf holding one degenerate item no query reaches, one node read then stop—applied at every release/realloc edge, with freshly allocated capacity born terminal; the tree builder hands freed ranges back with the fill obligation attached. The principle: zero fill is chosen by habit from buffers whose consumers only read fields; a walk consumer decodes, so the terminal value must be constructed, never defaulted. Regime: GPU node buffers, chunk/indirection tables, chain or arena structures a device walk decodes; any encoding whose zero pattern is non-terminal. Anti-regime: consumers that only read (zero fill correct); encodings with a reserved terminal code where zero is terminal. Correctness law—a hang or missed geometry, never a timing number.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "tile-coo-sparse-tile-aligned-format",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_15.rs:51",
+      "words": 191,
+      "description": "When a matrix's sparse payload—quantization outliers kept in high precision—is stored in a global CSR or COO format, its granularity is the whole matrix, not the GEMM tile hierarchy, so a fused sparse-dense kernel cannot stage one tile's outliers without walking the entire index chain, and 32-bit global indices bloat metadata. The remedy encodes a tile-local sparse format designed backward from the consumer kernel: a per-tile offset table, per-bucket metadata (bucket-local offset plus count, 16-bit each), and outlier records packing four entries each (8-bit row, 8-bit column, bf16 values) so decode consumes whole vector words with the next record prefetched. Two decision contents: index width derives from the staged tile extent—8-bit coordinates are sound only because the shared-memory tile is at most 256 per side; re-derive and assert at encode, since a widened tile silently wraps. And vectorization padding slots (counts padded to multiples of four) are repurposed by the quantizer to store original high-precision values—an accuracy lever, not layout slack. Regime: offline one-time preprocessing of outlier payloads for fused GEMM. Anti-regime: weights that mutate at runtime (hot-swap must re-encode); buckets over 65,535 entries; bf16 values are lossy versus f32 CSR.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "enumerable-domain-bit-identity-admission-gate",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_63.rs:80",
+      "words": 184,
+      "description": "A rewrite over a small dtype domain—a cast removal, a concat eliminated by writing directly to the target-dtype buffer, elementary math—is certified for bit-identity before enabling. Sampling random shapes cannot certify it: a 16-bit domain has 65,536 members, and a sample misses the signed zeros, subnormals, infinities or NaN payloads the rewrite maps differently. The remedy admits or refuses by EXHAUSTIVE enumeration of the entire input domain: enumerate every bit pattern viewed as the dtype, compare bitwise through the integer view against the reference implementation, and additionally check a few random wider shapes; the verdict is binary, cached under a lock, and computed at load time only—never inside a timed forward. On any mismatch the original path is kept and the opt-in flag stays false (loud refusal naming the failed self-test). Regime: cast, concat, or elementwise-math rewrites over 8/16-bit domains (2^8/2^16 sweepable). Anti-regime: f32 domains—2^32 is not sweepable, sample or prove algebraically there; certification in a timed forward; a non-elementwise rewrite is refused, never patched, even though bitwise comparison still catches divergence. This is enumerate-to-admit, distinct from enumerating in order to repair divergent inputs.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "verify-fold-gqa-repeats-into-row-axis-tile-fill",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_52.rs:24",
+      "words": 192,
+      "description": "A GQA-broadcast query GEMM at a verify or prompt width where each broadcast head's row count is SMALLER than the GEMM's M-tile (for example 16 real rows in 64-row tiles, three-quarters padding) and multiple query heads share each KV head: one GEMM batch per query head wastes tiles. The remedy folds the repeat axis into the row axis—reshape broadcast-kvHeads-heads-rows-dim into broadcast-kvHeads-(repeats*rows)-dim, a FREE view when the queries are contiguous—so one batched GEMM per KV head runs repeats*rows: roughly a third as many tiles in the measured case, each K/V tile read serving all broadcast heads. Bit-identity contract: the GEMM reduces every output element over the K dimension in the same fixed steps regardless of row, tile or batch, so moving a query row between tiles cannot change its value—provided the scores keep the repeats-then-rows ordering the downstream softmax indexes by. Regime: GQA broadcast with rows < tile M and repeats > 1, contiguous queries, non-causal verify windows. Anti-regime: rows >= tile M (neutral at best, no padding to reclaim); repeats == 1; consumers that cannot view folded scores in the repeats-rows order; non-contiguous queries (the reshape materializes a copy and can lose).",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "defer-promoted-write-to-first-consumer-dispatch",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_10.rs:99",
+      "words": 186,
+      "description": "A cache promotion path (for example routing expert weights into a serving bank) currently binds slots and then eagerly materializes, adding an explicit evaluate-everything call after each dynamic update—forcing every pending projection and writing the same bytes twice, because the next dispatch reads the bank anyway. The remedy splits promotion into BIND and MATERIALIZE and defers materialization to the first consumer dispatch: bind immediately (route-to-slot metadata and index maps—tiny and needed now for correctness), write the bank bytes lazily, and rely on an already-existing downstream dispatch as the synchronization fence (the next layer's router evaluation orders the writes before any read)—no new barrier added, none missing. Keep bind and materialize as separate stats so the deferral is measurable rather than invisible. Scope the laziness honestly: warm-start and pinned-preload paths materialize eagerly, component-at-a-time to cap transient memory; only the dynamic miss/promote path defers. The decision content is not laziness itself but the two-phase split plus NAMING the existing implicit fence. Distinct from deferring an arithmetic op into the next layer's fused kernel (op-fusion placement); this defers data materialization behind an identified existing fence, with no kernel changes.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "dtype-branch-dispatch-parity-in-place-precondition",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_113.rs:35",
+      "words": 196,
+      "description": "A kernel-choice dispatcher that branches by K/V cache dtype (F16 versus quantized branches of one attention-kernel ladder) has a measured admission rule proven in one branch—a shape-ratio rule such as: above GQA ratio 4 at long context, prefer the MMA kernel over the vector kernel—silently absent from its sibling branch, which then keeps the slow kernel for every small-query call at every context length. The remedy: sibling branches of one dispatcher carry PARITY on measured admission rules—a ratio rule proven in one branch is presumed to transfer, and the burden is a measured reason for divergence, never silent absence. The widening carries an IN-PLACE precondition: the fast kernel must read its operands in place (a validated dtype, head-dimension and type-equality surface); otherwise it converts the whole cache to the wide dtype on EVERY call and loses exactly where it should win. Process law: measure with temporary switches, remove them in the same change, land the predicate with its precondition—measure-only knobs never ship. Regime: multi-branch dispatchers whose kernel pairs' crossover depends on a shape ratio plus in-place readability. Anti-regime: branches with genuinely different kernel geometry (no parity presumption); widening without the in-place check; shipping the measure switches.",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "moe-group-selection-fused-into-topk",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_104.rs:61",
+      "words": 194,
+      "description": "Grouped-expert MoE routing (more than one expert group; the DeepSeek-V3 shape: each group's score is the sum of its top-2 experts, keep the top few groups, mask the rest to negative infinity) materializes as a roughly 14-op computation-graph subgraph that round-trips the logits through global memory four times. The remedy fuses the whole group selection into the topk kernel that already holds the logits in registers: a warp-local pass computes per-group top-2 via a running-max pair plus cross-lane fold, derives each group's rank with deterministic lower-index tie-break, ballots the kept groups, and sets non-kept experts to negative infinity in registers. Admission is a static whole-pattern match over the graph—each op and its input bindings verified—and refusals are loud: a bias-bearing gate routes around the fusion, group count above warp width is refused, and the kept-groups-must-hold-all-used-experts invariant is checked; a partial match falls back to the materialized graph, never guesses. Regime: grouped routing with more than one group where the mask subgraph rides a topk kernel's registers. Anti-regime: single-group routing; bias-bearing gates; group count above warp width; expert counts with no compiled instantiation (the admission predicate and the template instantiations must move in one commit).",
+      "domain": "kernel_opt"
+    },
+    {
+      "rule_id": "block-scaled-mma-scale-register-owns-its-rows",
+      "entry_anchor": "src/domains/kernel_opt/corpus/entries_gpu_145.rs:56",
+      "words": 168,
+      "description": "Lowering a block-scaled matrix-multiply-accumulate intrinsic (MXFP4 or NVFP4 e2m1 operand pairs with a mandatory f32 accumulator) whose scale operands are staged like any other operand—with invented selector values, no factor-versus-scale-kind cross-check, and unsupported configs silently mis-lowered. The remedy: each unit's scale register OWNS the rows that unit works—one packed scale-operand word per scale factor, with the byte selector and unit selector passed as literal zeros (the C++ backend's zero-pair ABI convention), never a per-row selector scheme and never staging scales through shared memory, which would re-read what the register layout already places in each unit's hands. An admission gate runs first and refuses loud BEFORE any register work: e2m1x2 operand pairs and a float32 accumulator are required; scale factor 2 (MXFP4) demands the ue8m0 scale kind, factor 4 (NVFP4) accepts ue4m3 or ue8m0, any other pairing refuses; the typed error names the offender's own configuration (operand types, accumulator, scale kind, factor). Correctness-shaped, not a timing claim—the selector-zero contract, the factor/scale-kind pairing, and the refusal payload are testable off-device.",
+      "domain": "kernel_opt"
+    }
+  ]
+}
