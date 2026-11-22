@@ -10548,11 +10548,13 @@ pub fn thou(n: usize) -> String {
     out
 }
 
-/// Issue 165: the run-end per-domain roll-up's accumulator. `print_suggestion`
-/// tallies exactly what it prints, so the line can never drift from the
-/// findings above it; the non-syn lanes + the secret scan merge their counts
-/// afterwards (disjoint surfaces by construction — the syn pass never cites
-/// a Dockerfile/manifest/`.wgsl` file kind).
+/// Issue 165: the run-end per-domain roll-up's accumulator. `tally_suggestion`
+/// counts every span the scan produced — previewed or not — so the line is
+/// whole-tree (P115: the pre-fix tallies rode the preview cap, and the
+/// clippy/perf halves under-read tree-wide runs by the cap factor); the
+/// non-syn lanes + the secret scan merge their counts afterwards (disjoint
+/// surfaces by construction — the syn pass never cites a
+/// Dockerfile/manifest/`.wgsl` file kind).
 #[derive(Default)]
 struct DomainTallies {
     /// Printed findings per domain label (syn citations + lane counts + the
@@ -10622,14 +10624,46 @@ impl DomainTallies {
     }
 }
 
+fn tally_suggestion(
+    s: &SpanSuggestion,
+    matcher: &LatentMatcher,
+    domain_filter: Option<DomainId>,
+    tally: &mut DomainTallies,
+    fixable_set: &std::collections::BTreeSet<String>,
+) {
+    let _ = matcher;
+    for (domain, lint) in &s.anchored_rules {
+        if domain_filter.is_some_and(|want| want != *domain) {
+            continue;
+        }
+        tally.add_citation(
+            domain.label(),
+            *domain == DomainId::Clippy && fixable_set.contains(lint),
+        );
+    }
+    let fits_any = s.by_domain.iter().any(|(d, _)| d.applies_to_path(&s.path));
+    for (domain, rules) in &s.by_domain {
+        if domain_filter.is_some_and(|want| want != *domain) {
+            continue;
+        }
+        if fits_any && !domain.applies_to_path(&s.path) {
+            continue;
+        }
+        for rule in rules {
+            tally.add_citation(
+                domain.label(),
+                *domain == DomainId::Clippy && fixable_set.contains(&rule.rule_id),
+            );
+        }
+    }
+}
+
 fn print_suggestion(
     s: &SpanSuggestion,
     matcher: &LatentMatcher,
     domain_filter: Option<DomainId>,
     feed_present: bool,
     bench_target: bool,
-    tally: &mut DomainTallies,
-    fixable_set: &std::collections::BTreeSet<String>,
 ) {
     let routed = s.routed_domain.label();
     let anchored = !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty();
@@ -10695,10 +10729,6 @@ fn print_suggestion(
             domain.label(),
             lint
         );
-        tally.add_citation(
-            domain.label(),
-            *domain == DomainId::Clippy && fixable_set.contains(lint),
-        );
     }
     for lint in &s.anchored_missing {
         println!("  [oracle] {lint:<32} NO CORPUS RULE (gap signal)");
@@ -10731,10 +10761,6 @@ fn print_suggestion(
                 domain.label(),
                 rule.rule_id,
                 rule.score
-            );
-            tally.add_citation(
-                domain.label(),
-                *domain == DomainId::Clippy && fixable_set.contains(&rule.rule_id),
             );
         }
     }
@@ -18218,6 +18244,10 @@ fn main() {
                     }
                 }
                 n_suggestions += 1;
+                // P115: the roll-up tallies EVERY span — the cap gates the
+                // PREVIEW only, never the count (a tree-wide run's clippy/perf
+                // halves used to under-read by the cap factor).
+                tally_suggestion(&s, &matcher, args.domain, &mut domain_tally, &fixable_set);
                 // The owner's UX law (2026-11-04): the per-span preview is
                 // capped on tree-wide runs — the summary lines are the
                 // product; the per-span review is a small-tree convenience
@@ -18231,8 +18261,6 @@ fn main() {
                         args.domain,
                         clippy_feed.is_some() || hot_present,
                         bench_target,
-                        &mut domain_tally,
-                        &fixable_set,
                     );
                 }
             }
