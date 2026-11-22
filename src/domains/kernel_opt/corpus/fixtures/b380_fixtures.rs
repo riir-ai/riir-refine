@@ -87,7 +87,8 @@ impl Tier {
         if !self.pool_alive {
             // a pool that posts but never completes must refuse LOUD,
             // never silently stall the tier on a dead lane.
-            return Err("cpu pool dead: lane prices unmeasurable, refuse");
+            const POOL_DEAD: &str = "cpu pool dead: lane prices unmeasurable, refuse";
+            return Err(POOL_DEAD);
         }
         let lane = if self.acc_cpu + self.t_cpu <= self.acc_up + self.t_up {
             self.acc_cpu += self.t_cpu;
