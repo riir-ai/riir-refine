@@ -1,7 +1,7 @@
 # Plan 393 — the humanfia pair distill batch (qda + humanize → 3 transcription rules; nominal Batch 377)
 
 **Status:** LANDED 2026-11-22 as Batch 378 (zed-m3-humanfia@m3 — the batch number re-derived at landing HEAD: 377 was taken by the B377 colorless landing; the verdict's re-derive clause governs). rust_perf 384→386 + sec 82→83; all gates green; see the LANDING row in `.distill/001_mining_queue_snapshot.md` + the Research 427 status line for the full record.
-**Claimed:** zed-m3-humanfia@m3, 1795288385, expires 2026-11-23T19:13:05+00:00
+**Lease closed:** zed-m3-humanfia@m3, 1795288385, was expires 2026-11-23T19:13:05+00:00 — LANDED as Batch 378, commit `41507e47f` (entries_92 + the sec agent-child rule); the lease folds per the close law (the numbering gate's STALE-CLAIM advisory, folded by the plan-399 allocation lane)
 **Lease closed:** zed-m3-humanfia@m3, epoch 1795288385, was expires 2026-11-23T19:13:05+00:00 — the batch LANDED 2026-11-22 (pushed), the work complete. Prior lease closed: zed-393-t01@amo — T0.1 delivered same session (claim record: zed-393-t01@amo, epoch 1795224851, was expires 2026-11-23T01:34:11+00:00)
 
 **Pre-registered proof path (ungoat law):** all three rules are suggestion-only, NotBenchable-by-domain (the metric-mismatch/annotation class, Batch-136 precedent) — the proof IS the fixture + falsifier + in-rule adjudication set below, plus the standing gates (standalone compile+execute pre-entry, pins_manifest, score-bench). No perf bars exist for this batch; any promotion beyond suggestion-only is out of scope by construction.
