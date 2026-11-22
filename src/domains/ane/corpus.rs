@@ -44,7 +44,7 @@ use crate::domains::ane::{AneDomain, AneFamily, AneRule};
 const LC_ANE: &str = "liquidcodec-ane @ 177f902 (lc_ane.py)";
 const BESH: &str = "beshkenadze/nemotron-3.5-asr-streaming-0.6b-coreml-ane-stream README @ 3dabd79";
 const ANEM: &str = "Anemll/anemll-forge @ fe8de185 (v8-gpu-ane-prefill branch; re-pinned at the batch T0 past the 912925f verdict pin)";
-const MLXS: &str = "ddalcu/mlx-serve @ 96311b26 (docs/reference.md; the Batch-398 T0 pin, tip unmoved at this batch's T0)";
+const MLXS: &str = "ddalcu/mlx-serve @ 96311b26 (docs/reference.md; the Batch-398 T0 pin, re-verified at the Batch-401 T0 — the tip has since moved, the pin is the record)";
 const MLXSG: &str = "ddalcu/mlx-serve @ 96311b26 (docs/gotchas/engine-mlx.md)";
 const MLXSM: &str = "ddalcu/mlx-serve @ 96311b26 (docs/gotchas/models-media.md)";
 const ANNOTATION: &str = "suggestion-only, NotBenchable-by-domain (the win metric lives in the CoreML/ANE runtime; no validator on this box hosts it) — measure on the target host before adopting";
@@ -2083,6 +2083,157 @@ fn run_program_for(_shape: Shape, _planes: &Roles<Surfaces>) {}"#
                  overlap (streams/slots — per-slot planes, then share across shapes within the \
                  slot). {ANNOTATION}. Sources: {MLXS} (ANE prefill rules, the I/O planes bullet); \
                  the bill: {MLXSG} (\"The share 0.35 'tiling cliff' was every eval failing\")."
+            )),
+        },
+
+        // ── Batch 401 — the procedure-bank wrong-API-twin (the swallowed-  ──
+        // ── slowdown law; Research 434's staged candidate #1, executed)    ──
+        AneRule {
+            rule_id: "ane-procedure-bank-wrong-symbol-api-swallowed-slowdown".to_string(),
+            ane_concept: "a capability query that answers a DEFAULT (0 / empty) instead of \
+                          erroring converts a functional break into a silent perf loss: resolve \
+                          per-procedure symbol indices from the OWNER object (the in-memory \
+                          wrapper is not a subclass of the model carrying the selectors), \
+                          require the returned count, and refuse a multi-procedure bank BY NAME \
+                          when the capability is unreachable — never degrade into identity \
+                          indices that serve only procedure 0"
+                .to_string(),
+            trigger: "an accelerated-device program bank (N > 1 procedures sharing one weight \
+                      buffer, each its own procedureIndex) whose host resolves per-procedure \
+                      I/O symbol indices through a selector on the wrapper object — especially \
+                      a twin spelling that answers 0/an empty array for every procedure — or \
+                      falls back to the identity mapping when the query cannot answer"
+                .to_string(),
+            buggy_code: r#"// NAIVE: the symbol query rides the wrapper the host happens to hold.
+// The twin selector answers 0 for every procedure instead of erroring,
+// so the code falls back to identity indices 0..count-1 — which serve
+// procedure 0 and fail EVERY other one. The GPU recompute absorbs each
+// failure, so the break reads as 'the bank is slow', not 'the bank is
+// broken': the only observable is the failure counter.
+struct AneInMemoryModel {
+    model: Option<AneModel>, // the wrapper OWNS the model; it is NOT one
+}
+
+impl AneInMemoryModel {
+    fn symbol_indices(&self, proc: usize, count: usize) -> Vec<usize> {
+        // wrong twin on the wrong receiver: answers 0, never errors
+        match input_symbol_indices_for_procedure(proc) {
+            Some(v) if v.len() == count => v,
+            _ => (0..count).collect(), // identity: right for proc 0, wrong for > 0
+        }
+    }
+}
+
+fn input_symbol_indices_for_procedure(_proc: usize) -> Option<Vec<usize>> {
+    Some(Vec::new()) // the swallowed-slowdown shape: a default, not an error
+}"#
+                .to_string(),
+            fixed_code: r#"// FIXED: resolve from the capability's OWNER (unwrap the wrapper
+// first — the right selector on the wrong receiver is unreachable, not
+// wrong); require the returned count to match; and when the capability
+// is unreachable for a shape that cannot work without it, refuse the
+// create BY NAME so the caller's split ladder walks down to banks of one.
+struct AneInMemoryModel {
+    model: Option<AneModel>,
+}
+
+impl AneInMemoryModel {
+    fn inner_model(&self) -> Option<&AneModel> {
+        self.model.as_ref() // the selectors live on the model, not the wrapper
+    }
+
+    fn has_symbol_api(&self) -> bool {
+        self.inner_model().is_some() // query the owner, never the wrapper
+    }
+
+    fn symbol_indices(&self, proc: usize, count: usize) -> Option<Vec<usize>> {
+        let model = self.inner_model()?;
+        let v = model.symbol_indices_for_procedure(proc)?;
+        (v.len() == count).then_some(v) // count-validated before use
+    }
+}
+
+fn create_bank(procs: &[Proc], m: &AneInMemoryModel) -> Result<Handle, String> {
+    // a bank of one is fine on identity; a bank of N > 1 without the
+    // capability is refused BY NAME — the swallowed-slowdown posture is
+    // the defect this gate exists to prevent
+    if procs.len() > 1 && !m.has_symbol_api() {
+        return Err(format!(
+            "exposes no per-procedure symbol indices, so a bank of {} cannot be dispatched",
+            procs.len()
+        ));
+    }
+    Ok(Handle::new(procs, m))
+}
+
+struct AneModel;
+
+impl AneModel {
+    fn symbol_indices_for_procedure(&self, _proc: usize) -> Option<Vec<usize>> {
+        None
+    }
+}
+
+struct Proc;
+
+struct Handle;
+
+impl Handle {
+    fn new(_procs: &[Proc], _m: &AneInMemoryModel) -> Self {
+        Self
+    }
+}"#
+                .to_string(),
+            family: AneFamily::Lifecycle,
+            notes: Some(format!(
+                "THE MEASURED CLASS, verbatim (docs/reference.md:847): \"symbol indices READ \
+                 from `procedureInfoForProcedureIndex:` on the `_ANEModel` behind `-model` \
+                 (NOT `inputSymbolIndicesForProcedureIndex:`, which answers 0 and fails every \
+                 procedure >0 as a swallowed slowdown; `eval_failures` is the tell).\" And the \
+                 bill (lib/ane/ane_bridge.m:302-307): \"a bank's procedures do NOT share one \
+                 symbol numbering — the identity mapping serves procedure 0 and fails EVERY \
+                 other one with a bare \"Program Inference error\" (measured 2026-08-20: 200 \
+                 of 252 evals dead on a 42-procedure bank).\" THE RECEIVER TRAP (:307-311): \
+                 \"The selectors live on `_ANEModel`, and `_ANEInMemoryModel` is NOT a subclass \
+                 of it (checked: `instancesRespondToSelector:` is NO) — it OWNS one, reachable \
+                 through its `-model` accessor once the net is loaded.\" THE FAIL-CLOSED GATE \
+                 (:335-341 + :580-585): \"A bank of more than one procedure CANNOT be served \
+                 without it — identity indices make every procedure past the first fail at \
+                 eval, which reads as a slow offload rather than a broken one — so the create \
+                 is refused by name and the caller's split ladder walks down to banks of \
+                 one.\" THE SILENCE CONTRACT (tests/test_ane_prefill.sh:120-122): \"A failed \
+                 eval never fails the REQUEST — the seam recomputes that chunk on the GPU — \
+                 so the only evidence is this line. Silence here is the contract.\" And the \
+                 misattribution it produced (docs/gotchas/engine-mlx.md:759-762): \"identity \
+                 indices made 200 of 210 evals fail into the GPU fallback, reading as 'banks \
+                 cost 23%'.\" DECISION CONTENT: this is a PARTIAL zero — procedure 0 succeeds \
+                 under identity indices, so a single-procedure smoke arm reads green; the \
+                 capability path must be exercised per-procedure (N > 1) before any bank arm \
+                 claims success, and the failure counter must sit beside the success signal \
+                 (/props per-unit evals + eval_failures, asserted zero in every test arm) \
+                 because the request path is contractually silent. KINSHIPS (adjudicated): \
+                 degenerate-output-invalidates-throughput-claim (rust_perf entries_84) owns \
+                 the WRONG-OUTPUT axis (degraded text invalidates the claim) — THIS ships \
+                 correct outputs (every failed eval is recovered by an exact GPU recompute) \
+                 and only the claim of acceleration is false: a capability-boundary failure \
+                 wearing a perf-regression costume; the kernel fail-open family (gpu_24, \
+                 gpu_50) fails OPEN because the query's subject is a MEASUREMENT — THIS \
+                 refuses fail-CLOSED because the subject is a LOAD-BEARING CAPABILITY the \
+                 dispatch cannot work without (the polarity flips with the subject); \
+                 ane-int8-matmul-shape-silent-wrong-gate owns silent-WRONG (bad data, no \
+                 error — host-reference gate) and ane-row-pitch-grid-refused-at-plan-time \
+                 owns silent-FAIL (compiles, then every eval errors LOUD) — THIS owns \
+                 silent-DEGRADE: right data, wrong device, no error ever reaches the caller; \
+                 silent-zero-launch-row-chunked-past-grid-z-ceiling (kernel gpu_137/138) is \
+                 a launch doing NO work — THIS is a PARTIAL zero. Regime: multi-procedure \
+                 program banks served through an exact-but-slower recovery path. \
+                 ANTI-REGIME: a procedure that genuinely takes zero inputs (the empty index \
+                 array IS the answer); single-procedure programs where identity indices are \
+                 the contract (the refusal is gated on procedure_count > 1 at the source, \
+                 ane_bridge.m:582); postures where unavailability is already typed and \
+                 surfaced. {ANNOTATION}. Sources: {MLXS} (docs/reference.md:847, the \
+                 procedure-bank bullet) + {MLXSG} (the eval-fallback misattribution) — \
+                 quotes re-verified at the pin at this batch's T0."
             )),
         },
     ]

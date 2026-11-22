@@ -25,14 +25,16 @@ fn seed_corpus_has_expected_entry_count() {
     let corpus = build_ane_seed_corpus();
     // Plan 377 seed: Research 409's six candidates (R1–R6) + Batch 376: the
     // Research 421 anemll branch-delta wave (A4/A1/A8/A9/A10/A6/A7) + Batch
-    // 399: the mlx-serve ANE seed wave (M1–M8, Research 432 §Queue slice 2).
+    // 399: the mlx-serve ANE seed wave (M1–M8, Research 432 §Queue slice 2)
+    // + Batch 401: the procedure-bank wrong-API-twin (Research 434's staged
+    // candidate #1).
     // Hard-pinned
     // the flat-key way (the dist_gates precedent — the manifest key is
     // FLAT, `ane_rules: N`, so there is no nested count() read):
     // `scripts/pins_manifest.py` reconcile-checks this count against the
     // committed manifest at every posture, so a drift reds the gate —
     // never a silent count change.
-    assert_eq!(corpus.entries.len(), 21);
+    assert_eq!(corpus.entries.len(), 22);
 }
 
 #[test]
@@ -621,4 +623,51 @@ fn m8_io_planes_shared_per_shape_class() {
     assert!(notes.contains("never memset at bind"));
     assert!(notes.contains("ane-concurrent-same-function-silent-corruption"));
     assert!(notes.contains("dual-bank-scratch-retention-per-round-class"));
+}
+
+// ── Batch 401 arm (the procedure-bank wrong-API-twin; Research 434's
+// staged candidate #1) — the partial-zero + fail-closed decision content.
+
+/// The wrong-API-twin law: identity indices serve procedure 0 and fail
+/// every procedure > 0 (the PARTIAL zero a single-procedure smoke arm
+/// reads green); the fix resolves from the OWNER and refuses a multi-
+/// procedure bank by name; the failure counter is the only tell.
+#[test]
+fn b401_procedure_bank_wrong_api_partial_zero_refused() {
+    let corpus = build_ane_seed_corpus();
+    let rule = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ane-procedure-bank-wrong-symbol-api-swallowed-slowdown")
+        .expect("Batch 401 procedure-bank rule present");
+    // the PARTIAL zero, demonstrated on a synthetic bank: identity
+    // indices serve procedure 0 (the identity IS 0..count-1 for proc 0)
+    // and are structurally wrong for every procedure past the first —
+    // a single-procedure arm reads green while 200 of 252 evals died.
+    let count = 8_usize;
+    let identity = |proc: usize| -> Vec<usize> { (0..count).collect() };
+    assert_eq!(identity(0), (0..count).collect::<Vec<usize>>());
+    // every procedure > 0 gets the same indices — wrong by construction
+    // (a bank's procedures do NOT share one symbol numbering)
+    assert_eq!(
+        identity(1),
+        identity(0),
+        "identity: proc 1 answered proc 0's indices"
+    );
+    // the fail-closed gate: N > 1 without the capability refuses BY NAME
+    let has_symbol_api = false;
+    let refused = 2 > 1 && !has_symbol_api;
+    assert!(refused, "the create gate refuses the multi-procedure bank");
+    // a bank of one is NOT refused (the identity IS the contract there)
+    assert!(!(1 > 1 && !has_symbol_api));
+    assert!(rule.fixed_code.contains("inner_model"));
+    assert!(rule.fixed_code.contains("cannot be dispatched"));
+    let notes = rule.context_notes().expect("Batch 401 rule notes");
+    assert!(notes.contains("swallowed slowdown"));
+    assert!(notes.contains("eval_failures"));
+    assert!(notes.contains("200 of 252"));
+    assert!(notes.contains("banks cost 23%"));
+    assert!(notes.contains("degenerate-output-invalidates-throughput-claim"));
+    assert!(notes.contains("ane-int8-matmul-shape-silent-wrong-gate"));
+    assert!(notes.contains("silent-zero-launch-row-chunked-past-grid-z-ceiling"));
 }

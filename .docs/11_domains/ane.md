@@ -19,7 +19,7 @@ surface. Seed corpus = the six Research 409 candidates (the liquidcodec-ane
 distill, R1 fixed-window-mask-stateless-streaming B+ two-source lead +
 R2–R6), **suggestion-only, no proposers** (the fix lane declines), **parse-only
 validator**. Surfaced in `--info`'s corpus row (🧠 ane) + the pins manifest
-(`ane_rules: 21` — the Research-409 seed + the anemll wave (Batch 376) + the mlx-serve ANE seed wave M1–M8 (Batch 399, Research 432 §Queue slice 2: ddalcu/mlx-serve @ `96311b26` docs/reference.md) + the eval fixtures + router-eval + demonstrability
+(`ane_rules: 22` — the Research-409 seed + the anemll wave (Batch 376) + the mlx-serve ANE seed wave M1–M8 (Batch 399, Research 432 §Queue slice 2: ddalcu/mlx-serve @ `96311b26` docs/reference.md) + the procedure-bank wrong-API-twin (Batch 401, Research 434's staged candidate #1, same source) + the eval fixtures + router-eval + demonstrability
 `T3_DOMAINS[9]`.
 
 ## The pregate (`ane_pregate` = ["ane"])
