@@ -1,7 +1,7 @@
 # 398 — mlx-serve transcription batch (kernel_opt + rust_perf + sec)
 
 **Status:** LANDED 2026-11-23 (zed-f50f3819@m3) — T0–T12 DONE, T13 commit rides this push. kernel 1097→1105 (entries_gpu_161, 8 rules), rust_perf 386→387 (entries_93), sec 83→84 (the DiscoveryEgress family seed); +16 faces + the negative package in-rule; fixtures b398 triple standalone-compiled AND executed pre-entry (debug AND -O; the gate caught five arm defects + one shadowing, all fixed pre-landing); gates: lib 3949/0, clippy -D x3 postures, retrieval floor PASS (no re-pin), fmt PASSED, pins_manifest --write + bare green; score-bench/freeze NOT owed (zero clippy_lints delta asserted). Research 432 is the controlling verdict. **RETURN VISIT: Research 274 / Batch 242 landed 31 rules @ `1015f78` (2026-10-14) — this batch is the DELTA batch; every candidate below survived the B242 dedup re-run (coordinator-verified 2026-11-22).**
-**Claimed:** zed-f50f3819@m3, 1796463200, expires 2026-11-25T18:00:00+00:00
+**Lease closed:** zed-f50f3819@m3, 1796463200, expired 2026-11-25T18:00:00+00:00 — LANDED 2026-11-23, commit 6c66c6677 (the lease folded per the close law)
 
 ## Source
 
