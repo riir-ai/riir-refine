@@ -111,7 +111,6 @@ fn parse_log(name: &str, text: &str) -> SourceLog {
 
 #[derive(Clone)]
 struct Run {
-    key: String,
     ts: u64,
     /// indices into the FLAT global row vec
     rows: Vec<usize>,
@@ -132,7 +131,6 @@ fn group_runs(logs: &[SourceLog]) -> (Vec<EditEventRow>, Vec<Run>) {
                 map.insert(
                     key.clone(),
                     Run {
-                        key: key.clone(),
                         ts: row.ts,
                         rows: Vec::new(),
                         run_checks: row.run_checks,
