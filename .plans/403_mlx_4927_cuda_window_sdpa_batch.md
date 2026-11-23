@@ -1,6 +1,7 @@
 # 403 — Batch 404 staging: ml-explore/mlx #4927 [CUDA] faster window attention (Research 438)
 
-**Status:** STAGED — NOT CLAIMED (the next claimant opens it per the queue; verdict Research 438, 2026-11-23)
+**Status:** CLAIMED — Batch 404 in flight (verdict Research 438, 2026-11-23)
+**Claimed:** zed@m3, epoch 1795407176, expires 2026-11-25T04:12:56+00:00
 
 Source: ml-explore/mlx PR #4927, merged 2026-11-22 at `58d91ee` (commits `318a72d` + `5a7769e`, MIT). The CUDA window-attention dispatch: NYI gate removed, the window encoded into cuDNN's fe::graph diagonal-band attributes, version-gated admission, decode-side KV slicing, VJP fallback-not-throw. Target domain **kernel_opt** (category D lead). Prior MLX family: B197 (Metal SDPA-VJP), B205, 10-24 qmv verdict.
 
