@@ -61,3 +61,21 @@ Therefore the transplant's honest first posture is NOT "order compiles" — it i
 3. The floor might already be the answer (T1 deliberately runs first).
 4. In-repo precedent base rate for trained-head promotions ≈ break-even (`calibrated_dispatch` NOT-promoted, `set_rerank` refuted vs `rule_embed_poc` gated PASS) — hence the pre-registered stop.
 5. If T0's census comes back thin on negatives/rule-id diversity, the honest answer is "not yet" — Phase 0 fails its own gate.
+
+## Census 2026-11-24b (zed-8fa4839b@amo — the accrual sweep + the fleet-wide defect hunt)
+
+The lane's named unblock (real fix workloads accruing into the pool) executed directly: a 14-repo mechanical-debt probe (8 small repos riir-auth/reflexer/viewbridge/llm/kat/grams/ledger/shader: 0 oracle-anchored — clippy-clean by their fences; dapps 0; instinct 0; rethink 0; neuron-db 1; infer 2-BLOCKED-sibling; ai 3) → three real fix runs landed:
+- **neuron-db `5bd613e`** (12 corpus edits + 3 clippy-fix corrections, 8 files; the lane's oracle doesn't cover the cfg-test posture — honest manual fallback; clippy --all-features --all-targets GREEN, lib 482/0).
+- **ai `67ccc867b`** (155 files, 566+/522−; lib tests 957+827+kin_g1+civ_arbiter+swarm gates PASS).
+- **train `75bdfec`** (the REPAIR of the aad54860 latent class — 15 deref/try_into sites the 11-24 batch's default-posture verify never compiled; all-features GREEN).
+
+**Census re-run on the grown pool (8 logs / 359 rows / 11 runs):** T1 floor FAIL both variants (GLOBAL min false-decline 40.8% > 1%; RULE best τ 0.05 → 5.44% false, corr 2/17); T2 head **UNDECIDABLE-thin — fit runs 5 / rows 49 / reverts 0, eval 6 runs / 310 rows / 17 reverts: the timestamp median put EVERY revert eval-side; accrual continues (each new clean run moves the median until the train-7 revert run crosses to fit; the re-open bar fit-side ≥ ~5 stays the gate).**
+
+**Rulewright defect classes mined this session (17 + 13 instances) — the improvement queue:**
+1. **deref-drop class** (the `redundant_borrow`-family fixer drops `&*` on Arc/&mut receivers whose deref carried a trait bound — `DevicePtr`/`DeviceRepr`/signature-verifier impls; 10 instances across train-gpu/mmorpg sim_loop+sync_facades): the fixer must refuse where the receiver type is `Arc<_>`/`&mut _` and the call's trait bound was satisfied only via Deref — or compile-gate at `--all-features` (the sites are feature-gated CUDA/test code).
+2. **const-fn rewrite class** (`manual_range_contains` + `map_elided_lints`-family rewrote `const fn` bodies into `RangeInclusive::contains`/`Option::map` — both non-const-stable, E0658; 3 instances: thermal_lod, swing_clock): the fixer must decline any edit inside a `const fn` body.
+3. **closure-shadow class** (`redundant_closure` rewrote `|o| f(o)` → `f` where the param shadowed the outer binding — E0277 bound break; 1 instance probe_626).
+4. **used-binding deletion class** (a fixer deleted `let released_at = ` from a loop whose value is USED — 1 instance shop_seek).
+5. **with_capacity generation class** (the hint emits `Vec::with_capacity(<non-usize const>)` — u64/u32 type breaks ×6 + one truncated literal `6_` — every one reverted to HEAD's `Vec::new()`; the rule must type-check the capacity expr or emit `as usize`).
+
+The verify-gate gap these share: **the lane's per-package `cargo check --all-targets` ran at DEFAULT features while every landed defect lived behind non-default features (cfg(cuda)/cfg(test)/cfg(feature))** — the lane's own verify WARNING names the posture ("76 non-default features NOT compile-gated") but the run proceeds. Pre-registered i250 T0 lesson instantiated: the shadow-score posture MUST gate its verify posture at `--all-features` before any decline-guard ever auto-applies, else the decline-guard inherits exactly this blind class. Session: zed-8fa4839b@amo, 1795622000
