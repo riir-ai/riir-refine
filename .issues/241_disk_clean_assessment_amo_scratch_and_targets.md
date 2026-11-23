@@ -1,9 +1,19 @@
 # Issue 241: disk-clean assessment — amo scratch + target survey (2026-11-17)
 
 **Status:** Open — housekeeping assessment (list-first, deletions per the disk-clean contract).
-**Claimed:** zed-133t1@amo, 1795456100, expires 2026-11-24T17:28Z
+**Lease closed:** zed-133t1@amo, 1795456100, was expires 2026-11-24T17:28Z — folded at the 11-23 pass's landing (scope: pre-large-run hygiene before the queued 6h realesrgan render + mist-bars exclusive; the wt-mg quartet rows dissolved — see below).
 **Lease closed:** zed-c0c35a68@amo, 1794946800, was expires 2026-11-19T02:20:00Z (expired 2026-11-19T02:20Z, no landing - folded 2026-11-19 by the re-claim below; scope passed through unchanged)
 **Lease closed:** zed-6addfb44@amo, 1795060553, was expires 2026-11-21T04:40:00+00:00 (scope discharged same session - the assessment landed 6e618b1c; the issue remains the standing deep-clean list for the next low-disk event)
+
+## 2026-11-23 pass (zed-133t1@amo, epoch 1795456100) — quartet rows DISSOLVED by another lane; the gate-profile tree measured; 127 GB SAFE-class executed (201 → 321 GB avail)
+
+Trigger: pre-large-run hygiene (the skill's "before large builds" class) — amo carries a queued 6 h 720p→5K realesrgan render + a 45 m exclusive mist-bars job; df was 201 GB and down from 356 Gi on 11-20.
+
+- **Quartet rows DISSOLVED (not deleted here):** the four `wt-mg-045/wt2-mg-045/wt-mg-065/wt2-mg-065` merge-gate worktrees from the 11-20 survey (~703 G candidate) are GONE — removed by another lane between 11-20 and now (also explains most of the 356→201 drift being *net* growth, not gross). `git worktree list` shows only `/private/tmp/s111-mirror-seal/seal-remake` + `/Users/katopz/git/i1256-mirror/seal-remake` (both FOREIGN — s111 sprint mirror + the live i1256 lease; untouched).
+- **The growth is the gate-profile tree** (`seal-remake/target/gate*`, measured this pass): `gate` 111 G + `gate-lane1` 49 G + `gate-lane2` 36 G + `gate-lane3` 28 G + `gate-exclusive` 14 G = 238 G — the guard_parallel one-target-per-lane discipline writing full gate targets into the MAIN checkout's target dir. **Deleted (SAFE, autonomous):** `gate-lane1/2/3` + `gate-exclusive` — 127 GB, newest inner file 2026-11-21T14:23Z (2+ days dead), no flock holders (lsof per `.cargo-lock`), no process names them, recreated automatically by the next `guard_parallel.sh` run. **Kept:** `gate/` (111 G, 16 h fresh merge-gate cache — deleting burns a full gate rebuild for the next merge-gate lane; new standing row: teardown when the gate cadence allows a rebuild window), `release/` 29 G (LOAD-BEARING viewer+bot-host, verified present post-touch), `debug/` 22 G (active seal lanes defer, standing), editor-run/dev-vibe/soak (lane-owned, small), wasm32+tmp (empty).
+- **Unchanged verdicts:** `riir-ai/target` 95 G — sibling riir-games-mmorpg WIP STILL dirty (12+ files: quest_combat/authority_sim/genesis/strategy_grammar) → debug-half (73 G incl. 15 G incremental) stays deferred to a quiet window; `zed/target` 24 G — owner-built TODAY (zed-remote-server .gz 10:10 local) → never listed; `riir-train/data` IRREPLACEABLE (GGUF pins); cargo registries kept (healthy box).
+- **Post-touch verify:** df 201 → 321 GB; seal-viewer + seal-bot-host resolve; `cargo-refine --version` fine (0.6.0).
+- Housekeeping compaction note for the standing table: the **gate-profile tree is the new recurring consumer** — every `guard_parallel.sh` run writes 3–4 × 30–50 G lane targets. The build-hygiene law's isolated-target-dir discipline says gate lanes belong in `/tmp/<plan>`-class dirs, not the shared checkout target; routing future gate lanes to overflow dirs (or rm-ing lane targets at gate close, the teardown law) is the structural fix — a build-hygiene-skill item, not deletions each cycle.
 
 ## 2026-11-19 re-claim verdict (zed-6addfb44@amo, epoch 1795060553) — SAFE-class executed autonomously per the 2026-11-17 decree, 98 GB net recovered; the standing table re-measured with two stale rows dissolved
 
