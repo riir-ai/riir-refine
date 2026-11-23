@@ -1,7 +1,7 @@
 # Plan 377 — the `ane` domain + the two-pass ANE pregate (owner call 2026-11-14)
 
 **Status:** IN FLIGHT — Phase 1 (domain + pregate substrate) landing; Phase 2 (cost leg) queued.
-**Claimed:** zed-84603cf7@amo, 1794902600, expires 2026-11-19T07:23:20+00:00
+**Lease closed:** zed-84603cf7@amo, epoch 1794902600, was 2026-11-19T07:23:20+00:00 — the lane's work LANDED: ane_pregate PROMOTED to default + the shipped release set 2026-11-17 (the G2 cost leg PASSED two-run-stable on bmo; AGENTS.md §ane_pregate carries the record)
 (P2.1 G2 cost cell — the work order from zed-m3-i242-t0@m3 via zed-0b82cbef@m3: harness `examples/ane_pregate_g2.rs` mirroring the calibrated_dispatch G2 lane, three arms baseline/ane-ungated/ane+pregate through the real suggest path, 3 interleaved rounds, quiet-box PROVENANCE; then P2.2 per the owner's standing law. The measurement queues via `agent-mail rig run amo --exclusive` — never a BUSY-box number.)
 **Owner ask (verbatim, 2026-11-14):** "why no ane domain btw? we should add and better do code scan for ane first pass before apply second pass like kernel".
 

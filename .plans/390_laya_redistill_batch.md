@@ -1,7 +1,7 @@
 # Plan 390 — Batch 374: laya-onnx/0.4.35 re-distill (rust_perf batching lead + serving transcription)
 
 **Status:** LANDED 2026-11-20 (zed-6ef0ba37@m3, epoch 1795173677 — Batch 374: 5 rules + 4 faces; GOAT cell Bench 163 ParetoDominant 3/0/0 two-run stable; R7 dropped thin; R9 placement corrected to its own rule; the T9 pin-refresh disposition resolved by this lane pre-batch as reflex 128 PIN HELD; T0 corrections carried into the research note + the corpus notes; claim was (YES B+; verdict session zed-m3-laya@m3, 2026-11-20); executing from zed-6ef0ba37@m3 the same day (reflex 128's lane — T9's pin-refresh disposition already RESOLVED by that lane: recommendation routed AND executed, reflex 128 PIN HELD, commits a1fc4a5a/17463a3d; record the resolution in the snapshot landing row, no filing owed)
-**Claimed:** zed-6ef0ba37@m3, 1795173677, expires 2026-11-22T11:21:17Z
+**Lease closed:** zed-6ef0ba37@m3, epoch 1795173677, was 2026-11-22T11:21:17+00:00 — LANDED as Batch 374 2026-11-20 (the laya redistill; 5 rules + 4 faces, GOAT cell Bench 163 ParetoDominant; the snapshot LANDING row is the record)
 
 Source: `github.com/NandhaKishorM/laya` — verdict pin `416dd9ed20da2d43fc40e23712e9adceefabf634` (tip 2026-11-20; FAST-MOVING — T0 re-pins and re-verifies). Apache-2.0. Clone ephemeral at `.raw/laya`, removed at batch close.
 
