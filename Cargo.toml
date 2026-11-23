@@ -2436,5 +2436,16 @@ required-features = ["latent_retrieval"]
 name = "band_ood_cost"
 required-features = ["latent_retrieval"]
 
+# Issue 250 T1 — the retrieval-similarity floor census (REPORT-ONLY, exit 0;
+# --self-test pins the floor arithmetic). Reads .refine/edit_events.jsonl
+# logs (the T1b per-edit event log), scores each edit's diff pair against
+# the FIT accepted fixes by trigram Jaccard, and evaluates the decline
+# policy against the pre-registered G3/false-decline bars. Ungated imports
+# (blueprint is always-compiled), so no required-features row.
+# Run: cargo run --release --example similarity_floor_census -- [--self-test] \
+#   [--events <path>]... [--min-runs <n>] [--tau <t>] [REPO_ROOT]...
+[[example]]
+name = "similarity_floor_census"
+
 [[example]]
 name = "read_episode_census"
