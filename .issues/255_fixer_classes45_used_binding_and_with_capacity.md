@@ -1,7 +1,7 @@
 # Issue 255: fixer decline-guards for census defect classes 4–5 (used-binding deletion + with_capacity type breaks)
 
 **Status:** Open — claimed post-clear; **implementation BLOCKED on the shared worktree** (the Batch-407 lane's uncommitted hunks hold `src/domain/rust_perf/corpus/{mod,tests}.rs`, `src/health_views.rs`, `AGENTS.md` — the class-5 fixtures land in corpus tests; unblocks when their landing clears the tree; their claimability wake adjudicates 2026-11-25T07:15Z at `zed-8a6abf92`). Source of record: `.issues/250` §"Rulewright defect classes mined this session" (classes 4–5 of 5; classes 1–3 CLOSED by the cfg-gate escalation `e4b2dd31`).
-**Claimed:** zed-896d73d6@amo, 1795477158, expires 2026-11-25T05:39:00+00:00
+**Claimed:** zed-896d73d6@amo, 1795477158, expires 2026-11-26T07:00:00+00:00
 
 ## The classes (from the i250 census, 17 + 13 instances)
 
