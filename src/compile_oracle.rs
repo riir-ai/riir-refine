@@ -169,12 +169,27 @@ impl CheckRunner {
     /// manifest — stderr surfaced + enriched), or exits cleanly with no
     /// JSON on stdout (the zero-JSON tightening).
     pub fn run_check(&self, pkg: &Path) -> Result<CheckOutcome, String> {
+        self.run_check_with(pkg, &[])
+    }
+
+    /// One check in `pkg` with per-invocation extra args appended AFTER
+    /// the global [`CheckRunner::extra_args`] (the i250 cfg-gate escalation
+    /// passes `--all-features` per armed package; the global `--verify-args`
+    /// passthrough still applies). Same contract as [`CheckRunner::run_check`].
+    ///
+    /// # Errors
+    ///
+    /// Identical to [`CheckRunner::run_check`].
+    pub fn run_check_with(&self, pkg: &Path, extra: &[&str]) -> Result<CheckOutcome, String> {
         let mut cmd = Command::new(&self.cargo_bin);
         cmd.current_dir(pkg)
             .arg("check")
             .arg("--all-targets")
             .arg("--message-format=json");
         for a in &self.extra_args {
+            cmd.arg(a);
+        }
+        for a in extra {
             cmd.arg(a);
         }
         if self.isolate_env {

@@ -101,6 +101,40 @@ impl Fixture {
         }
     }
 
+    /// A fixture crate declaring one non-default feature with the edit
+    /// target inside its cfg gate — the i250 cfg-gate escalation arms'
+    /// shape (the edit flips the GATED fn's body `2` → `3`).
+    fn new_gated(tag: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("fvfx_matrix_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"fvfx_matrix\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\
+             [features]\nfvfx_gate = []\n[lib]\npath = \"src/lib.rs\"\n",
+        )
+        .unwrap();
+        let original = "pub fn existing() -> usize {\n    1\n}\n\n#[cfg(feature = \"fvfx_gate\")]\npub fn gated() -> usize {\n    2\n}\n";
+        let lib = src_dir.join("lib.rs");
+        std::fs::write(&lib, original).unwrap();
+        Self {
+            dir,
+            lib,
+            original: original.to_string(),
+        }
+    }
+
+    /// The gated fixture's edit: the gated fn's body `2` → `3` on line 7.
+    fn edit_set_gated(&self) -> FileEditSet {
+        FileEditSet {
+            path: self.lib.clone(),
+            original: self.original.clone(),
+            fixed: self.original.replace("    2\n", "    3\n"),
+            edits: vec![edit("some-rule", 7, "3", "2")],
+        }
+    }
+
     fn lib_on_disk(&self) -> String {
         std::fs::read_to_string(&self.lib).unwrap()
     }
@@ -448,4 +482,103 @@ fn refusal_tally_rollup_is_fixed_order_and_additive() {
         run.rollup_line(),
         "verify refusals: spawn_failure 2 · incomplete_check 4 · no_manifest 1"
     );
+}
+
+// ── i250 cfg-gate escalation ────────────────────────────────────────────
+
+/// The escalated package's checks carry `--all-features` — baseline AND
+/// rounds. The fake cargo logs its args; the fixture declares the feature
+/// so the arming story is real even though the fake cargo decides the
+/// verdicts.
+#[test]
+#[cfg(unix)]
+fn arm_cfg_escalation_checks_carry_all_features() {
+    let fx = Fixture::new_gated("esclog");
+    let log = fx.dir.join("args.log");
+    let marker = fx.dir.join("baseline_done");
+    let body = format!(
+        "echo \"$@\" >> \"{}\"\nif [ -f \"{}\" ]; then {ARTIFACT}; exit 0; fi\ntouch \"{}\"; {ARTIFACT}; exit 0\n",
+        log.display(),
+        marker.display(),
+        marker.display()
+    );
+    let script = fake_cargo(&fx.dir, "fake_cargo_esc", &body);
+    let pkgs = std::collections::HashSet::from([fx.dir.clone()]);
+    let report = FixVerifier::with_cargo_bin(script.display().to_string())
+        .with_escalated_pkgs(pkgs)
+        .verify(&[fx.edit_set_gated()]);
+    assert!(report.ran && report.baseline_clean, "{report:?}");
+    assert_eq!(report.kept_edits, 1, "{report:?}");
+    assert_eq!(report.escalated_pkgs, vec![fx.dir.clone()], "{report:?}");
+    assert!(report.escalation_fallbacks.is_empty(), "{report:?}");
+    let logged = std::fs::read_to_string(&log).unwrap();
+    let lines: Vec<&str> = logged.lines().collect();
+    assert!(
+        lines.len() >= 2,
+        "baseline + at least one round expected: {logged}"
+    );
+    assert!(
+        lines.iter().all(|l| l.contains("--all-features")),
+        "every escalated check carries --all-features: {logged}"
+    );
+}
+
+/// A broken escalated baseline (pre-existing all-features breakage — the
+/// FAKE cargo fails only when invoked WITH `--all-features` before the
+/// marker exists, i.e. the baseline phase) falls back to the default
+/// posture mid-verify: the package re-checks clean at default, the edit
+/// lands, the fallback is disclosed, and the later rounds never carry
+/// `--all-features` again.
+#[test]
+#[cfg(unix)]
+fn arm_cfg_escalation_falls_back_when_all_features_baseline_broken() {
+    let fx = Fixture::new_gated("escfb");
+    let log = fx.dir.join("args.log");
+    let marker = fx.dir.join("baseline_done");
+    // Baseline phase + escalated args → one error diagnostic + exit 1
+    // (Errors verdict — not clean, so the fallback fires); everything
+    // else → artifact JSON + exit 0.
+    let body = format!(
+        "echo \"$@\" >> \"{}\"\ncase \"$*\" in *--all-features*) if [ ! -f \"{}\" ]; then echo '{{\"reason\":\"compiler-message\",\"message\":{{\"level\":\"error\",\"spans\":[{{\"file_name\":\"src/lib.rs\",\"line_start\":7,\"line_end\":7}}],\"children\":[]}}}}'; exit 1; fi ;; esac\nif [ -f \"{}\" ]; then {ARTIFACT}; exit 0; fi\ntouch \"{}\"; {ARTIFACT}; exit 0\n",
+        log.display(),
+        marker.display(),
+        marker.display(),
+        marker.display()
+    );
+    let script = fake_cargo(&fx.dir, "fake_cargo_escfb", &body);
+    let pkgs = std::collections::HashSet::from([fx.dir.clone()]);
+    let report = FixVerifier::with_cargo_bin(script.display().to_string())
+        .with_escalated_pkgs(pkgs)
+        .verify(&[fx.edit_set_gated()]);
+    assert!(report.ran && report.baseline_clean, "{report:?}");
+    assert_eq!(
+        report.kept_edits, 1,
+        "the edit verifies at the default posture: {report:?}"
+    );
+    assert!(
+        report.escalated_pkgs.is_empty(),
+        "the package fell back: {report:?}"
+    );
+    assert_eq!(
+        report.escalation_fallbacks,
+        vec![fx.dir.clone()],
+        "{report:?}"
+    );
+    let logged = std::fs::read_to_string(&log).unwrap();
+    let lines: Vec<&str> = logged.lines().collect();
+    assert!(
+        lines.len() >= 3,
+        "escalated baseline + default baseline + round: {logged}"
+    );
+    assert!(
+        lines[0].contains("--all-features"),
+        "the FIRST (escalated) baseline carries --all-features: {logged}"
+    );
+    assert!(
+        lines[1..].iter().all(|l| !l.contains("--all-features")),
+        "after the fallback no check carries --all-features: {logged}"
+    );
+    // Three checks total: the escalated baseline, its default re-check,
+    // and the post-edit round.
+    assert_eq!(report.n_checks, 3, "{report:?}");
 }

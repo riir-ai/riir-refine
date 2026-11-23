@@ -18420,13 +18420,30 @@ fn main() {
             .as_deref()
             .map(|s| s.split_whitespace().map(str::to_string).collect())
             .unwrap_or_default();
-        let verifier = riir_refine::fix_verify::FixVerifier::new().with_extra_args(extra.clone());
+        // i250 cfg-gate escalation: when the posture is the auto default
+        // (no --verify-args) and any edited file carries cfg-gated regions
+        // the default-features baseline cannot provably compile, that
+        // package's checks run at --all-features — the census defect
+        // classes (deref-drop in cfg(cuda) code, const-fn rewrites in
+        // gated thermal/swing code, ...) landed only because the gate
+        // compiled them to nothing. Fallback + disclosure live in the
+        // verifier.
+        let escalation_pkgs: std::collections::HashSet<PathBuf> =
+            if riir_refine::fix_verify::cfg_gate_escalation_armed(args.verify_args.as_deref()) {
+                riir_refine::fix_verify::cfg_gate_escalation_packages(&verify_batches)
+            } else {
+                std::collections::HashSet::new()
+            };
+        let verifier = riir_refine::fix_verify::FixVerifier::new()
+            .with_extra_args(extra.clone())
+            .with_escalated_pkgs(escalation_pkgs.clone());
         // Issue 031 H3: the verify baseline is default-features cargo check
         // — code behind non-default features is NOT compile-gated (the
         // katgpt-pruners batch shipped 2 feature-gated breaks past verify:
         // a u8-const with_capacity E0308 + an E0631 fn-path coercion). Warn
         // loudly when an owning package has non-default features and the
-        // caller did not override the baseline via --verify-args.
+        // caller did not override the baseline via --verify-args. A package
+        // the i250 escalation already arms is covered — no warning.
         if args.verify_args.is_none() {
             let mut warned: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
             for b in &verify_batches {
@@ -18434,6 +18451,9 @@ fn main() {
                     continue;
                 };
                 if !warned.insert(pkg.clone()) {
+                    continue;
+                }
+                if escalation_pkgs.contains(&pkg) {
                     continue;
                 }
                 let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
@@ -18490,6 +18510,25 @@ fn main() {
                     r.rule_id,
                     r.line,
                     if r.whole_file { " (whole file)" } else { "" }
+                );
+            }
+            // i250 cfg-gate escalation disclosures.
+            if !report.escalated_pkgs.is_empty() {
+                let names: Vec<String> = report
+                    .escalated_pkgs
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
+                eprintln!(
+                    "verify: cfg-gate escalation — {} package(s) verified at --all-features: {}",
+                    names.len(),
+                    names.join(", ")
+                );
+            }
+            for p in &report.escalation_fallbacks {
+                eprintln!(
+                    "verify: cfg-gate escalation FELL BACK in {} — the --all-features baseline does not compile (pre-existing); gated edits stay uncertified",
+                    p.display()
                 );
             }
         }
@@ -18630,12 +18669,17 @@ fn main() {
                     let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
                         continue;
                     };
+                    // i250: an escalated-and-surviving package verified at
+                    // --all-features — the audit reads the all-features set
+                    // (undecidable non-feature gates still mark, honestly).
+                    let fs_args: Option<&str> = if report.escalated_pkgs.contains(&pkg) {
+                        Some("--all-features")
+                    } else {
+                        args.verify_args.as_deref()
+                    };
                     sets.insert(
                         pkg.clone(),
-                        riir_refine::fix_verify::feature_set_from_args(
-                            &text,
-                            args.verify_args.as_deref(),
-                        ),
+                        riir_refine::fix_verify::feature_set_from_args(&text, fs_args),
                     );
                 }
                 if !parents.contains_key(&b.path) {
@@ -18698,10 +18742,14 @@ fn main() {
                     let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
                         continue;
                     };
-                    let set = riir_refine::fix_verify::feature_set_from_args(
-                        &text,
-                        args.verify_args.as_deref(),
-                    );
+                    // i250: an escalated-and-surviving package verified at
+                    // --all-features — the audit reads the all-features set.
+                    let fs_args: Option<&str> = if report.escalated_pkgs.contains(&pkg) {
+                        Some("--all-features")
+                    } else {
+                        args.verify_args.as_deref()
+                    };
+                    let set = riir_refine::fix_verify::feature_set_from_args(&text, fs_args);
                     sets.insert(pkg.clone(), (text, set));
                 }
                 let Some((text, set)) = sets.get(&pkg) else {

@@ -47,6 +47,27 @@
 //! 6. Loop (bounded by the edit count) until a clean check or everything
 //!    is reverted.
 //!
+//! ## The i250 cfg-gate escalation
+//!
+//! The loop's posture is whatever `--verify-args` spells — by default the
+//! crate's default features, which compile cfg-gated modules to NOTHING
+//! (the green-zero class). A kept edit inside such a module therefore
+//! read "verified" uncompiled — the defect classes the 2026-11-24 fleet
+//! census mined (deref-drops in `cfg(cuda)` verifier code, `const fn`
+//! rewrites behind feature gates, ...) all landed through exactly that
+//! hole. The AUTO posture now escalates: when no `--verify-args` is
+//! passed and an edited file carries a cfg region the posture cannot
+//! provably compile ([`cfg_gate_escalation_packages`]), that package's
+//! checks (baseline + rounds) run with `--all-features` — the baseline
+//! runs at the escalated posture INSTEAD of the default one, so the
+//! clean path costs no extra check. A package whose escalated baseline
+//! does not compile (pre-existing all-features breakage) falls back to
+//! the default posture mid-verify and keeps the incumbent semantics +
+//! the post-verify audits; the fallback is disclosed on the report,
+//! never a refusal. Demote: `RIIR_REFINE_VERIFY_ALL_FEATURES=0` (the
+//! exact literal). A caller-passed `--verify-args` owns the posture —
+//! no escalation.
+//!
 //! ## Failure-mode honesty
 //!
 //! - Interrupted mid-verify (Ctrl-C): the tree holds exactly what
@@ -166,6 +187,16 @@ pub struct VerifyReport {
     /// stats doctrine): WHY verification refused, first-class.
     /// Output-only; the run roll-up prints the tally.
     pub refusals: RefusalTally,
+    /// i250 cfg-gate escalation: packages whose checks ran at
+    /// `--all-features` (post-fallback survivors, sorted). These packages'
+    /// cfg-gated edits were genuinely compiled by the gate — the P20
+    /// audit reads them against the all-features set.
+    pub escalated_pkgs: Vec<PathBuf>,
+    /// Packages whose escalation fell back to the default posture
+    /// mid-verify: the escalated (pre-edit) baseline did not compile —
+    /// pre-existing all-features breakage, disclosed, never a refusal
+    /// (sorted).
+    pub escalation_fallbacks: Vec<PathBuf>,
 }
 
 /// Per-class refusal tallies (plan 329 P2 — the sccache per-cause stats
@@ -255,6 +286,14 @@ struct CheckOutcome {
 /// path.
 pub struct FixVerifier {
     runner: CheckRunner,
+    /// i250 cfg-gate escalation: packages whose checks (baseline + rounds)
+    /// run with `--all-features`, armed by the caller from
+    /// [`cfg_gate_escalation_packages`].
+    escalated_pkgs: std::collections::HashSet<PathBuf>,
+    /// Packages whose escalation fell back mid-verify (the escalated
+    /// baseline did not compile). Interior-mutable: the baseline discovers
+    /// a fallback while `verify` holds `&self`.
+    escalation_fallbacks: std::cell::RefCell<std::collections::HashSet<PathBuf>>,
     /// Issue 171 T0b: skip re-checking packages a round's reverts could
     /// not reach. Defaults to [`scoped_recheck_default`].
     scoped_recheck: bool,
@@ -269,6 +308,84 @@ pub fn scoped_recheck_default() -> bool {
         && std::env::var("RIIR_REFINE_SCOPED_RECHECK").map_or(true, |v| v != "0")
 }
 
+/// i250 cfg-gate escalation default posture: armed unless the exact
+/// literal demote `RIIR_REFINE_VERIFY_ALL_FEATURES=0` is set (the
+/// env-switch law: a default-on arm's env is DEMOTE-ONLY — unset = ON,
+/// the exact `0` restores the incumbent byte-identically).
+#[must_use]
+pub fn cfg_gate_escalation_default() -> bool {
+    std::env::var("RIIR_REFINE_VERIFY_ALL_FEATURES").map_or(true, |v| v != "0")
+}
+
+/// The caller owns the verify posture whenever `--verify-args` is passed
+/// (feature flags there could conflict with `--all-features`, and the
+/// posture is then already explicit); the escalation is the AUTO posture
+/// only. [`cfg_gate_escalation_default`] supplies the demote env.
+#[must_use]
+pub fn cfg_gate_escalation_armed(verify_args: Option<&str>) -> bool {
+    verify_args.is_none() && cfg_gate_escalation_default()
+}
+
+/// i250: the packages owning at least one edit behind a cfg gate the
+/// default-features verify posture cannot PROVABLY compile — the set to
+/// hand to [`FixVerifier::with_escalated_pkgs`]. The armed posture is
+/// always the default-features baseline (arming itself requires no
+/// `--verify-args`, see [`cfg_gate_escalation_armed`]), so the feature
+/// sets here read the manifests with no args. `test` atoms count as
+/// enabled (the `--all-targets` baseline compiles them), matching
+/// [`eval_cfg`].
+#[must_use]
+pub fn cfg_gate_escalation_packages(files: &[FileEditSet]) -> std::collections::HashSet<PathBuf> {
+    let mut out = std::collections::HashSet::new();
+    let mut sets: HashMap<PathBuf, FeatureSet> = HashMap::new();
+    for f in files {
+        let Some(pkg) = owning_package_root(&f.path) else {
+            continue;
+        };
+        if out.contains(&pkg) {
+            continue;
+        }
+        let set = sets.entry(pkg.clone()).or_insert_with(|| {
+            let text = std::fs::read_to_string(pkg.join("Cargo.toml")).unwrap_or_default();
+            feature_set_from_args(&text, None)
+        });
+        if source_has_unsat_cfg_regions(&f.fixed, set) {
+            out.insert(pkg);
+        }
+    }
+    out
+}
+
+/// Does this source carry ANY cfg region the feature set does not
+/// provably enable — file-level inner `#![cfg]` attrs as whole-file
+/// regions plus [`item_cfg_regions`]'s own walk (nested mods, impls and
+/// statements included)? The arming predicate for
+/// [`cfg_gate_escalation_packages`]; the module-decl gate (Issue 182) is
+/// NOT resolved here (no parent sources) — a mod-decl-gated file keeps
+/// its post-verify audit mark without arming the escalation.
+fn source_has_unsat_cfg_regions(source: &str, set: &FeatureSet) -> bool {
+    let Ok(parsed) = syn::parse_file(source) else {
+        // The verifier refuses unparseable output anyway; nothing to arm.
+        return false;
+    };
+    let total = source.lines().count().max(1);
+    let mut regions: Vec<CfgRegion> = Vec::new();
+    // A file-level inner attr gates the whole file.
+    let file_exprs: Vec<CfgExpr> = parsed.attrs.iter().filter_map(cfg_expr_from_attr).collect();
+    if !file_exprs.is_empty() {
+        regions.push(CfgRegion {
+            start_line: 1,
+            end_line: total,
+            expr: conjoin(file_exprs),
+            decl_parent: None,
+        });
+    }
+    for item in &parsed.items {
+        item_cfg_regions(item, &mut regions);
+    }
+    regions.iter().any(|r| region_gap(r, set).is_some())
+}
+
 impl Default for FixVerifier {
     fn default() -> Self {
         Self::new()
@@ -280,6 +397,8 @@ impl FixVerifier {
     pub fn new() -> Self {
         Self {
             runner: CheckRunner::new(),
+            escalated_pkgs: std::collections::HashSet::new(),
+            escalation_fallbacks: std::cell::RefCell::new(std::collections::HashSet::new()),
             scoped_recheck: scoped_recheck_default(),
         }
     }
@@ -289,6 +408,17 @@ impl FixVerifier {
     #[must_use]
     pub fn with_scoped_recheck(mut self, on: bool) -> Self {
         self.scoped_recheck = on;
+        self
+    }
+
+    /// Arm the i250 cfg-gate escalation: these packages' checks (baseline
+    /// and rounds) run with `--all-features`, so cfg-gated edits are
+    /// genuinely compiled before they can land. A package whose escalated
+    /// baseline does not compile falls back to the default posture
+    /// mid-verify (disclosed on the report), never fails the run.
+    #[must_use]
+    pub fn with_escalated_pkgs(mut self, pkgs: std::collections::HashSet<PathBuf>) -> Self {
+        self.escalated_pkgs = pkgs;
         self
     }
 
@@ -305,6 +435,8 @@ impl FixVerifier {
     pub fn with_cargo_bin(bin: impl Into<String>) -> Self {
         Self {
             runner: CheckRunner::new().with_cargo_bin(bin),
+            escalated_pkgs: std::collections::HashSet::new(),
+            escalation_fallbacks: std::cell::RefCell::new(std::collections::HashSet::new()),
             scoped_recheck: scoped_recheck_default(),
         }
     }
@@ -332,29 +464,25 @@ impl FixVerifier {
         // Group by owning package so each check compiles the crate the
         // edits live in (cross-file effects inside the package are caught
         // by the whole-package check).
-        let mut by_pkg: HashMap<PathBuf, Vec<usize>> = HashMap::new();
-        for (idx, f) in touched.iter().enumerate() {
-            let Some(pkg) = owning_package_root(&f.path) else {
+        let by_pkg = match group_touched_by_pkg(&touched) {
+            Ok(m) => m,
+            Err(path) => {
                 report.refusals.no_manifest += 1;
-                report.error = Some(format!("no Cargo.toml above {}", f.path.display()));
+                report.error = Some(format!("no Cargo.toml above {}", path.display()));
+                self.finalize_escalation(&mut report);
                 return report;
-            };
-            by_pkg.entry(pkg).or_default().push(idx);
-        }
+            }
+        };
         let mut pkgs: Vec<PathBuf> = by_pkg.keys().cloned().collect();
         pkgs.sort();
         // touched-file index → owning package index (T0b bookkeeping).
-        let mut pkg_of: Vec<usize> = vec![0; touched.len()];
-        for (pi, pkg) in pkgs.iter().enumerate() {
-            for &idx in &by_pkg[pkg] {
-                pkg_of[idx] = pi;
-            }
-        }
+        let pkg_of = pkg_index_of(&touched, &by_pkg);
 
         // 1. Baseline on the unmodified tree (nothing has been written
         // yet — a broken tree cannot host a verification).
         if let Err(msg) = self.run_baseline(&pkgs, &mut report) {
             report.error = Some(msg);
+            self.finalize_escalation(&mut report);
             return report;
         }
         if !report.baseline_clean {
@@ -397,6 +525,7 @@ impl FixVerifier {
                     // nothing unverified behind.
                     report.error = Some(e);
                     restore_all(&touched);
+                    self.finalize_escalation(&mut report);
                     return report;
                 }
             };
@@ -438,6 +567,7 @@ impl FixVerifier {
         }
         report.ended_clean = ended_clean;
         tally_loop_exhaustion(&mut report, ended_clean);
+        self.finalize_escalation(&mut report);
         report
     }
 
@@ -526,27 +656,47 @@ impl FixVerifier {
     /// set on the report).
     fn run_baseline(&self, pkgs: &[PathBuf], report: &mut VerifyReport) -> Result<(), String> {
         for pkg in pkgs {
-            let outcome = match self.run_check(pkg) {
-                Ok(o) => o,
-                Err(e) => {
-                    tally_run_check_err(report, &e);
-                    return Err(e);
-                }
-            };
-            report.n_checks += 1;
-            let errors = parse_error_locations(&outcome.json);
-            // The shared verdict's Errors and Incomplete arms both refuse
-            // the baseline: a broken tree cannot host a verification, and a
-            // KILLED baseline check must not pass as clean either (Issue
-            // 841).
-            if check_verdict(outcome.exit_ok, !errors.is_empty()) == CheckVerdict::Clean {
-                continue;
+            if !self.baseline_clean_for(pkg, report)? {
+                report.baseline_clean = false;
+                return Ok(()); // message set by the caller from the flag
             }
-            report.baseline_clean = false;
-            return Ok(()); // message set by the caller from the flag
         }
         report.baseline_clean = true;
         Ok(())
+    }
+
+    /// One package's baseline verdict, with the i250 cfg-gate escalation
+    /// fallback: an escalated package checks at `--all-features` first;
+    /// a broken escalated baseline is PRE-EXISTING all-features breakage
+    /// (this is the unedited tree), so the package falls back to the
+    /// default posture and re-checks — the fallback is disclosed on the
+    /// report, never a refusal. `false` = the FINAL posture's baseline is
+    /// broken.
+    fn baseline_clean_for(&self, pkg: &Path, report: &mut VerifyReport) -> Result<bool, String> {
+        let mut clean = self.baseline_check_clean(pkg, report)?;
+        if !clean && self.escalation_active(pkg) {
+            report.escalation_fallbacks.push(pkg.to_path_buf());
+            self.escalation_fallbacks
+                .borrow_mut()
+                .insert(pkg.to_path_buf());
+            clean = self.baseline_check_clean(pkg, report)?;
+        }
+        Ok(clean)
+    }
+
+    /// One baseline check, counted and classified through the shared
+    /// verdict (Issue 841: Errors AND Incomplete both refuse).
+    fn baseline_check_clean(&self, pkg: &Path, report: &mut VerifyReport) -> Result<bool, String> {
+        let outcome = match self.run_check(pkg) {
+            Ok(o) => o,
+            Err(e) => {
+                tally_run_check_err(report, &e);
+                return Err(e);
+            }
+        };
+        report.n_checks += 1;
+        let errors = parse_error_locations(&outcome.json);
+        Ok(check_verdict(outcome.exit_ok, !errors.is_empty()) == CheckVerdict::Clean)
     }
 
     /// One package check, classified through the shared verdict (Issue
@@ -590,15 +740,44 @@ impl FixVerifier {
     }
 
     /// One `cargo check --all-targets --message-format=json` run in `pkg`,
-    /// delegated to the shared [`CheckRunner`] (Plan 019 T0.3). Fails (Err)
-    /// only when cargo could not run at all — compile errors come back as
-    /// `Ok(outcome)` with `exit_ok = false` + error diagnostics in the JSON.
+    /// delegated to the shared [`CheckRunner`] (Plan 019 T0.3) with the
+    /// package's escalation posture appended (i250: `--all-features` while
+    /// armed and not fallen back). Fails (Err) only when cargo could not
+    /// run at all — compile errors come back as `Ok(outcome)` with
+    /// `exit_ok = false` + error diagnostics in the JSON.
     fn run_check(&self, pkg: &Path) -> Result<CheckOutcome, String> {
-        let outcome = self.runner.run_check(pkg)?;
+        let extra: &[&str] = if self.escalation_active(pkg) {
+            &["--all-features"]
+        } else {
+            &[]
+        };
+        let outcome = self.runner.run_check_with(pkg, extra)?;
         Ok(CheckOutcome {
             json: outcome.json,
             exit_ok: outcome.exit_ok,
         })
+    }
+
+    /// Is `pkg` currently verifying at the escalated posture? Armed by
+    /// the caller AND not yet fallen back (the fallback flips mid-verify).
+    fn escalation_active(&self, pkg: &Path) -> bool {
+        self.escalated_pkgs.contains(pkg) && !self.escalation_fallbacks.borrow().contains(pkg)
+    }
+
+    /// Fold the escalation bookkeeping into the report — called at every
+    /// terminal point of [`FixVerifier::verify`].
+    fn finalize_escalation(&self, report: &mut VerifyReport) {
+        let fb = self.escalation_fallbacks.borrow();
+        report.escalated_pkgs = self
+            .escalated_pkgs
+            .iter()
+            .filter(|p| !fb.contains(*p))
+            .cloned()
+            .collect();
+        report.escalation_fallbacks = fb.iter().cloned().collect();
+        drop(fb);
+        report.escalated_pkgs.sort();
+        report.escalation_fallbacks.sort();
     }
 }
 
@@ -610,6 +789,34 @@ fn tally_loop_exhaustion(report: &mut VerifyReport, ended_clean: bool) {
     if !ended_clean && report.kept_edits > 0 {
         report.refusals.loop_exhausted += 1;
     }
+}
+
+/// Group the touched files by owning package; `Err` names the first file
+/// with no Cargo.toml above it. Split out of `verify` (the lines gate).
+fn group_touched_by_pkg(touched: &[&FileEditSet]) -> Result<HashMap<PathBuf, Vec<usize>>, PathBuf> {
+    let mut by_pkg: HashMap<PathBuf, Vec<usize>> = HashMap::new();
+    for (idx, f) in touched.iter().enumerate() {
+        let Some(pkg) = owning_package_root(&f.path) else {
+            return Err(f.path.clone());
+        };
+        by_pkg.entry(pkg).or_default().push(idx);
+    }
+    Ok(by_pkg)
+}
+
+/// touched-file index → owning-package index (T0b bookkeeping), packages
+/// visited in sorted order so the indexes are deterministic. Split out of
+/// `verify` (the lines gate).
+fn pkg_index_of(touched: &[&FileEditSet], by_pkg: &HashMap<PathBuf, Vec<usize>>) -> Vec<usize> {
+    let mut pkgs: Vec<&PathBuf> = by_pkg.keys().collect();
+    pkgs.sort();
+    let mut pkg_of = vec![0; touched.len()];
+    for (pi, pkg) in pkgs.iter().enumerate() {
+        for &idx in &by_pkg[*pkg] {
+            pkg_of[idx] = pi;
+        }
+    }
+    pkg_of
 }
 
 /// Plan 329 P2: classify a `run_check` `Err` into its refusal class —
@@ -3593,5 +3800,129 @@ mod tests {
         // Silent-when-zero: the default tally renders as no line at all.
         assert_eq!(VerifyReport::default().refusals, RefusalTally::default());
         assert_eq!(VerifyReport::default().refusals.rollup_line(), "");
+    }
+
+    // ── i250 cfg-gate escalation ────────────────────────────────────────
+
+    /// The arming detector: a file carrying a cfg region the default
+    /// feature set does not provably compile arms its owning package;
+    /// an ungated file — and a `cfg(test)`-gated one (the `--all-targets`
+    /// baseline compiles it, [`eval_cfg`]'s Test=True) — does not.
+    #[test]
+    fn escalation_detector_arms_only_on_unsat_cfg_regions() {
+        let tmp = std::env::temp_dir().join(format!("fv_esc_det_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src_dir = tmp.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            tmp.join("Cargo.toml"),
+            "[package]\nname = \"fv_esc_det\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\
+             [features]\nesc_gate = []\n[lib]\npath = \"src/lib.rs\"\n",
+        )
+        .unwrap();
+        let gated = "pub fn keep() -> usize {\n    1\n}\n\n#[cfg(feature = \"esc_gate\")]\npub fn gated() -> usize {\n    2\n}\n";
+        let ungated = "pub fn keep() -> usize {\n    1\n}\n";
+        let test_gated = "pub fn keep() -> usize {\n    1\n}\n\n#[cfg(test)]\nmod t {\n    pub fn inner() -> usize {\n        2\n    }\n}\n";
+        let mk = |name: &str, content: &str, line: usize| FileEditSet {
+            path: tmp.join("src").join(name),
+            original: content.to_string(),
+            fixed: content.replace("    1\n", "    2\n"),
+            edits: vec![edit("r", line, "2", "1")],
+        };
+        // The feature-gated file arms the package.
+        let pkgs = cfg_gate_escalation_packages(&[mk("lib.rs", gated, 2)]);
+        assert_eq!(pkgs.len(), 1, "{pkgs:?}");
+        assert!(pkgs.contains(&tmp), "{pkgs:?}");
+        // The ungated twin does not.
+        let pkgs = cfg_gate_escalation_packages(&[mk("plain.rs", ungated, 2)]);
+        assert!(pkgs.is_empty(), "{pkgs:?}");
+        // cfg(test) counts as enabled — no arm.
+        let pkgs = cfg_gate_escalation_packages(&[mk("t.rs", test_gated, 2)]);
+        assert!(pkgs.is_empty(), "{pkgs:?}");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The demote literal is the EXACT `0` (the env-switch law's
+    /// DEMOTE-ONLY shape); a caller-passed posture always disarms.
+    /// Process-global env — only this test reads this variable.
+    #[test]
+    fn escalation_demote_literal_is_exact_zero() {
+        std::env::set_var("RIIR_REFINE_VERIFY_ALL_FEATURES", "0");
+        assert!(!cfg_gate_escalation_default());
+        assert!(!cfg_gate_escalation_armed(None));
+        assert!(!cfg_gate_escalation_armed(Some("--features x")));
+        std::env::remove_var("RIIR_REFINE_VERIFY_ALL_FEATURES");
+        assert!(cfg_gate_escalation_default());
+        assert!(cfg_gate_escalation_armed(None));
+        // Any other value arms — the demote literal is the exact `0`.
+        std::env::set_var("RIIR_REFINE_VERIFY_ALL_FEATURES", "off");
+        assert!(cfg_gate_escalation_default());
+        std::env::remove_var("RIIR_REFINE_VERIFY_ALL_FEATURES");
+    }
+
+    /// The i250 escalation end-to-end on REAL cargo: an edit that breaks
+    /// a feature-gated fn is REVERTED when the escalation is armed (the
+    /// `--all-features` rounds compile the gate) and KEPT without it —
+    /// the blind class the escalation closes, demonstrated both ways.
+    /// #[ignore]d like [`Self::fix_verify_e2e_bad_edits_reverted_good_survive`]
+    /// (spawns cargo; run:
+    /// `cargo test --features fix_verify --lib -- --ignored escalation_e2e -- --nocapture`).
+    #[test]
+    #[ignore = "spawns cargo (seconds); run explicitly for the i250 escalation proof"]
+    fn escalation_e2e_gated_break_reverted_only_when_armed() {
+        let tmp = std::env::temp_dir().join(format!("fv_esc_e2e_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src_dir = tmp.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            tmp.join("Cargo.toml"),
+            "[package]\nname = \"fv_esc_e2e\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\
+             [features]\nesc_gate = []\n[lib]\npath = \"src/lib.rs\"\n",
+        )
+        .unwrap();
+        let original = "pub fn keep() -> usize {\n    1\n}\n\n#[cfg(feature = \"esc_gate\")]\npub fn gated() -> usize {\n    2\n}\n";
+        std::fs::write(src_dir.join("lib.rs"), original).unwrap();
+        // The edit breaks the GATED fn only: `2` → `"two"` is E0308
+        // inside the gate, invisible to the default-features posture.
+        let fixed = original.replace("    2\n", "    \"two\"\n");
+        let edit_set = FileEditSet {
+            path: src_dir.join("lib.rs"),
+            original: original.to_string(),
+            fixed: fixed.clone(),
+            edits: vec![edit("some-rule", 7, "\"two\"", "2")],
+        };
+
+        // Armed: the escalated posture compiles the gate → the break is
+        // attributed (line 7) → span-reverted.
+        let pkgs = cfg_gate_escalation_packages(std::slice::from_ref(&edit_set));
+        assert_eq!(pkgs.len(), 1, "detector must arm: {pkgs:?}");
+        let report = FixVerifier::new()
+            .with_escalated_pkgs(pkgs)
+            .verify(std::slice::from_ref(&edit_set));
+        assert!(report.ran && report.baseline_clean, "{report:?}");
+        assert_eq!(
+            report.reverted.len(),
+            1,
+            "the gated break must revert: {report:?}"
+        );
+        assert_eq!(report.kept_edits, 0, "{report:?}");
+        assert_eq!(report.escalated_pkgs.len(), 1, "{report:?}");
+        assert!(report.escalation_fallbacks.is_empty(), "{report:?}");
+
+        // Unarmed (the incumbent): the same edit lands — the blind class.
+        let unarmed = FileEditSet {
+            path: src_dir.join("lib.rs"),
+            original: original.to_string(),
+            fixed,
+            edits: vec![edit("some-rule", 7, "\"two\"", "2")],
+        };
+        let report = FixVerifier::new().verify(std::slice::from_ref(&unarmed));
+        assert!(report.ran && report.baseline_clean, "{report:?}");
+        assert_eq!(
+            report.kept_edits, 1,
+            "without escalation the gated break lands: {report:?}"
+        );
+        assert!(report.escalated_pkgs.is_empty(), "{report:?}");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
