@@ -107,6 +107,26 @@ compile-confirmed usize, 1245/1245 tests) is
 [Bench 031](../../.benchmarks/031_fix_verify_mode_goat.md) (landed as
 katgpt-rs `212ed7942`).
 
+### The cfg-gate escalation (i250, 2026-11-23)
+
+The loop's posture is whatever `--verify-args` spells — by default the
+crate's default features, which compile cfg-gated modules to NOTHING, so
+a kept edit inside one read "verified" uncompiled (the defect classes
+the 2026-11-24 fleet census mined all landed through that hole). The
+AUTO posture now escalates: with no `--verify-args`, any edited file
+carrying a cfg region the posture cannot provably compile (`#[cfg]`
+gated items, nested mods/impls/statements, file-level `#![cfg]` attrs;
+`cfg(test)` does NOT arm — the `--all-targets` baseline compiles it)
+arms its owning package, whose checks (baseline + rounds) then run with
+`--all-features`. The escalated baseline runs INSTEAD of the default
+one, so the clean path costs no extra check; a package whose escalated
+baseline does not compile (pre-existing all-features breakage) falls
+back to the default posture mid-verify — disclosed on the run, never a
+refusal — and the post-verify cfg/required-features audits read the
+escalated posture for escalated packages. Demote:
+`RIIR_REFINE_VERIFY_ALL_FEATURES=0` (the exact literal). A caller-passed
+`--verify-args` owns the posture — no escalation.
+
 ## Domain gating (T2.4)
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
