@@ -1,7 +1,7 @@
 # Plan 406: Batch 407 nominal — the vLLM GDN decode-fusion family distill (Research 441)
 
 **Status:** STAGED-UNCLAIMED — staged behind the live m3 leases (Plan 404 ARTEX exp 2026-11-25T18:00Z, Plan 405 coreutils exp 2026-11-25T07:05Z); the first free mining lane claims this per the queue order. Verdict: Research 441, YES B− corpus, face-heavy.
-**Claimed:** —
+**Lease closed:** — (staged-unclaimed: the Research 441 verdict landed WITHOUT a lease — the placeholder was malformed and blinded the repo-wide lease check; reshaped to a closed row by the 2026-11-24 housekeeping sweep, zed-56f3ce1e@amo)
 
 ## Tasks
 
