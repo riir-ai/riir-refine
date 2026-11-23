@@ -1,6 +1,6 @@
 # Plan 394 — the colorless-rs family-seed batch (R1 sync-async twins + R2 drop-or-keep; nominal Batch 378)
 
-**Status:** STAGED — unclaimed (claim-before-edit; 48 h lease from the claim push; the push is the arbiter)
+**Status:** LANDED as Batch 377 2026-11-22 (feat `04b790e6e` + docs `15457ef98`, pushed) — the batch is complete; the STAGED line below was the pre-claim posture and is kept only as history. Plan closed; riir-refine Issue 394's numbered-file work is done (the landing records live in AGENTS.md's per-batch arcs + the snapshot LANDING row).
 **Lease closed:** zed-m3@m3, epoch 1795283407, was expires 2026-11-23T17:50:07Z — the batch LANDED 2026-11-22 (feat 04b790e6e + docs 15457ef98, pushed), the work complete
 **Source:** veecore/colorless-rs @ `b5db6b95cf2f18efbb12fabe5709ac003fcde622` (verdict pin; re-clone + re-pin at T0 — fast-moving, zero publish history). Research 428 is the controlling verdict.
 **Batch number:** LANDED AS **377** — at this batch's landing HEAD the highest LANDED was 373 (376 anemll + 373 atlas); the nominal-378 assumption (377 humanfia in flight) never materialized — the plan-393 lane never started (T0.1-only lease closed). The re-derivation takes the next free number 377; disclosed in the claim row + landing receipt.
