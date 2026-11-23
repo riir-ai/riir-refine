@@ -1,6 +1,6 @@
 # 438 — Distill verdict: ml-explore/mlx PR #4927 "[CUDA] faster window attention"
 
-**Status:** DISTILLED — pending owner decision (staged Plan 403, nominal Batch 404; NOT claimed — the next claimant opens it per the queue, the 10-24 qmv/NAX precedent)
+**Status:** DISTILLED — LANDED as Batch 404 (kernel_opt 1109→1113, Plan 403; see the queue-snapshot LANDING line + Plan 403's receipt)
 
 ## Source
 

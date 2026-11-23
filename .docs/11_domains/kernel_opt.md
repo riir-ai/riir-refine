@@ -217,7 +217,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 > `src/domains/kernel_opt/corpus/mod.rs` (measured truth, repaired + disclosed
 > at B309/B310) and the `expected` array in the same module's `tests.rs`
 > (gate-verified every batch); the standing total lives in AGENTS.md
-> (1109 at Batch 402 — the mlxfast-bonsai2-27b delta residue, Plan 402 /
+> (1113 at Batch 404 — the mlx #4927 cuda-window-sdpa pack, Plan 403 / Research 438: windowed-parameter-nyi-gate-forces-full-work-fallback + slice-operand-to-window-before-kernel + dependency-version-known-wrong-window-refusal + fused-vjp-ungeneric-direction-falls-back-not-throw, ml-explore/mlx @ 58d91ee8… MIT; +2 count-neutral faces on their owners; the census/bookkeeping repair rode — entries_gpu_163 joined the census, B402's missing trail row recorded, A/D/N headers repaired to measured truth; fixtures b404 7/7 pre-entry; prior: (1109 at Batch 402 — the mlxfast-bonsai2-27b delta residue, Plan 402 /
 > Research 437: `verify-window-weight-load-amortization-exact`
 > (MemoryAccess 211→212 — k verify positions share ONE weight read, per-
 > position accumulators in the stock serial order, columns bit-identical,

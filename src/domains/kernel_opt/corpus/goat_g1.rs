@@ -89,7 +89,7 @@ use crate::domains::kernel_opt::KernelRule;
 #[must_use]
 pub fn expected_corpus_files() -> Vec<String> {
     let mut names = vec!["entries_popcorn".to_string()];
-    for n in 1..=162 {
+    for n in 1..=164 {
         if n < 10 {
             names.push(format!("entries_gpu_{n:02}"));
         } else {
@@ -381,6 +381,8 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
         entries_gpu_160,
         entries_gpu_161,
         entries_gpu_162,
+        entries_gpu_163,
+        entries_gpu_164,
         entries_gpu_37,
         entries_gpu_36,
         entries_gpu_01,
@@ -1306,7 +1308,7 @@ mod tests {
     #[test]
     fn expected_corpus_files_cover_all_batches() {
         let names = expected_corpus_files();
-        assert_eq!(names.len(), 163); // popcorn + gpu_01..162 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues; B380 REPAIRED the B379 miss — entries_gpu_159 landed without arming the census (both lists blind together, the comparison stayed green) and 160 joined here, the B354/B357 class, B362 precedent; B398 continues — 161 joined at landing; B400 continues — 162 joined at landing)
+        assert_eq!(names.len(), 165); // popcorn + gpu_01..164 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues; B380 REPAIRED the B379 miss — entries_gpu_159 landed without arming the census (both lists blind together, the comparison stayed green) and 160 joined here, the B354/B357 class, B362 precedent; B398 continues — 161 joined at landing; B400 continues — 162 joined at landing; Batch 404 REPAIRED the B402 miss — entries_gpu_163 landed without arming the census (the B379/B380 class again, both lists blind together) and 163 + 164 joined here)
         assert_eq!(names[0], "entries_popcorn");
         assert!(names.contains(&"entries_gpu_09".to_string()));
         assert!(names.contains(&"entries_gpu_10".to_string()));
