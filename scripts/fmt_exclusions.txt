@@ -41,7 +41,7 @@ src/domains/*/corpus/fixtures/*.rs notripwire # executed provenance; measured en
 #   touched since) so it is exempted by the exact row below; b345/b350 are
 #   entry-DIRTY and the class tripwire is ARMED for everything new.
 src/domains/sec/fixtures/b342_fixtures.rs notripwire # measured entry-clean (git: one commit, never touched after)
-src/domains/sec/fixtures/b402_sec_fixtures.rs notripwire # measured entry-clean (git-verified 2026-11-23: the landed bytes 6ff64738 ARE rustfmt-clean — the author formatted BEFORE executing, the legal entry-clean shape; the row exists because the class tripwire above arms every sec fixture and the gate cannot read git history)
+# (b402_sec_fixtures row lives below — added independently by two lanes the same morning, deduplicated 2026-11-23)
 src/domains/sec/fixtures/*.rs tripwire # executed provenance at sec's path shape; entry-dirty class (b345/b350)
 
 # — bench records: the apparatus a record pins stays as recorded. Measured
