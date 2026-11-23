@@ -325,8 +325,18 @@ impl Collector<'_> {
     /// type is fixed by std or by the file-local definition.
     fn is_provably_unit(&self, expr: &Expr) -> bool {
         match expr {
-            // `loop`/`while`/`for` evaluate to `!` or `()`, never must_use.
-            Expr::Loop(_) | Expr::While(_) | Expr::ForLoop(_) => true,
+            // `loop` is `()` ONLY when no `break` inside carries a value —
+            // `break now;` makes the loop's type the break value's type, and
+            // the deletion then breaks every later use (the shop_seek
+            // instance, issue 255 class 4: `let released_at = loop { …
+            // break now; }` — the store row recorded success=1, the compile
+            // gate caught it late). A value-break inside a NESTED loop also
+            // refuses — it belongs to that inner loop, but the flat scan
+            // cannot prove ownership and this rule's convention is missed
+            // fires, never wrong fires. `while`/`for` stay unconditionally
+            // unit: `break <value>` is illegal in them by language law.
+            Expr::Loop(l) => !loop_breaks_with_value(&l.body),
+            Expr::While(_) | Expr::ForLoop(_) => true,
             // An `if` without else IS `()` by law.
             Expr::If(i) => i.else_branch.is_none(),
             // A block whose tail is a statement (or empty) is `()`.
@@ -357,6 +367,30 @@ impl Collector<'_> {
             _ => false,
         }
     }
+}
+
+/// Does any `break` inside this block carry a value? Descends through
+/// nested expressions wholesale — a nested loop's value-break also flags
+/// (conservative: the scan cannot prove which loop the break targets, and
+/// a wrong-fire here would delete a USED binding; a missed fire just
+/// leaves one edit unapplied).
+fn loop_breaks_with_value(block: &syn::Block) -> bool {
+    struct BreakScan {
+        found: bool,
+    }
+    impl<'ast> Visit<'ast> for BreakScan {
+        fn visit_expr(&mut self, e: &'ast Expr) {
+            if let Expr::Break(b) = e {
+                if b.expr.is_some() {
+                    self.found = true;
+                }
+            }
+            syn::visit::visit_expr(self, e);
+        }
+    }
+    let mut scan = BreakScan { found: false };
+    scan.visit_block(block);
+    scan.found
 }
 
 fn block_tail_is_unit(block: &syn::Block) -> bool {
@@ -660,5 +694,37 @@ mod tests {
         assert!(out.contains("    // keep me\n"), "{out}");
         assert!(out.contains("other();"), "{out}");
         assert_eq!(src.lines().count(), out.lines().count(), "{out}");
+    }
+
+    #[test]
+    fn value_breaking_loop_binding_refuses() {
+        // The shop_seek instance (issue 255 class 4, store row lint_key
+        // let_unit_value shape "let released_at =" empty fix): `loop { …
+        // break now; }` carries the break VALUE — deleting the prefix broke
+        // both later uses. The unit proof now refuses; the compile gate no
+        // longer has to catch it late.
+        let src = "fn ramp(s: &mut Feeder) -> u64 {\n    let mut seen = Vec::new();\n    let released_at = loop {\n        match s.next() {\n            BuyCall::Seek { at } => seen.push(at),\n            BuyCall::Release => break s.tick(),\n        }\n    };\n    assert!(seen.len() <= 3);\n    released_at\n}";
+        assert!(
+            propose_fix("let_unit_value", src).is_none(),
+            "value-carrying loop fired as unit"
+        );
+    }
+
+    #[test]
+    fn value_free_loop_still_fires() {
+        // Positive control: a `loop` that only `break;`s (or diverges) IS
+        // unit — the rewrite still lands.
+        let src = "fn probe(p: &mut P) {\n    let released = loop {\n        if p.done() { break; }\n        p.step();\n    };\n    p.finish();\n}";
+        let out = propose_fix("let_unit_value", src).expect("unit loop must fire");
+        assert!(!out.contains("let released"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn nested_value_break_refuses_conservatively() {
+        // A value-break inside a NESTED loop: the flat scan cannot prove
+        // which loop it targets — refuse (missed fire, never wrong fire).
+        let src = "fn probe(p: &mut P) -> u64 {\n    let seen = loop {\n        for _ in 0..3 {\n            if p.ready() { break 7u64; }\n        }\n        break p.tick();\n    };\n    seen\n}";
+        assert!(propose_fix("let_unit_value", src).is_none());
     }
 }

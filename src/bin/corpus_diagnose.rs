@@ -237,6 +237,7 @@ fn main() {
     let mut repos: Option<Vec<PathBuf>> = None;
     let mut recent_days: Option<u64> = None;
     let mut bind: Option<String> = None;
+    let mut dump_shapes: Option<String> = None;
     let mut referee: Option<String> = None;
     let mut referee_set = false;
     let mut enroll: Option<String> = None;
@@ -331,6 +332,18 @@ fn main() {
                     std::process::exit(2);
                 }
             },
+            "--dump-shapes" => {
+                // Raw-row intake (issue 255 T0): print every row whose
+                // lint_key/shape/fix contains the needle — the reproducer
+                // probe for a census instance, report-only, exits 0.
+                match argv.next() {
+                    Some(v) => dump_shapes = Some(v),
+                    None => {
+                        eprintln!("--dump-shapes needs a needle substring");
+                        std::process::exit(2);
+                    }
+                }
+            }
             "--help" | "-h" => {
                 print_usage();
                 return;
@@ -344,6 +357,36 @@ fn main() {
     }
 
     let roots = repos.unwrap_or_else(default_roots);
+
+    // The raw-row dump runs ahead of the fold (it needs the rows, not the
+    // aggregation) and RETURNS — a targeted probe, never a full report.
+    if let Some(needle) = dump_shapes.as_deref() {
+        let mut hits = 0usize;
+        for root in &roots {
+            let Ok((store, _bad)) = TrajStore::open(root) else {
+                continue;
+            };
+            for row in store.dump() {
+                let hay = format!("{}\n{}\n{}", row.lint_key, row.shape, row.fix);
+                if hay.contains(needle) {
+                    hits += 1;
+                    println!(
+                        "=== {} @ {}\nlint_key: {}\n--- shape:\n{}\n--- fix:\n{}\nsuccess={} fail={}",
+                        root.display(),
+                        row.last_seen_at,
+                        row.lint_key,
+                        row.shape,
+                        row.fix,
+                        row.success_count,
+                        row.fail_count
+                    );
+                }
+            }
+        }
+        println!("{hits} row(s) matched {needle:?}");
+        return;
+    }
+
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
