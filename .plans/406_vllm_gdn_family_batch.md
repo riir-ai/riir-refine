@@ -1,6 +1,7 @@
 # Plan 406: Batch 407 nominal — the vLLM GDN decode-fusion family distill (Research 441)
 
-**Status:** STAGED-UNCLAIMED — staged behind the live m3 leases (Plan 404 ARTEX exp 2026-11-25T18:00Z, Plan 405 coreutils exp 2026-11-25T07:05Z); the first free mining lane claims this per the queue order. Verdict: Research 441, YES B− corpus, face-heavy.
+**Status:** CLAIMED — Batch 407 in flight (zed-e7e471a3@amo, 2026-11-23T22:34Z; T0 re-clone + widen first). Verdict: Research 441, YES B− corpus, face-heavy. Staged behind the m3 leases Plans 404/405 — corpus coordination note: 405 (coreutils) edits the rust_perf corpus with a live lease to 2026-11-25T07:05Z; this batch keeps its rust_perf edit (R1) surgical and re-runs the dedup delta at landing HEAD (T1), landing out-of-window only if 405 has not landed by then (Batch 373 precedent).
+**Claimed:** zed-e7e471a3@amo, 1795473279, expires 2026-11-25T22:34:00+00:00
 **Lease closed:** — (staged-unclaimed: the Research 441 verdict landed WITHOUT a lease — the placeholder was malformed and blinded the repo-wide lease check; reshaped to a closed row by the 2026-11-24 housekeeping sweep, zed-56f3ce1e@amo)
 
 ## Tasks
