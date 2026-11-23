@@ -474,7 +474,7 @@ fn m2_load_bill_names_runtime_shapes() {
         .expect("M2 present");
     // the growth arithmetic: a 4-bit pack's int8 copy grows ~1.8x its linears
     let shard_linears = 1_000_u64;
-    let int8_copy = (shard_linears as f64 * 1.8) as u64;
+    let int8_copy = shard_linears * 18 / 10; // exact 1.8x, integer math
     assert!(int8_copy > shard_linears, "the copy GROWS past the shard");
     assert!(m2.fixed_code.contains("build_peak_bytes"));
     assert!(m2.fixed_code.contains("SWAP_FLOOR_BYTES"));
@@ -594,7 +594,9 @@ fn m7_deep_k_chunked_in_graph() {
     // the measured cliff: one K=17408 operator at 4.3 TFLOPS vs chunked 11.8
     let (deep_rate, chunked_rate) = (4.3_f64, 11.8_f64);
     assert!(chunked_rate / deep_rate > 2.5, "the cliff is ~2.6x");
-    assert!(17408 / 4600 >= 3, "the K chunks into slabs");
+    let deep_k = 17_408_usize;
+    let slab_k = 4_600_usize;
+    assert!(deep_k.div_ceil(slab_k) >= 3, "the K chunks into slabs");
     assert!(m7.fixed_code.contains("K_CHUNK"));
     assert!(m7.fixed_code.contains("compile_conv_chunked"));
     let notes = m7.context_notes().expect("M7 notes");
@@ -645,7 +647,7 @@ fn b401_procedure_bank_wrong_api_partial_zero_refused() {
     // and are structurally wrong for every procedure past the first —
     // a single-procedure arm reads green while 200 of 252 evals died.
     let count = 8_usize;
-    let identity = |proc: usize| -> Vec<usize> { (0..count).collect() };
+    let identity = |_proc: usize| -> Vec<usize> { (0..count).collect() };
     assert_eq!(identity(0), (0..count).collect::<Vec<usize>>());
     // every procedure > 0 gets the same indices — wrong by construction
     // (a bank's procedures do NOT share one symbol numbering)
@@ -654,12 +656,15 @@ fn b401_procedure_bank_wrong_api_partial_zero_refused() {
         identity(0),
         "identity: proc 1 answered proc 0's indices"
     );
-    // the fail-closed gate: N > 1 without the capability refuses BY NAME
-    let has_symbol_api = false;
-    let refused = 2 > 1 && !has_symbol_api;
-    assert!(refused, "the create gate refuses the multi-procedure bank");
+    // the fail-closed gate: N > 1 without the capability refuses BY NAME;
     // a bank of one is NOT refused (the identity IS the contract there)
-    assert!(!(1 > 1 && !has_symbol_api));
+    let has_symbol_api = false;
+    let gate_refuses = |bank: usize| bank > 1 && !has_symbol_api;
+    assert!(
+        gate_refuses(2),
+        "the create gate refuses the multi-procedure bank"
+    );
+    assert!(!gate_refuses(1), "a bank of one is not refused");
     assert!(rule.fixed_code.contains("inner_model"));
     assert!(rule.fixed_code.contains("cannot be dispatched"));
     let notes = rule.context_notes().expect("Batch 401 rule notes");

@@ -1965,6 +1965,7 @@ mod entries_gpu_16;
 mod entries_gpu_160;
 mod entries_gpu_161;
 mod entries_gpu_162;
+mod entries_gpu_163;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2189,6 +2190,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_160::entries());
     entries.extend(entries_gpu_161::entries());
     entries.extend(entries_gpu_162::entries());
+    entries.extend(entries_gpu_163::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2404,6 +2406,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // the corpus explicitly dropped as not-a-rule (7bcab59f).
             "expert-prompt-row-batch-amortizes-weight-pool-stream",
             "verify-row-tiles-share-loaded-weight-panel",
+            // Batch 402 +1 (the mlxfast-27b delta residue, 0c7c3923, Plan 402 / Research 437):
+            // verify-window-weight-load-amortization-exact — the W4 verify-window
+            // load-sharing law: positions share ONE weight read; each keeps its own
+            // accumulator in the stock one-row QMV order (bit-identical columns — the
+            // EXACTNESS contract is this rule's axis beside the panel/stream amortizations
+            // above, which own the mechanism without the order discipline).
+            "verify-window-weight-load-amortization-exact",
             // Batch 249 slice 3 +1 (TensorFold B+ remainder, `9ccf4727` window):
             // paced-load-room-counts-free-plus-reclaimable — the INTAKE gauge
             // (free + reclaimable-without-writeback, bounded wait, loud
@@ -2973,6 +2982,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "consumer-offset-absorption-precomputed-weight-row-correction",
             "roundfuse-packed-embedding-gather",
             "splitk-reduce-one-launch-slice-order-pinned",
+            // Batch 402 +1 (the mlxfast-27b delta residue, 0c7c3923, Plan 402 / Research 437):
+            // splitk-reduce-consumed-in-place-by-consumer-kernel — the reduce with
+            // exactly one narrow consumer folds INTO that consumer's reads (chunk order
+            // pinned, bit-identical, load-gated); the ELIMINATION pole of the reduce
+            // axis beside the one-launch collapse above (which still runs the reduce).
+            "splitk-reduce-consumed-in-place-by-consumer-kernel",
             "fusion-scope-by-barrier-cost-not-dispatch-count",
             // Batch 251 +2 (the Yukon conversion, Research 284):
             "dead-destination-scale-elided-consumer-applies-on-load",

@@ -1023,6 +1023,7 @@ mod entries_92;
 mod entries_93;
 mod entries_94;
 mod entries_95;
+mod entries_96;
 
 #[cfg(test)]
 mod tests;
@@ -1423,6 +1424,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_93::b398_rules());
     entries.extend(entries_94::b399_rules());
     entries.extend(entries_95::b401_rules());
+    entries.extend(entries_96::b402_rules());
     Corpus::new(entries)
 }
 

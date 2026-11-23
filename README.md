@@ -92,9 +92,9 @@ is a per-span annotation, never a gate.
 | Domain | Feature | Default | Rules | What it fixes |
 |---|---|---|---|---|
 | **clippy_lints** | `clippy_lints` | on | 120 corpus lints | `clippy::*` — mechanical rewrites proven value-preserving (97 fixable + 20 verify-tier + 3 self-evolve) |
-| **rust_perf** | `rust_perf` | on | 390 rules | CPU hot paths — allocation, concurrency, io, layout, iterators, dispatch, caching, measurement honesty |
-| **kernel_opt** | `kernel_pregate` | on | 1107 rules | GPU kernels + host orchestration (Metal / CUDA / wgpu); joins a file only when the kernel-signal gate fires |
-| **sec** | `sec` | off | 84 rules | security classes — web trust, crypto hygiene, input validation, FFI/unsafe (7 fixable, 75 suggest-only) |
+| **rust_perf** | `rust_perf` | on | 392 rules | CPU hot paths — allocation, concurrency, io, layout, iterators, dispatch, caching, measurement honesty |
+| **kernel_opt** | `kernel_pregate` | on | 1109 rules | GPU kernels + host orchestration (Metal / CUDA / wgpu); joins a file only when the kernel-signal gate fires |
+| **sec** | `sec` | off | 85 rules | security classes — web trust, crypto hygiene, input validation, FFI/unsafe (7 fixable, 78 suggest-only) |
 | **docker** | `docker` | on | 31 rules | Dockerfile bounded fixes against the hadolint oracle |
 | **dist** | `dist` | on | 8 suggest-only rules | shipped-artifact build-config advice over `Cargo.toml` manifests |
 | **shader_perf** | `shader_perf` | on | 8 rules | WGSL render-pipeline (`@vertex`/`@fragment`) bounded fixes |

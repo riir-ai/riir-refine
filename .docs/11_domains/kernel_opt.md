@@ -217,7 +217,20 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 > `src/domains/kernel_opt/corpus/mod.rs` (measured truth, repaired + disclosed
 > at B309/B310) and the `expected` array in the same module's `tests.rs`
 > (gate-verified every batch); the standing total lives in AGENTS.md
-> (1107 at Batch 400 — the mvm (Magni VM) distill, Plan 400: the exact-N
+> (1109 at Batch 402 — the mlxfast-bonsai2-27b delta residue, Plan 402 /
+> Research 437: `verify-window-weight-load-amortization-exact`
+> (MemoryAccess 211→212 — k verify positions share ONE weight read, per-
+> position accumulators in the stock serial order, columns bit-identical,
+> Qwen35A3BTargetVerify.swift:7-10) + `splitk-reduce-consumed-in-place-by-
+> consumer-kernel` (Fusion 68→69 — one narrow consumer + a storing tape ⇒
+> the consumer sums the chunk partials in the reduce kernel's own order,
+> the reduce launch disappears bit-identically, load-gated per geometry,
+> PrismHadamardQwen35.swift:196-213; the PRIOR-COVERAGE CORRECTION: the
+> pin `0c7c3923` surface was already progressively mined by the October
+> staged-lead waves gpu_51/60/63/70/71/72 + rust_perf entries_10 — this
+> batch lands the un-owned residue only; +2 count-neutral faces: gpu_14
+> += the vendored NAX dsplit instance, ane += the capability-nil twin);
+> fixtures 7/7; 1107 at Batch 400 — the mvm (Magni VM) distill, Plan 400: the exact-N
 > snapshot-isolation edge + park-off-worker waiter custody, Bobliuuu/mvm @
 > 60c42deb; +1 count-neutral face on rust_perf entries_74; fixtures 16/16;
 > 1076 at Batch 345 — the `LocalSR` accelerator-backend acceptance gate, Plan 357; 1075 at Batch 341 — the metal-graph graph-exec-lifecycle pair, Plan 350; 1073 at Batch 337 — landed out of numeric order after 339; B339's 1068 row sits below). No live count is hand-typed into this file.

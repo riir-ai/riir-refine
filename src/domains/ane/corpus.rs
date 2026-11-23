@@ -2231,7 +2231,16 @@ impl Handle {
                  array IS the answer); single-procedure programs where identity indices are \
                  the contract (the refusal is gated on procedure_count > 1 at the source, \
                  ane_bridge.m:582); postures where unavailability is already typed and \
-                 surfaced. {ANNOTATION}. Sources: {MLXS} (docs/reference.md:847, the \
+                 surfaced. FACE (Batch 402, the capability-nil fail-safe twin, count-neutral): a
+                 type-erased capability seam must distinguish ABSENT from ZERO — the
+                 contract-seam twin from the same delta (mlxfast-bonsai2-27b-engine @
+                 0c7c3923, MTPContractsV2.swift:136-138: \"nil means compatibility cannot be
+                 proven and must fail safe to plain decode\"; the capability key is the
+                 ObjectIdentifier of the EXACT owner instance, :123-125, so a type-erased
+                 wrapper \"answers at runtime\" :128-130) — compose: resolve from the owner,
+                 refuse by name when unreachable (this rule), and when the seam DOES answer,
+                 the answer key is instance identity, never type identity. {ANNOTATION}.
+                 Sources: {MLXS} (docs/reference.md:847, the \
                  procedure-bank bullet) + {MLXSG} (the eval-fallback misattribution) — \
                  quotes re-verified at the pin at this batch's T0."
             )),

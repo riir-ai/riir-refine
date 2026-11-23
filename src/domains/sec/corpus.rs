@@ -3366,6 +3366,143 @@ entry)."
                 .to_string(),
             family: SecFamily::DiscoveryEgress,
         },
+        // ══ Batch 402 delta residue: ONE suggest-only InputValidation    ══
+        // ══ rule (the arena reorg's confinement-profile lane); fixtures ══
+        // ══ b402_sec_fixtures.rs.                                       ══
+        // ── deny-list-completeness-gated-emitted-last (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "deny-list-completeness-gated-emitted-last".to_string(),
+            sec_concept: "MECHANISM (confinement-profile construction — the deny/allow rule-engine assembly law): a profile generator for a LATER-RULES-WIN deny/allow engine (Seatbelt, and the class: seccomp filter emitters, WASI preopen composers, nftables/ipc-filter generators) carries THREE assembly laws, and all three exist because a confinement profile fails SILENTLY — a missing deny rule does not error, it WIDENS the sandbox. (1) PROTECTIVE DENIES EMITTED LAST so they win over every allow, verbatim (Layr-Labs/mlxfast-bonsai2-27b-engine @ 0c7c3923, tools/seatbelt-profile.py:21-25, MIT): 'deny every file write, then allow writes to the device nodes, to every --write-subpath tree, to every path that starts with a --write-prefix, and to every --unix-socket path;' / '* last, so that they win over every allow: deny every read and write of the evaluator-only paths that the environment names.' — the evaluator-only paths (the goldens, the baseline workspace, the calibration, the benchd binary) are the run's secrets; an allow rule that accidentally covers one must NOT out-rank the deny. (2) THE DENY SET SOURCES FROM ONE AUTHORITATIVE CHANNEL — the environment, not caller arguments — verbatim (:26-28): 'The evaluator-only paths come from the environment, not from arguments, so that every caller denies the same set:' — three trusted callers share ONE profile generator (the file's header: 'This is the one source of the profile rules'); a per-caller argument would let each caller assemble a different fence, and the weakest caller's omission becomes the leak. (3) THE OFFICIAL POSTURE REFUSES INCOMPLETE — verbatim (:33-36): 'With --official, the four paths that an official run must name (MLXFAST_QWEN38_GOLDEN_DIR, MLXFAST_BASELINE_WORKSPACE, MLXFAST_BASELINE_CALIBRATION, BENCHD_BIN_DIR) are required. The script exits 2 and names the unset ones when one is missing, because the deny list would otherwise be incomplete.' — the refusal NAMES the missing inputs (fail loud, fail specific); without it the official run would execute against a silently narrower sandbox — the untrusted participant code would be able to READ the evaluator's goldens and calibrations and the failure would look like nothing at all. THE RESOLUTION RIDER (:41-47) is the path-side trap in the same law: 'Seatbelt matches resolved paths. Each path is resolved at its deepest existing ancestor (/tmp becomes /private/tmp) and the rest is kept, because an output tree may not exist yet.' — realpath alone resolves NOTHING for a not-yet-existing output tree; the deny must resolve at the deepest EXISTING ancestor and keep the remainder, or the rule silently fails to match the path the engine will see at runtime. THE CLASS RULE: the defect is not the rule engine, it is PROFILE ASSEMBLY — ordering (deny must outrank allow in engines where position wins), provenance (one choke point for the deny inputs), completeness (an official posture enumerates its required deny inputs and refuses, naming them, when any is unset), and path resolution matching what the engine will match at runtime. FIX SPACE (Rust): a sandbox/profile builder struct whose deny section is APPENDED after every allow (and the builder documents the engine's ordering semantics — later-wins vs first-match — because the emit order flips between them); deny inputs read at one choke point (a constructor taking the authority struct, not per-call site args); `fn official(inputs: &OfficialInputs) -> Result<Profile, Vec<String>>` that returns EVERY unset name (exit 2 with the full list, not the first); path deny rules resolved at the deepest existing ancestor with the tail kept. REGIME: seccomp/profile emitters, WASI preopen composers, Landlock ruleset builders, namespace/cgroup fence writers, firewall/ipc-filter generators, any job-runner fence whose inputs are paths the untrusted payload must not read. ANTI-REGIME: FIRST-MATCH-WINS engines (deny-last would be the BUG there — the law is deny-OUTRANKS-allow, position only the mechanism); profiles with no untrusted payload (the evaluator/trusted boundary is what makes incompleteness a security event, not a config nit); deny inputs minted by the same builder that consumes them (no channel divergence to prevent). ⛔ KINSHIP (adjudicated both directions): egress-control-bypass-flag (Batch 342) owns a FLAG DEFEATING an existing control — THIS owns CORRECT ASSEMBLY of the control itself (absence → refusal, ordering, single source); agent-child-unsandboxed-account-authority (Batch 378, coganchor) owns the child fence's GRANT SCOPING ('what is granted is what is there as the wall is drawn') — adjacent in the fence-construction family, distinct axis: B378 scopes GRANTS to what exists at draw time, THIS orders + sources + completeness-gates the DENY half against a later-wins engine — compose on a job-runner fence; external-helper-config-pinned-invocation (Batch 373, atlas) pins the INVOCATION surface pre-spawn (env strips, pinned flags) — the spawn-side twin of the profile-side law, distinct seam; the jitengine approval-vs-confinement face (F14) owns approval GATING — THIS is confinement CONSTRUCTION. Suggest-only (WHICH engine ordering and which inputs are the deployment's design; the fixture pins THAT the three laws hold, not the profile text). Detector: none at landing — the shape (a profile emitter whose deny/allow ordering and input provenance matter) needs the engine's ordering semantics a parse-only pass cannot bind; the regime above is the review checklist. Fixture: fixtures/b402_sec_fixtures.rs (the deny-last arm — an allow covering an evaluator path is OVERRIDDEN; the incomplete-official arm — a missing deny input refuses with the name; the divergent-provenance arm — a per-caller argument omits one evaluator path and reads the golden, the env-sourced arm denies the same set everywhere; the resolution arm — /tmp symlink + not-yet-existing output tree resolved at the deepest existing ancestor). Batch 402 / Plan 402 / Research 437 (Layr-Labs/mlxfast-bonsai2-27b-engine delta cfb35b0d..0c7c3923 — the arena reorg's submission-security infra: tools/seatbelt-profile.py:14-47, the one-source header :14-16, the rules block :21-25, the env-sourced clause :26-28, the official refusal :33-36, the resolution rider :41-47)."
+                .to_string(),
+            buggy_code: r#"/// NAIVE: a confinement-profile builder assembles allows and denies
+/// AD-HOC per caller — deny rules emitted wherever the caller's list
+/// puts them, deny inputs passed as ARGUMENTS (each caller its own
+/// set), and an official run proceeds with whatever subset it got.
+/// In a later-rules-wins engine, an allow emitted after a deny
+/// OUTRANKS it; an incomplete deny list silently widens the sandbox;
+/// and path rules spelled against unresolved paths never match what
+/// the engine resolves at runtime.
+pub struct Profile {
+    rules: Vec<String>,
+}
+
+pub struct ProfileBuilder {
+    rules: Vec<String>,
+}
+
+impl ProfileBuilder {
+    /// deny paths come from the CALLER's args — every caller a different set
+    pub fn deny_paths(mut self, evaluator_paths: &[&str]) -> Self {
+        for p in evaluator_paths {
+            self.rules.push(format!("(deny file-read* (subpath \"{p}\"))"))
+        }
+        self
+    }
+
+    /// allows appended AFTER the denies — later rules win: an allow
+    /// covering an evaluator path now outranks the deny above it
+    pub fn allow_write_prefix(mut self, prefix: &str) -> Self {
+        self.rules
+            .push(format!("(allow file-write* (prefix \"{prefix}\"))"));
+        self
+    }
+}
+
+/// the official runner: builds with whatever args it happened to have;
+/// a missing evaluator path is a silently narrower fence, never an error
+pub fn build_official(evaluator_paths: &[&str]) -> Profile {
+    ProfileBuilder { rules: vec![] }
+        .deny_paths(evaluator_paths)
+        .allow_write_prefix("/tmp/out")
+        .build()
+}
+
+impl ProfileBuilder {
+    fn build(self) -> Profile {
+        Profile { rules: self.rules }
+    }
+}
+"#.to_string(),
+            fixed_code: r#"/// FIXED: the three assembly laws. (1) denies appended LAST so they
+/// outrank every allow in a later-rules-wins engine; (2) deny inputs
+/// from ONE authoritative channel (the process env), never caller
+/// args — every caller denies the same set; (3) the official posture
+/// enumerates its required inputs and REFUSES naming every unset one.
+/// Path denies resolve at the deepest EXISTING ancestor (/tmp ->
+/// /private/tmp) with the tail kept, because an output tree may not
+/// exist yet.
+pub struct Profile {
+    rules: Vec<String>,
+}
+
+const OFFICIAL_REQUIRED: [&str; 4] = [
+    "MLXFAST_GOLDEN_DIR",
+    "MLXFAST_BASELINE_WORKSPACE",
+    "MLXFAST_BASELINE_CALIBRATION",
+    "BENCHD_BIN_DIR",
+];
+
+impl Profile {
+    /// the ONE source: all callers get the same fence
+    pub fn from_env() -> Self {
+        let mut rules: Vec<String> = Vec::new();
+        // ... allows first (device nodes, write-subpath trees,
+        // write-prefixes, unix sockets) ...
+        rules.push("(allow file-write* (subpath \"/dev/null\"))".into());
+        rules.push("(allow file-write* (prefix \"/tmp/out\"))".into());
+        // (1) protective denies LAST so they win over every allow;
+        // (2) sourced from the env, not caller args
+        for p in evaluator_only_paths_from_env() {
+            let resolved = resolve_deepest_existing(&p);
+            rules.push(format!("(deny file-read* file-write* (subpath \"{resolved}\"))"));
+        }
+        Profile { rules }
+    }
+
+    /// (3) the official posture refuses incomplete, naming every miss
+    pub fn official_from_env() -> Result<Self, Vec<String>> {
+        let missing: Vec<String> = OFFICIAL_REQUIRED
+            .iter()
+            .filter(|k| std::env::var(k).is_err())
+            .map(|k| (*k).to_string())
+            .collect();
+        if !missing.is_empty() {
+            return Err(missing); // exit 2 with the full list, not the first
+        }
+        Ok(Self::from_env())
+    }
+}
+
+fn evaluator_only_paths_from_env() -> Vec<String> {
+    // one choke point: the environment is the authority
+    std::env::var("MLXFAST_EVALUATOR_PATHS")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn resolve_deepest_existing(path: &str) -> String {
+    // walk up to the deepest ancestor that EXISTS, resolve it, keep
+    // the tail (an output tree may not exist yet)
+    let p = std::path::Path::new(path);
+    let mut anc = p.to_path_buf();
+    loop {
+        if anc.exists() {
+            let resolved = anc.canonicalize().unwrap_or(anc.clone());
+            let tail = p.strip_prefix(&anc).unwrap_or(std::path::Path::new(""));
+            return resolved.join(tail).to_string_lossy().into_owned();
+        }
+        match anc.parent() {
+            Some(parent) => anc = parent.to_path_buf(),
+            None => return path.to_string(),
+        }
+    }
+}
+"#.to_string(),
+            family: SecFamily::InputValidation,
+        },
 
     ]
 }
@@ -4977,4 +5114,65 @@ mod tests {
             "batch-398 buggy/fixed must both parse"
         );
     }
+}
+
+/// Batch 402 — the deny-list-completeness rule (Plan 402 / Research 437,
+/// mlxfast-bonsai2-27b-engine @ 0c7c3923, the arena reorg's
+/// confinement-profile lane): present, parsed, decision content pinned.
+/// The fixture preflight is the standalone file
+/// `fixtures/b402_sec_fixtures.rs` (4/4 executed at debug AND -O before
+/// entry — the record lives in the batch row).
+#[test]
+fn batch402_deny_list_rule_present_and_pinned() {
+    let rules = entries();
+    let r = rules
+        .iter()
+        .find(|r| r.rule_id == "deny-list-completeness-gated-emitted-last")
+        .expect("batch-402 deny-list rule present");
+    assert_eq!(r.family, SecFamily::InputValidation);
+    // the verbatim anchors
+    for needle in [
+        "last, so that they win over every allow",
+        "come from the environment, not from arguments",
+        "the deny list would otherwise be incomplete",
+        "deepest existing ancestor",
+    ] {
+        assert!(r.sec_concept.contains(needle), "anchor {needle:?} missing");
+    }
+    // the three assembly laws
+    for needle in [
+        "PROTECTIVE DENIES EMITTED LAST",
+        "ONE AUTHORITATIVE CHANNEL",
+        "REFUSES INCOMPLETE",
+    ] {
+        assert!(
+            r.sec_concept.contains(needle),
+            "assembly law {needle:?} missing"
+        );
+    }
+    // the family adjudications both directions
+    for needle in [
+        "egress-control-bypass-flag",
+        "agent-child-unsandboxed-account-authority",
+        "external-helper-config-pinned-invocation",
+    ] {
+        assert!(
+            r.sec_concept.contains(needle),
+            "adjudication {needle:?} missing"
+        );
+    }
+    // the anti-regime (first-match-wins engines flip the emit order)
+    assert!(
+        r.sec_concept.contains("FIRST-MATCH-WINS"),
+        "the ordering-semantics anti-regime missing"
+    );
+    assert!(
+        !crate::domains::sec::proposers::FIXABLE_SEC.contains(&r.rule_id.as_str()),
+        "batch-402 must stay suggest-only (never FIXABLE_SEC)"
+    );
+    // both halves parse
+    assert!(
+        syn::parse_file(&r.buggy_code).is_ok() && syn::parse_file(&r.fixed_code).is_ok(),
+        "batch-402 buggy/fixed must both parse"
+    );
 }
