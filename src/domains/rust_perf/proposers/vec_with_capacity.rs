@@ -72,7 +72,7 @@
 use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Signature, Stmt};
+use syn::{Expr, ExprLit, File, ItemConst, Lit, Local, Pat, RangeLimits, Signature, Stmt, Type};
 
 /// Byte range of any node's span (Range<usize> form; convert to a pair when
 /// hashing).
@@ -83,9 +83,10 @@ fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
 use super::ProposerOpts;
 
 pub(crate) fn collect_edits_opts(source: &str, file: &File, opts: ProposerOpts) -> Vec<SourceEdit> {
+    let const_types = file_const_int_types(file);
     let mut edits = Vec::new();
     super::for_each_fn(file, |sig, block| {
-        collect_block_edits(source, sig, block, block, &mut edits, opts);
+        collect_block_edits(source, sig, block, block, &mut edits, opts, &const_types);
     });
     edits
 }
@@ -104,6 +105,7 @@ fn collect_block_edits(
     root: &syn::Block,
     edits: &mut Vec<SourceEdit>,
     opts: ProposerOpts,
+    const_types: &std::collections::HashMap<String, ConstIntTy>,
 ) {
     let stmts = &block.stmts;
     let usize_params = usize_typed_params(sig);
@@ -146,7 +148,7 @@ fn collect_block_edits(
         // wins, even if `cap_replacement` then declines it.
         if let Some(cap) = find_loop_capacity(&stmts[i + 1..], ident) {
             if let Some(replacement) =
-                cap_replacement(source, &cap, &usize_params, &later_bound, opts)
+                cap_replacement(source, &cap, &usize_params, &later_bound, opts, const_types)
             {
                 if let Some(init) = &local.init {
                     edits.push(edit(&init.expr, replacement));
@@ -158,7 +160,7 @@ fn collect_block_edits(
     // INSIDE them are scanned with this block's own gates.
     for stmt in &block.stmts {
         for nested in super::stmt_nested_blocks(stmt) {
-            collect_block_edits(source, sig, nested, root, edits, opts);
+            collect_block_edits(source, sig, nested, root, edits, opts, const_types);
         }
     }
 }
@@ -450,13 +452,17 @@ fn capacity_from_iter(expr: &Expr) -> Option<Cap> {
 /// Build `Vec::with_capacity(<cap text>)` from the ORIGINAL source text of
 /// the capacity node, gated by the parse-only safety checks (scope + usize).
 /// Under `opts.untyped_paths` (verify-mode), the usize gate accepts any
-/// plain path — rustc's E0308 backs the auto-revert.
+/// plain path — rustc's E0308 backs the auto-revert. Issue 255 (class 5):
+/// when verify-mode's path names an in-file const whose integer type the
+/// [`file_const_int_types`] census PROVES non-usize, the emit casts —
+/// `(<expr>) as usize` — instead of burning the round on a guaranteed E0308.
 fn cap_replacement(
     source: &str,
     cap: &Cap,
     usize_params: &[String],
     later_bound: &[String],
     opts: ProposerOpts,
+    const_types: &std::collections::HashMap<String, ConstIntTy>,
 ) -> Option<String> {
     let node = match cap {
         Cap::Node(node) => {
@@ -465,7 +471,9 @@ fn cap_replacement(
             {
                 return None;
             }
-            format!("Vec::with_capacity({})", usize_text(source, node)?)
+            let text = usize_text(source, node)?;
+            let text = cast_as_usize_if_known_non_usize(node, opts, const_types, text);
+            format!("Vec::with_capacity({text})")
         }
         Cap::NodePlusOne(node) => {
             if !capacity_is_usize(node, usize_params, opts)
@@ -473,7 +481,9 @@ fn cap_replacement(
             {
                 return None;
             }
-            format!("Vec::with_capacity({} + 1)", usize_text(source, node)?)
+            let text = usize_text(source, node)?;
+            let text = cast_as_usize_if_known_non_usize(node, opts, const_types, text);
+            format!("Vec::with_capacity({text} + 1)")
         }
         // The emitted text is `<node>.len()` — always usize; the receiver
         // still must not reference a later `let`.
@@ -487,10 +497,101 @@ fn cap_replacement(
     Some(node)
 }
 
+/// A const's integer type as proven by an in-file declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConstIntTy {
+    Usize,
+    OtherInt,
+}
+
+/// `(<expr>) as usize` when the capacity node is a single-segment path
+/// naming an in-file const whose integer type the census proves non-usize
+/// (verify-mode only — the default posture's usize gate declines these
+/// paths unchanged, so this widens no default firing). `as` binds tighter
+/// than `+`, so the `NodePlusOne` form composes: `(N) as usize + 1`.
+fn cast_as_usize_if_known_non_usize(
+    node: &Expr,
+    opts: ProposerOpts,
+    const_types: &std::collections::HashMap<String, ConstIntTy>,
+    text: String,
+) -> String {
+    if !opts.untyped_paths {
+        return text;
+    }
+    let Expr::Path(p) = node else {
+        return text;
+    };
+    let Some(ident) = p.path.get_ident() else {
+        return text;
+    };
+    if const_types.get(&ident.to_string()) == Some(&ConstIntTy::OtherInt) {
+        format!("({text}) as usize")
+    } else {
+        text
+    }
+}
+
+/// Every in-file `const` item's integer type, keyed by name: top-level
+/// consts, impl-block associated consts, and fn-body-local `const` items
+/// (the census shape was fn-local, issue 255 class 5). A name declared with
+/// CONFLICTING types in different scopes drops to absent — the flat map
+/// must not vouch for a type it cannot prove. Non-integer and generic types
+/// are absent too: verify-mode's bare emit + rustc-backed revert is today's
+/// behavior for anything the census cannot prove.
+fn file_const_int_types(file: &File) -> std::collections::HashMap<String, ConstIntTy> {
+    struct Scan<'a> {
+        out: &'a mut std::collections::HashMap<String, ConstIntTy>,
+    }
+    fn int_ty_of(ty: &Type) -> Option<ConstIntTy> {
+        let Type::Path(tp) = ty else {
+            return None;
+        };
+        if tp.qself.is_some() {
+            return None;
+        }
+        let seg = tp.path.segments.last()?;
+        if !seg.arguments.is_none() {
+            return None;
+        }
+        match seg.ident.to_string().as_str() {
+            "usize" => Some(ConstIntTy::Usize),
+            "u8" | "u16" | "u32" | "u64" | "u128" | "i8" | "i16" | "i32" | "i64" | "i128" => {
+                Some(ConstIntTy::OtherInt)
+            }
+            _ => None,
+        }
+    }
+    impl<'ast> Visit<'ast> for Scan<'_> {
+        fn visit_item_const(&mut self, c: &'ast ItemConst) {
+            let name = c.ident.to_string();
+            let Some(ty) = int_ty_of(&c.ty) else {
+                return;
+            };
+            match self.out.get(&name) {
+                // Conflicting declarations of one name: drop it.
+                Some(existing) if *existing != ty => {
+                    self.out.remove(&name);
+                }
+                Some(_) => {}
+                None => {
+                    self.out.insert(name, ty);
+                }
+            }
+        }
+    }
+    let mut out = std::collections::HashMap::new();
+    let mut scan = Scan { out: &mut out };
+    scan.visit_file(file);
+    out
+}
+
 /// Source text for a capacity node, with a non-`usize` integer-literal
-/// suffix stripped (`5u64` → `5`): `with_capacity` takes `usize`, and an
-/// unsuffixed decimal literal infers it in that position (riir-train
-/// `gepo_goat` lesson — the suffixed emit was an E0308).
+/// suffix stripped (`5u64` → `5`; `6_u64` → `6` — the separator before the
+/// stripped suffix goes too, never emit a bare trailing `_`).
+/// `with_capacity` takes `usize`, and an unsuffixed decimal literal infers
+/// it in that position (riir-train `gepo_goat` lesson — the suffixed emit
+/// was an E0308; issue 255 class 5 — the census recorded a suffix-strip
+/// emitting `6_`, normalized here regardless of the exact revert cause).
 fn usize_text(source: &str, node: &Expr) -> Option<String> {
     if let Expr::Lit(ExprLit {
         lit: Lit::Int(li), ..
@@ -503,7 +604,7 @@ fn usize_text(source: &str, node: &Expr) -> Option<String> {
         }
         return Some(
             text.strip_suffix(suffix)
-                .map(str::to_string)
+                .map(|s| s.strip_suffix('_').unwrap_or(s).to_string())
                 .unwrap_or(text),
         );
     }
@@ -1096,5 +1197,92 @@ mod tests {
         );
         // Parse-only (the default) still skips it.
         assert!(propose_fix("vec-with-capacity", src).is_none());
+    }
+
+    #[test]
+    fn verify_mode_u64_const_emits_as_usize() {
+        // Issue 255 class 5: the census's ×6 u64/u32 E0308 breaks. When the
+        // in-file const census PROVES the capacity const's integer type
+        // non-usize, verify-mode emits the cast instead of the guaranteed
+        // failing bare path. BOARD_SIZE here is FILE-level; the sibling
+        // test below pins the fn-local shape.
+        let src = "const BOARD_SIZE: u64 = 8;\nfn cells() -> Vec<u8> {\n    let mut v = Vec::new();\n    for i in 0..BOARD_SIZE { v.push(i as u8); }\n    v\n}";
+        let out = propose_verify(src).expect("verify-mode attempts the u64 const");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity((BOARD_SIZE) as usize)")),
+            "{out}"
+        );
+        // Parse-only (the default) still skips it — no default widening.
+        assert!(propose_fix("vec-with-capacity", src).is_none());
+    }
+
+    #[test]
+    fn verify_mode_fn_local_u64_const_emits_as_usize() {
+        // The census shape: the typed const declared INSIDE the fn body
+        // (the monopoly BOARD_SIZE u8 shape's sibling — the cast form).
+        let src = "fn cells() -> Vec<u8> {\n    const BOARD_SIZE: u64 = 8;\n    let mut v = Vec::new();\n    for i in 0..BOARD_SIZE { v.push(i as u8); }\n    v\n}";
+        let out = propose_verify(src).expect("verify-mode attempts the fn-local u64 const");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity((BOARD_SIZE) as usize)")),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn verify_mode_node_plus_one_cast_composes() {
+        // `as` binds tighter than `+`: `(N) as usize + 1` is the Inclusive
+        // range form of the cast (issue 255 class 5).
+        let src = "const N: u64 = 8;\nfn cells() -> Vec<u8> {\n    let mut v = Vec::new();\n    for i in 0..=N { v.push(i as u8); }\n    v\n}";
+        let out = propose_verify(src).expect("verify-mode attempts the inclusive u64 const");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity((N) as usize + 1)")),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn verify_mode_conflicting_const_names_stay_bare() {
+        // One name, two scopes, two types: the census drops it (the flat
+        // map must not vouch for a type it cannot prove) — bare emit,
+        // rustc-backed revert, exactly today's behavior.
+        let src = "fn a() -> Vec<u8> {\n    const N: u8 = 8;\n    let mut v = Vec::new();\n    for i in 0..N { v.push(i); }\n    v\n}\nfn b() -> Vec<u8> {\n    const N: usize = 8;\n    let mut v = Vec::new();\n    for i in 0..N { v.push(i as u8); }\n    v\n}";
+        let out = propose_verify(src).expect("verify-mode attempts both consts");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(N)")),
+            "{out}"
+        );
+        assert!(
+            !squash(&out).contains("as usize"),
+            "conflicting N must not cast: {out}"
+        );
+    }
+
+    #[test]
+    fn suffix_separator_stripped_with_suffix() {
+        // The census's `6_` emit shape (issue 255 class 5): a suffixed
+        // literal with a digit separator before the suffix — `6_u64` strips
+        // to a clean `6`, never a bare trailing underscore.
+        let src = "fn cells() -> Vec<u8> {\n    let mut v = Vec::new();\n    for i in 0..6_u64 { v.push(i as u8); }\n    v\n}";
+        let out = propose_fix("vec-with-capacity", src).expect("int literal passes the gate");
+        assert!(squash(&out).contains("with_capacity(6)"), "{out}");
+        assert!(
+            !squash(&out).contains("with_capacity(6_)"),
+            "emit must not carry the separator: {out}"
+        );
+        // The default posture fired here all along (int literals pass the
+        // gate) — this is emit-text normalization, not a firing change.
+    }
+
+    #[test]
+    fn grouped_separator_literal_stays_intact() {
+        // `1_000_u32` strips to `1_000` — interior separators stay; only
+        // the separator immediately before the stripped suffix goes.
+        let src = "fn cells() -> Vec<u8> {\n    let mut v = Vec::new();\n    for i in 0..1_000_u32 { v.push(i as u8); }\n    v\n}";
+        let out = propose_fix("vec-with-capacity", src).expect("int literal passes the gate");
+        assert!(squash(&out).contains("with_capacity(1_000)"), "{out}");
+        assert!(
+            !squash(&out).contains("with_capacity(1_000_)"),
+            "emit must not carry the separator: {out}"
+        );
     }
 }
