@@ -6,7 +6,7 @@
 > - `92b52792d` — "[Perf][GDN] Drop the prefill copies of the fused spec-decode path" (#67733, 2026-11-16)
 > Staged by the perf-rematch weekly watch (2026-11-24, riir-ai `d0b745763`) as lead family (1); this verdict is the T0 the watch row owed.
 > **Date:** 2026-11-24
-> **Status:** DISTILLED — pending owner decision (staged-unclaimed: Plan 406 allocated, nominal Batch 407, behind the live m3 leases Plans 404/405)
+> **Status:** LANDED 2026-11-24 (Batch 407, Plan 406, zed-e7e471a3@amo) — rust_perf +1 rule, kernel_opt +8 count-neutral faces, same commit. **R1 DEMOTED at landing (NotBenchable-by-platform):** the GOAT falsifier fired — the Pareto validator priced the pair ParetoDominated (0 faster / 3 slower / 0 tie) and the isolated probe (identical indexing loops, only the allocation differing) read 0.967/0.979 twice, inside the tie band: the Rust class `vec![0.0; n]` rides `alloc_zeroed`, whose zero-page path serves the zeros without a separate memset pass on this platform posture, so the pass the rule teaches deleting (torch.zeros pays a real memset) is already absent in the Rust allocation class. The LAW stays decision content (the dead-store mechanism + regime condition + canary discipline; the torch win is real where it was measured). The 16-bit-state lever (T8): LOSSY-GATED lane intel — never a bit-identity arm; any future decode-state-traffic cell is governed by the lossy law's per-family retention gate. DROPS + widen finds recorded in §6 below.
 > **Related Research:** 438 (mlx-4927, the Metal sibling family), 421 (anemll GDN numerics), 429 (maya inkling-mini)
 > **Related Plans:** 406 (this verdict's batch plan, unclaimed)
 > **Classification:** Public
