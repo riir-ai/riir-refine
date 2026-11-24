@@ -942,6 +942,7 @@ mod entries_07;
 mod entries_08;
 mod entries_09;
 mod entries_10;
+mod entries_100;
 mod entries_11;
 mod entries_12;
 mod entries_13;
@@ -1335,6 +1336,7 @@ mod tests;
 ///   scan — the corpus's first hand-SIMD `std::arch` entry with both AVX2 and
 ///   NEON arms).
 #[must_use]
+#[allow(clippy::too_many_lines)] // data table, not logic (the corpus convention)
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     let mut entries = entries_01::entries();
     entries.extend(entries_02::entries());
@@ -1435,6 +1437,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_97::b407_rules());
     entries.extend(entries_98::b408_rules());
     entries.extend(entries_99::b412_rules());
+    entries.extend(entries_100::b413_rules());
     Corpus::new(entries)
 }
 
