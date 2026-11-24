@@ -107,3 +107,18 @@ in 050/061/063/067, un-closed DONE plan 033, reverted HISTORY/TASKS); its legiti
 `.plans/067`). develop re-set to origin/develop `7daa9bc` (ff refused — diverged; hold branch
 `hold/i067-stale-revert-600848e` preserves the commit for adjudication). seal-sprints now
 synced + clean. riir-refine itself: clean, up to date, nothing to sweep.
+
+## 2026-11-24 pass (amo hygiene lane, post-leftover-sweep) — survey current; SAFE-class partial (6.5G); the big rows are LIVE lanes
+
+df before 187G avail (post-sweep). The 11-23 pass's quartet rows dissolved; the current big trees:
+
+**LOAD-BEARING / LIVE (never delete):**
+- seal-remake/target 177G + riir-ai/target 115G + i131-riir-ai/target 115G — the two product workspaces + the live sprint!131 mirror clone (its managed job runs from i131-sib/worktree). Profiling-invalidation law: profiling data is never invalidation data; these are the shipping postures. Next deep-clean candidate ONLY via a measured sweep pass with the lanes quiet.
+- zed/target 24G (the box's Zed build), riir-refine/target 17G (the release-set binary's home — the LOAD-BEARING class), riir-train/target 16G, riir-infer/target 12G (bmo's i1241 census lane pairs with it), seal-game-editor/target 6.7G (m3's wp3p2 checkout rides this clone), seal-render 6.6G + i131-seal-render 6.6G.
+
+**/tmp scratch (dated-run class):**
+- sprint117-sibs 69G (mtime TODAY 16:04 — sprint117 lane LIVE today, gate sibs) — KEEP, lane's teardown.
+- s020-w3-gate-target 57G (mtime TODAY 12:56 — sprint!020 wave-3 mist gate, lane live) — KEEP.
+- i257 13G (today 20:09), i1256 13G (Nov 23 — the i1256-mirror's gate target; mirror itself torn down this pass, target kept one more day pending the lane's close), seal-view-084 9.2G + sge084-target 4.1G (sprint084 window OPEN — mist-bars merge pending), plan470 5.0G (today), i1241 4.5G (today, census), wp3p2 5.0G (the live wp3p2 lane's target), sv125-target 6.9G (fingerprints moved TODAY 19:41 — another agent's today-work; KEEP despite sprint125 having landed), s085probe-gate 5.2G (today 17:36).
+
+**SAFE-class executed this pass:** seal-e2e-matrix-20261122-235251 6.5G removed (2-day-dated matrix run dir, receipts in .benchmarks). Plus the earlier sweep's i1221t4samp+_v2 2.56G + i1256-mirror 175M. df after 193G avail (+6G this pass, +9G session total).
