@@ -28,3 +28,6 @@ The fixture IS the gate for T0/T3: each planted shape must classify, the control
 ## Related
 
 Research 447 (the filing landscape note; Noeri correction formula) · Research 377 (SkySynth five-shape hack taxonomy — the classification vocabulary to reuse for reasons) · shipped guards this extends: bench-target guard (bench files), adoption_gate readmit refusal (output history), blueprint-report (verdict audit) · prior art (class-level, why the claim is narrow): EvilGenie arXiv:2511.21654 (test-file-edit detection for reward-hack measurement), APR patch-overfitting line (Smith 2015 FSE; ODS 2024, FSE; arXiv:2603.11262), TRACE 2026 (human-verified exploit taxonomy).
+
+**Claimed:** zed-0a464098@amo, 1795522485, expires 2026-11-26T12:30:00+00:00
+Claim-note: scope = T0–T3 as mailed (the classifier + outcome flag + corrected roll-up + fixtures/canary), report-only default-on posture, never in the release set until its gates pass; work happens on amo (standard sibling layout).
