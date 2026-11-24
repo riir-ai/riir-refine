@@ -1,6 +1,6 @@
 # Plan 407 — Batch 408 nominal: the TKCC road-blog transcription (staged leads 2026-11-17, Research 440 / riir-ai R402 / riir-infer note 030)
 
-**Status:** LANDED 2026-11-24 (Batch 408) — rust_perf +3 (entries_98, all measurement-honesty suggestion-only NotBenchable), kernel_opt count-NEUTRAL +5 faces, one commit. T0 live-fetch verified every staged datum byte-exact; TWO staging corrections carried (the 13–38%-experts datum NOT re-verifiable in the live text — dropped; the barrier census sharpened to 3 full + 1 effectively-full + 1 genuinely fine); gen-1 score-bench FLAT (heal 0.9643 / created 0.0179 / edits 70 — run #257); freeze gen2+gen3 e2es PASS no table movement. **Lease closed:** zed-amo-i407@amo, 1795480316, was expires 2026-11-26T01:00Z — closed at the landing.
+**Status:** LANDED 2026-11-24 (Batch 408, commit `0f6dcebb`) — rust_perf +3 (entries_98, all measurement-honesty suggestion-only NotBenchable), kernel_opt count-NEUTRAL +5 faces, one commit. T0 live-fetch verified every staged datum byte-exact; TWO staging corrections carried (the 13–38%-experts datum NOT re-verifiable in the live text — dropped; the barrier census sharpened to 3 full + 1 effectively-full + 1 genuinely fine); gen-1 score-bench FLAT (heal 0.9643 / created 0.0179 / edits 70 — run #257); freeze gen2+gen3 e2es PASS no table movement. **Lease closed:** zed-amo-i407@amo, 1795480316, was expires 2026-11-26T01:00Z — closed at the landing.
 
 ## Source
 
