@@ -10,7 +10,11 @@
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
 //! 389 entries across 15 categories as of Batch 399 (+2: the mlx-serve ANE seed's `rust_perf` half,
-//! `entries_94`; Batch 400 count-NEUTRAL — +1 FACE note-only on `entries_74`
+//! `entries_94`; Batch 408 (+3: the TKCC road-blog transcription, `entries_98` — three
+//! measurement-honesty rules `benchmark-input-distribution-realism` /
+//! `isolated-bench-cache-state-vs-live` / `harness-overhead-contaminates-us-kernels`,
+//! together.ai/blog/road-to-together-compiler POST-ONLY, the URL the pin, quotes
+//! byte-verified at the live text 2026-11-24, Plan 407); prior Batch 400 count-NEUTRAL — +1 FACE note-only on `entries_74`
 //! `writeclass-share-partition-inflight-writes`: the mvm admission-FIFO
 //! measured instance, a 47k-task record 100-300 ms head-of-line at 1.9 µs/task,
 //! host per-class budgets shed 38% of serve — Plan 400 / Research 435,
@@ -1025,6 +1029,7 @@ mod entries_94;
 mod entries_95;
 mod entries_96;
 mod entries_97;
+mod entries_98;
 
 #[cfg(test)]
 mod tests;
@@ -1427,6 +1432,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_95::b401_rules());
     entries.extend(entries_96::b402_rules());
     entries.extend(entries_97::b407_rules());
+    entries.extend(entries_98::b408_rules());
     Corpus::new(entries)
 }
 
