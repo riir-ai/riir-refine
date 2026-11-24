@@ -1,6 +1,6 @@
 # Plan 409 — Batch 410: slice (3) the vendored ml-explore/mlx tree — the 2D-conv + col-reduce clusters at the mlx-serve submodule pin
 
-**Status:** OPEN — claimed by zed-amo-i410@amo (the amo idle loop, Protocol H fresh-passed 2026-11-24); expiry 48 h from claim push.
+**Status:** LANDED — 2026-11-24, session zed-amo-i410@amo (Research 443; claim `af5f66fd` closed by the landing; the six rules + five faces in entries_gpu_166, gates green, fixtures 7/7 pre-entry at debug AND -O).
 
 Queue head: Research 432's named follow-up pool item, "the vendored ml-explore/mlx tree (its own scale)" — the
 B398 visit's disclosed unread submodule residue (`lib/mlx-src`, never pulled), confirmed staged by Research 436
@@ -33,24 +33,29 @@ License: ml-explore/mlx MIT (re-verify at clone). Transcription law: Metal/C++ s
 fixtures, suggestion-only `NotBenchable-by-domain` (no Metal runner in the validator) unless a rule is
 host-benchable.
 
-- [ ] T0 — re-verify the submodule pin at the current mlx-serve tip (`2201ec9` → `c69303b0`) and the
-      clone at the pin; LICENSE re-check; count the upstream commits past the pin (recorded, unswept);
-      per-file line counts (recon numbers re-verified at claim)
-- [ ] T1 — dedup greps at 3+ vocabularies over `src/domains/kernel_opt/` + `src/domains/rust_perf/`
-      (conv/winograd/depthwise/im2col/implicit-gemm; reduce/2pass/col-reduce/fixed-partition/tier),
-      every hit read and ruled in-row; prior mined set named per candidate; re-run at landing HEAD
-- [ ] T2 — two parallel reader subagents over the two clusters; coordinator re-verifies every quoted
-      line at the clone (file:line + verbatim text)
-- [ ] T3 — author corpus entries (`entries_gpu_166.rs`, kernel_opt primary; rust_perf only if a
-      measurement rule emerges) + riders; per-entry adjudications vs the named kin, in-rule both
-      directions; suggestion-only annotations with the domain reason
-- [ ] T4 — fixtures `b410_fixtures` standalone-compiled AND executed pre-entry (debug AND -O); the
-      gate's caught defects fixed before entry
-- [ ] T5 — gates at the isolated CARGO_TARGET_DIR: batch parse gate, default lib, kernel_opt lib,
-      clippy -D × postures, retrieval floors BOTH lanes, fmt gate (bare rustfmt on touched files),
-      `pins_manifest --write`, count web one-landing; score-bench/freeze NOT owed if zero clippy_lints
-      delta; release-set binary NOT owed (suggestion-only kernel delta, corpus-only — the B402/B409
-      disclosure convention; the maintained binary is already stale at e4b2dd31, the rebuild folds into
-      the next maintained-binary lane)
-- [ ] T6 — Research 443 batch record; snapshot claim → LANDED reshape; commit `feat: batch 410: ...` +
-      push; teardown the clone
+- [x] T0 — re-verify the submodule pin at the current mlx-serve tip (`2201ec9` → `c69303b0`) and the
+      clone at the pin; LICENSE re-check (MIT); count the upstream commits past the pin (64, recorded,
+      unswept); per-file line counts (recon numbers verified)
+- [x] T1 — dedup greps at 3+ vocabularies over `src/domains/kernel_opt/` + `src/domains/rust_perf/`
+      (conv/winograd/depthwise/im2col/implicit-gemm; reduce/2pass/col-reduce/fixed-partition/tier;
+      bounds/mask/hoist; strided-view; capacity/budget) — zero owners on the six landed axes; re-run at
+      landing HEAD (the batch re-greps at the live corpus during authoring)
+- [x] T2 — two parallel reader subagents over the two clusters' remaining surfaces; coordinator
+      re-verified every quoted line at the clone (11 verification reads; reader A's commutative-flag lead
+      dropped pre-authoring — no such flag exists)
+- [x] T3 — author corpus entries (`entries_gpu_166.rs`, 6 rules) + 5 count-neutral faces on their OWNERS;
+      per-entry adjudications vs the named kin, in-rule both directions; suggestion-only NotBenchable
+      annotations with the domain reason
+- [x] T4 — fixtures `b410_fixtures` standalone-compiled AND executed pre-entry (debug AND -O, 7/7); the
+      gate caught FOUR fixture defects (the R2 shape-gate inputs, the R1 scalar closed-form index order,
+      the R4 tamper predicate direction, the R2 tamper budget arithmetic) + the B402 raw-string class
+      (3 strings with embedded quotes) — all fixed pre-entry
+- [x] T5 — gates at the isolated CARGO_TARGET_DIR (/tmp/b410_tgt): default lib 3980/0; kernel+latent
+      4127/0; retrieval floors BOTH lanes 30/0 HELD no re-pin; clippy -D × 3 postures clean (11
+      mechanicals healed via cargo clippy --fix — the stale-binary fallback, disclosed); fmt gate PASSED;
+      numbering gate PASSED; pins_manifest agrees (kernel_opt.rules 1121); count web one-landing (router
+      1121 + category table B134/D271/N104 + health_views kernel 1121/total 1791 + README + AGENTS +
+      kernel_opt.md + the re-pin trail); score-bench/freeze NOT owed (zero clippy_lints delta); release-set
+      binary NOT owed (corpus-only suggestion-only delta — the B402/B409 disclosure; the binary is already
+      stale at e4b2dd31, the rebuild folds into the next maintained-binary lane)
+- [x] T6 — Research 443 batch record; snapshot claim → LANDED reshape; commit + push; teardown the clone

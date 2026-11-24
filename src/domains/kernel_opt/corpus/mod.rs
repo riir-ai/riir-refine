@@ -1968,6 +1968,7 @@ mod entries_gpu_162;
 mod entries_gpu_163;
 mod entries_gpu_164;
 mod entries_gpu_165;
+mod entries_gpu_166;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2195,6 +2196,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_163::entries());
     entries.extend(entries_gpu_164::entries());
     entries.extend(entries_gpu_165::entries());
+    entries.extend(entries_gpu_166::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2660,6 +2662,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Compute,
         "B: compute",
         &[
+            // Batch 410 +1 (Plan 409 / Research 443, mlx @ c69303b0):
+            // identity-guarded-atomic-elision-packed-bool-word — the
+            // atomic law: the identity test (if !val) elides the RMW
+            // on identity-heavy streams; the packed bool4 word carries
+            // four lanes in ONE atomic (single-lane-clearing mask);
+            // the guard appears ONLY on the idempotent ops — Sum's
+            // bare fetch_add is the deliberate asymmetry.
+            "identity-guarded-atomic-elision-packed-bool-word",
             // Batch 409 +1 (Plan 408 / Research 442, prism @ d12ca13bb #428):
             // offset-block-dot-block-sum-dp4a-correction — the raw-code
             // offset dot: sum = d_Q·(m·Σu + d·Σ(c·u)), TWO dp4a per
@@ -3060,6 +3070,24 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 410 +2 (Plan 409 / Research 443, mlx @ c69303b0):
+            // winograd-admission-budget-floor-routes-to-generalist —
+            // the fast-conv admission law: shape conjuncts + a
+            // working-set budget (recommendedMaxWorkingSetSize/4*3,
+            // used subtracted first) + the amortization floor — when
+            // the budget forces tiling below 32 rows per tile, return
+            // 0 and the caller falls through to the implicit-GEMM
+            // generalist; the unfold twin (maxBufferLength division,
+            // loud single-row refusal, scratch-max-tile views) rides
+            // as faces.
+            "winograd-admission-budget-floor-routes-to-generalist",
+            // whole-tile-inbounds-hoisted-loader-fast-path — the
+            // bounds law: a tile-granularity predicate (first + BN <=
+            // N) computed ONCE at loader construction buys the
+            // unguarded unrolled copy on the hot posture; the input
+            // loaders keep per-row guards because their predicate is
+            // not a tile property — the boundary clause.
+            "whole-tile-inbounds-hoisted-loader-fast-path",
             // Batch 404 +2 (Plan 403 / Research 438, mlx #4927 @ 58d91ee8):
             // windowed-parameter-nyi-gate-forces-full-work-fallback — the batch
             // LEAD: a capability gate answering not-implemented for a parameter
@@ -4188,6 +4216,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            // Batch 410 +1 (Plan 409 / Research 443, mlx @ c69303b0):
+            // winograd-fixed-transform-as-simdgroup-mma-chain — the
+            // transform-as-mma law: a FIXED small transform (the
+            // Winograd matrices) rides the SIMD-group/tensor matrix
+            // units as one mma chain per tile — (G·g)·Gt — the
+            // constants loaded once as two thread_elements per lane,
+            // never a scalar loop nest; the out-of-range clause rides
+            // the fragment write, never the mma.
+            "winograd-fixed-transform-as-simdgroup-mma-chain",
             // Batch 409 +1 (Plan 408 / Research 442, prism @ d12ca13bb #428):
             // min-max-range-scale-asymmetric-block-codec — the codec-choice
             // law: blocks asymmetric around zero spend a second fp16 on a
@@ -4196,6 +4233,22 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // split-surface clause; measured KLD 0.05/0.06 vs the
             // zero-anchored floor 0.258.
             "min-max-range-scale-asymmetric-block-codec",
+            // Batch 410 +1 (Plan 409 / Research 443, mlx @ c69303b0):
+            // nan-preflight-preserves-propagation-parity — the NaN
+            // preflight law: a hardware lane intrinsic that loses NaN
+            // (simd_min/simd_max) gets a simd_any(NaN) preflight at
+            // EVERY stage (lane + pairwise + butterfly) so propagation
+            // parity holds regardless of which stage observes it; the
+            // integer carve-out keeps the bare intrinsic.
+            "nan-preflight-preserves-propagation-parity",
+            // Batch 410 +1 (Plan 409 / Research 443, mlx @ c69303b0):
+            // logical-reduce-width-bitcast-float-carveout — the
+            // read-type law: all/any remaps its read type by WIDTH
+            // (integers bitcast, sub-4-byte read SIGNED for the bool
+            // target); floats are exempt — -0.0 compares equal to
+            // zero with a bit set, so truthiness moves to the
+            // magnitude-bits test.
+            "logical-reduce-width-bitcast-float-carveout",
             // Batch 404 +1 (Plan 403 / Research 438, mlx #4927 @ 58d91ee8):
             // dependency-version-known-wrong-window-refusal — a fast path gated
             // not on capability but on a KNOWN-WRONG dependency version window
