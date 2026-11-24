@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-31
 **Status:** Active — Phase 1 landed local; rethink + reflex fronts DEPLOYED 2026-11-03 (touch-deploy); refine + riir.ai fronts pending the kat-service/owner lane; T2.2 landed+deployed; T2.4 LANDED 2026-11-04 (completed through riir-dapps issue 157 `06444d6`, ticked 2026-11-05); T2.1/T2.3 open. **2026-11-18: the flow figures + refine front copy re-scoped to the v4 points plane (zero KAT on any served figure/walk; tiers out; accrual vocabulary; the GitHub icon joins the refine header) — riir-refine `d81f804a9` (canonical) + riir-dapps `571395a9` (mirrors + front_page/family/legal + the umbrella doc's dead-status fix that had killed every render_flows --check since 11-04); kat-service 636/0 + clippy -D + `--check` green end to end; deploy still the gen2 leg (owner lane, issue 190 T6's ⛔)**
-**Claimed:** zed-m3-webfamily, 1796256304, expires 2026-11-19T00:00:00+00:00
+**Lease closed:** zed-m3-webfamily, 1796256304, expired 2026-11-19T00:00:00+00:00 unlanded — the remaining fronts (refine + riir.ai) are owner-deploy-gated (the kat-service/owner lane); re-claim rides that ceremony.
 (prior claim zed-9e5cd646-continuation expired 2026-11-05T00:00; the lease line stays parseable — prose rides its own lines)
 **Research:** [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md) (public program digest)
 **Target:** `reflex-site` (reflex.riir.ai), `riir-refine` site lane (refine.riir.ai), `riir-rethink` site lane (rethink.riir.ai), `riir-dapps`/root (riir.ai) — per the web-family skill
