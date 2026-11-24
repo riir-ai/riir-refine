@@ -816,6 +816,14 @@ pub mod corpus_referee;
 // green zero on empty/blind/single-class populations.
 pub mod horizon_report;
 
+// Issue 256 T0/T1: the fix-trajectory early-read census core (report-only;
+// the `fix_trajectory_census` example is the thin printer) — the DoM
+// early-read LORO probe + the katgpt-core closure_audit macrostate arm
+// (feature `fix_trajectory_census` forwards `katgpt-core/closure_audit`)
+// over the SAME rings horizon_report loads. Refuses typed on
+// empty/single-attempt/single-class corpora — never a green zero.
+pub mod fix_trajectory_census;
+
 // Issue 128 (T1-T4): the fixseq cascade-law + derailment-index report — the
 // Traverse/Scout long-horizon failure statistics (arXiv:2609.17930, Research
 // 200) over the SAME ring jsonl horizon_report loads. Counting over labeled

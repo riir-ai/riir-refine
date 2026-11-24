@@ -458,6 +458,13 @@ basis_cert = ["katgpt-core/diagnostics"]
 # fixture. No new dep edge: katgpt-core is already the one public dep.
 nuisance_fraction = ["katgpt-core/diagnostics"]
 
+# Issue 256 T0/T1 — the fix-trajectory early-read census example: forwards
+# katgpt-core `closure_audit` (Issue 1244's matched-capacity macrostate
+# gate, Bench 994) for the report-only T1 arm over the fixseq rings.
+# Report-only; the gate test (fix_trajectory_census_gates) rides the same
+# feature so the typed-verdict paths execute somewhere.
+fix_trajectory_census = ["katgpt-core/closure_audit"]
+
 # katgpt-rs Issue 983 T1 — the heal-lane corpus-gap event, the FIRST consumer
 # of katgpt-core's `coverage_manifest` substrate (the Coverage-Manifested
 # Memory + gap-check protocol): stamp the clippy corpus's coverage of the
@@ -1586,6 +1593,16 @@ required-features = ["rustc_errors"]
 name = "fixseq_prevalence"
 required-features = ["rustc_errors"]
 
+# Issue 256 T0/T1: the fix-trajectory early-read census (report-only) —
+# DoM early-read LORO probe + katgpt-core closure_audit over the
+# .refine/fixseq rings. Ungated (horizon_report/span_embed are ungated;
+# closure_audit rides the katgpt-core path dep's own feature — the example
+# needs it, so it rides the `diagnostics` umbrella here).
+#   cargo run --release --example fix_trajectory_census --features fix_trajectory_census -- [PATHS…]
+[[example]]
+name = "fix_trajectory_census"
+required-features = ["fix_trajectory_census"]
+
 # Issue 025 T6: the WGSL/cube git-history mining harness (default+experimental
 # patterns; the diff adjudicates). Same gating as wgsl_scan_smoke — the
 # scanner lives behind kernel_opt.
@@ -2414,6 +2431,14 @@ required-features = ["evolve_novelty"]
 [[test]]
 name = "fix_verify_failure_matrix"
 required-features = ["fix_verify"]
+
+# Issue 256 — the fix-trajectory census example's gates: the T0 probe
+# answer shape, the T1 audit's typed verdicts, every census refusal, and
+# the ring-parser edge arms. Needs katgpt-core closure_audit (the T1
+# arm) — the feature forwards it.
+[[test]]
+name = "fix_trajectory_census_gates"
+required-features = ["fix_trajectory_census"]
 
 # Issue 215 G0 — the try-next pool census (REPORT-ONLY): real heal_with_pool
 # pools (RegateHarness) × per-candidate ClippyVerifier compile outcomes over

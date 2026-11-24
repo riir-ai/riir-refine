@@ -327,7 +327,12 @@ pub fn classify(path: &Path, edit: &AppliedEdit<'_>, flagged: &[FlaggedLint]) ->
 /// Public for the issue-257 backfill census (the traj rows' span-free
 /// pass judges coverage against the row's own lint key).
 #[must_use]
-pub fn extract_covering_attr(replacement: &str, restore: &str, original: &str, lint: &str) -> Option<String> {
+pub fn extract_covering_attr(
+    replacement: &str,
+    restore: &str,
+    original: &str,
+    lint: &str,
+) -> Option<String> {
     let attr = extract_new_silencer(replacement, restore, original)?;
     if attribute_covers(&attr, lint) {
         Some(attr)
