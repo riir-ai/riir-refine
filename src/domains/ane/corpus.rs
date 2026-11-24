@@ -486,7 +486,24 @@ fn serve_form(x: &[f32], form: Form) -> Vec<f32> {
                  is dead weight — the gate runs at FORM ADMISSION, never per call); bit-exact \
                  integer paths with no tolerance question. {ANNOTATION}. Source: {ANEM} \
                  (research/v8_prefill/PREFILL_RESEARCH.md:302-303, :406-407; the probe at \
-                 w8a8/a8_ffn_shape_probe.py)."
+                 w8a8/a8_ffn_shape_probe.py). Batch 409 FACE (Plan 408 / Research 442 — PrismML-Eng/ \
+                 llama.cpp @ d12ca13bb #428, the pq2_0m KV type's sub-commits, MIT): the law's \
+                 attention-kernel instance — a lossy-codec landing caught by its reference CENSUS, \
+                 never by a build. Three defects in one PR chain, none build-detectable: (a) the GPU \
+                 V-dequant read only 2 of 4 two-bit codes per byte and broadcast each — verbatim \
+                 'read only 2 of 4 two-bit codes per byte and broadcast each via __half2half2 / \
+                 repeated shift, producing [c0,c0,c1,c1] instead of [c0,c1,c2,c3] — the missing c2,c3 \
+                 inflated KV-cache KLD (1.6) vs the Vulkan reference (0.05)' — fixed by extracting \
+                 all four codes explicitly, matching the .comp reference; (b) the K shmem-staging \
+                 scale index hit the wrong field ('indexed the packed scale with a_offset + buf_ib/4 \
+                 in the wrong field; index by a_offset + global_ib instead') plus dequant-formula \
+                 comment drift (y = m + (q−1)·d vs the actual y = m + q·d — PQ2_0M uses q in {{0..3}} \
+                 directly, unlike PQ2_0's (q−1)); (c) the CPU flash-attention vec_dot table lacked \
+                 the type row entirely — 'stops dereferencing a NULL vec_dot (null pointer segfault \
+                 at threadpool init)'. Only (a) had a runtime census to catch it (the KLD read); \
+                 (b) was review-caught, (c) was a crash waiting for the first mixed-cache boot — the \
+                 law's admission gate must run AT LANDING on a lossy codec (the reference census \
+                 ships in the same commit), not after the first anomaly."
             )),
         },
         // ── A1 (B− RE-READ, rule form landed) — whole-model gates are blind ──

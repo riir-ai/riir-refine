@@ -1967,6 +1967,7 @@ mod entries_gpu_161;
 mod entries_gpu_162;
 mod entries_gpu_163;
 mod entries_gpu_164;
+mod entries_gpu_165;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2193,6 +2194,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_162::entries());
     entries.extend(entries_gpu_163::entries());
     entries.extend(entries_gpu_164::entries());
+    entries.extend(entries_gpu_165::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2658,6 +2660,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Compute,
         "B: compute",
         &[
+            // Batch 409 +1 (Plan 408 / Research 442, prism @ d12ca13bb #428):
+            // offset-block-dot-block-sum-dp4a-correction — the raw-code
+            // offset dot: sum = d_Q·(m·Σu + d·Σ(c·u)), TWO dp4a per
+            // byte-word (0x01010101 against u gives Σu), the offset one
+            // scalar multiply at block granularity, transport-free by
+            // the codec's own m-word; vs B180's isum-transport additive
+            // cancel — compose.
+            "offset-block-dot-block-sum-dp4a-correction",
             // Batch 362 +2 (Plan 373 / Research 406, ThreeRT): the edge-
             // stopping width of a MC image filter computed from a 3x3-FILTERED
             // variance with a positive floor + demodulate/re-modulate around
@@ -4178,6 +4188,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            // Batch 409 +1 (Plan 408 / Research 442, prism @ d12ca13bb #428):
+            // min-max-range-scale-asymmetric-block-codec — the codec-choice
+            // law: blocks asymmetric around zero spend a second fp16 on a
+            // min/max range codec (d=(max−min)/3, m=min, raw codes), all
+            // levels inside [min, max], worst-case d/6; the KV-only
+            // split-surface clause; measured KLD 0.05/0.06 vs the
+            // zero-anchored floor 0.258.
+            "min-max-range-scale-asymmetric-block-codec",
             // Batch 404 +1 (Plan 403 / Research 438, mlx #4927 @ 58d91ee8):
             // dependency-version-known-wrong-window-refusal — a fast path gated
             // not on capability but on a KNOWN-WRONG dependency version window
