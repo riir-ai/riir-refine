@@ -1,7 +1,7 @@
 # Plan 411 — Batch 412: the mlxfast staged pool (Research 437's 8 candidates)
 
-**Status:** IN FLIGHT — claimed 2026-11-24T04:44Z by zed-amo-i412@amo (epoch 1795495491), expires 2026-11-26T04:44Z.
-**Claimed:** zed-amo-i412@amo, 1795495491, expires 2026-11-26T04:44Z
+**Status:** LANDED — 2026-11-24, Batch 412, commit (this landing); lease closed at landing. Research 445 carries the full record.
+**Lease closed:** zed-amo-i412@amo, epoch 1795495491 — landed 2026-11-24 (the Batch-412 landing commit); the standing lease law's reshape-at-close.
 
 ## Source
 
@@ -30,29 +30,29 @@ claim time).
 
 ## Tasks
 
-- [ ] Claim pushed BEFORE authoring (this plan + the snapshot claim row, one commit).
-- [ ] T0: clone Layr-Labs/mlxfast-bonsai2-27b-engine at `0c7c3923` into `.raw/mlxfast-27b`;
+- [x] Claim pushed BEFORE authoring (this plan + the snapshot claim row, one commit).
+- [x] T0: clone Layr-Labs/mlxfast-bonsai2-27b-engine at `0c7c3923` into `.raw/mlxfast-27b`;
       MIT license verified at the pin; locate each of the 8 candidates' source surfaces
       (file + line windows) via the names' mechanism vocabulary.
-- [ ] T1: dedup grep per candidate against `src/domains/kernel_opt/` + `src/domains/rust_perf/`
+- [x] T1: dedup grep per candidate against `src/domains/kernel_opt/` + `src/domains/rust_perf/`
       + `sec` (3+ vocabulary variants; 3+-vocabulary greps + in-row reads per the Batch 402
       lesson). Kill owned mechanisms, keep owners cited for in-rule adjudication.
-- [ ] T2: 2 parallel reader subagents over the surviving candidates (pattern, bounded
+- [x] T2: 2 parallel reader subagents over the surviving candidates (pattern, bounded
       fix-space, category, rationale, source quote); coordinator re-verifies EVERY quoted line
       against the real file (Batch 31 discipline).
-- [ ] T3: author corpus entries (expected home: rust_perf `entries_99` for the
+- [x] T3: author corpus entries (expected home: rust_perf `entries_99` for the
       measurement-honesty/concurrency class; kernel `entries_gpu_168` if any kernel-surface
       candidate survives; sec per candidate as dedup admits). Suggestion-only/NotBenchable
       annotations carried where the win metric has no validator host (the dialed/B136 class).
-- [ ] T4: fixtures — standalone-compiled AND executed BEFORE entry (debug AND -O), four-arm
+- [x] T4: fixtures — standalone-compiled AND executed BEFORE entry (debug AND -O), four-arm
       discipline per rule; expected name `b412_fixtures` (+ domain-specific files as authored).
-- [ ] T5: gates — default lib; kernel+latent lib; retrieval floors BOTH lanes (30/0, no re-pin
+- [x] T5: gates — default lib; kernel+latent lib; retrieval floors BOTH lanes (30/0, no re-pin
       expected — corpus delta is not clippy_lints; if rust_perf delta moves nothing in the
       router floors, no re-pin); clippy -D ×3 postures clean; fmt (bare rustfmt, touched
       files); numbering gate + dual-allocation; pins_manifest --write; count web one-landing
       (AGENTS head + README + .docs/11_domains heads + health_views + router witness +
       KERNEL_CATEGORIES + category table + census if kernel delta).
-- [ ] T6: Research note (`.research/445_*`), landing row in the snapshot, commit `feat: batch
+- [x] T6: Research note (`.research/445_*`), landing row in the snapshot, commit `feat: batch
       412: ...` + push; teardown (.raw/mlxfast-27b, /tmp target dirs, fixture binaries).
 
 ## Yield expectation

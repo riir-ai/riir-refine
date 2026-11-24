@@ -3504,6 +3504,122 @@ fn resolve_deepest_existing(path: &str) -> String {
             family: SecFamily::InputValidation,
         },
 
+        // ══ Batch 412 (2026-11-24) — the mlxfast staged pool's sec half ══
+        // ══ (Plan 411 / Research 445: the Research 437 staged          ══
+        // ══ candidates, Layr-Labs/mlxfast-bonsai2-27b-engine @         ══
+        // ══ 0c7c3923 MIT — the same pin Batch 402 mined; each staged   ══
+        // ══ name re-surfaced and re-verified in-source this session).  ══
+        // ══ TWO suggest-only InputValidation entries; fixtures         ══
+        // ══ b412_sec_fixtures.rs (standalone-compiled AND executed    ══
+        // ══ before entry, debug AND -O, 8/8). The batch's rust_perf   ══
+        // ══ half (4 rules) lands in rust_perf/corpus/entries_99.rs;   ══
+        // ══ the kernel half (1 rule) in kernel_opt/corpus/            ══
+        // ══ entries_gpu_168.rs.                                       ══
+        // ── retired-mode-named-refusal-not-deletion (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "retired-mode-named-refusal-not-deletion".to_string(),
+            sec_concept: "a RETIRED declaration mode (a bring-your-own source the platform no \
+longer accepts) is a NAMED typed refusal — mode, accepted replacement, reason — kept as \
+a live enum case, never deleted: deletion collapses the retired mode into the \
+unknown-source typo diagnostic, so a participant using a retired mode reads the wrong \
+mistake, and nothing reds if the fetch path is ever restored (the flipped refusal test \
+is the mutation killer — an accept-case turned refusal-case goes red on restoration, \
+where a deleted test is just silence). The source's law, verbatim at the pin \
+(Sources/MLXFastTrustedHarness/Gemma4MTPHeadDeclaration.swift:200-205): 'REQUANT-ONLY \
+(David ruling, 2026-08-26). `pinned` is the ONLY source this track accepts. The head is \
+the organizer's own weights; a participant may declare a re-quantization of them and may \
+not substitute weights of their own. `remote` and `in_branch` are the two spellings of \
+\"load bytes the participant chose\", so both are named refusals rather than gated flows.' \
+THE STAKES are a leaderboard vector, not cosmetic: a substituted draft head cannot move \
+the output (the organizer-pinned target decides every emitted token and re-checks the \
+stream against a hidden serial trajectory after the clock stops), but it moves the accept \
+rate — 'which is the game', the decode-gain axis dominating the composite at weight 0.75. \
+TWO LAYERS ENFORCE ONE RULING: the manifest drops the head directories from editablePaths \
+(head weights cannot ride in) AND the parser refuses the fetch declarations (cannot go \
+and get) — 'Neither half is sufficient alone, so both land together'; and the retired \
+numeric gate SURVIVES the narrowing (a stated-bytes-must-fit-cap bound kept alive because \
+deleting it 'would silently drop the one numeric bound a declaration still carries'). ⛔ \
+KINSHIP (adjudicated): prefix-commit-priced-worthiness-typed-outcome (entries_93) is the \
+nearest by DOCTRINE (typed outcomes, loud refusals — 'the loud-verdict doctrine's second \
+instance') but owns prefix-cache COMMIT worthiness — THIS owns declaration admission at \
+the parse seam: the loud-verdict shape composes, the sinks differ, no merge; the specdec \
+gate trio (entries_gpu_161) owns runtime gate METRIC/threshold/scheduling axes — THIS a \
+load-time artifact-admission axis; pre-sampled-verify-extends-speculative-eligibility \
+(entries_gpu_123) owns the speculative ELIGIBILITY gate (which rows may draft) — a \
+runtime scheduling axis, distinct; deny-list-completeness-gated-emitted-last (Batch 402, \
+same repo+pin) owns confinement-profile ASSEMBLY — both are fail-closed admission \
+construction, different sinks (a deny list vs an enum grammar), compose on the fence. \
+REGIME: any declaration/API enum whose variants get retired by policy (weight sources, \
+protocol versions, auth modes, feature toggles retired for competitive or security \
+reasons); every place deletion would mis-report policy as typo. ANTI-REGIME: variants \
+deleted for being UNREACHABLE dead code (nothing ever constructed them — there is no \
+user to mis-diagnose); internal-only enums with no external surface. Suggest-only (the \
+refusal grammar and the mutation-killer test are per-enum contracts; no mechanical \
+rewrite). Detector note: none at landing — telling a retired case from a typo case needs \
+the policy history, not the syntax. Fixture: `fixtures/b412_sec_fixtures.rs` F1 (the \
+deleted-variant misreport arm, the named-refusal arm, the negative-control arm — a \
+well-formed retired declaration with the organizer's own URL is still refused, the \
+refusal is about the SOURCE not the URL — and the distinct-diagnostics arm). Batch 412 / \
+Plan 411 / Research 445."
+                .to_string(),
+            buggy_code: "/// NAIVE: the retired modes were DELETED and the match collapsed —\n/// a participant using a retired mode gets the typo diagnostic (the\n/// wrong mistake), and nothing reds if a fetch path is restored.\nenum WeightSource {\n    Pinned,\n}\n\nfn parse(raw: &str) -> Result<WeightSource, String> {\n    match raw {\n        \"pinned\" => Ok(WeightSource::Pinned),\n        other => Err(format!(\"unknown weight source '{other}'\")),\n    }\n}\n"
+                .to_string(),
+            fixed_code: "/// The named-refusal grammar: retired modes stay as live cases\n/// and refuse with mode + replacement + reason; a real typo keeps\n/// the unknown-source diagnostic; the flipped tests are the\n/// mutation killers.\n#[derive(Debug)]\nenum DeclError {\n    UnknownSource(String),\n    RetiredSource { mode: &'static str, replacement: &'static str, why: &'static str },\n}\n\nenum WeightSource {\n    Pinned,\n    RetiredRemote, // kept live: the refusal NAMES it\n    RetiredInBranch,\n}\n\nfn parse(raw: &str) -> Result<WeightSource, DeclError> {\n    match raw {\n        \"pinned\" => Ok(WeightSource::Pinned),\n        \"remote\" | \"in_branch\" => Err(DeclError::RetiredSource {\n            mode: if raw == \"remote\" { \"remote\" } else { \"in_branch\" },\n            replacement: \"'pinned'\",\n            why: \"a submission carries no drafter weights of its own\",\n        }),\n        other => Err(DeclError::UnknownSource(other.to_string())),\n    }\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── entity-keyed-envelope-widen-tripwire (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "entity-keyed-envelope-widen-tripwire".to_string(),
+            sec_concept: "an admission envelope keyed PER ENTITY (each decoder/track/model \
+owns its own structural ceiling AND its own contract-permitted set) is guarded by a \
+WIDEN TRIPWIRE: the tested envelope may tighten silently, but widening it is a schema \
+change that must turn a pinned test red — the tripwire pins the FIRST depth above each \
+contract set, so an envelope widened by a fixture edit fails loudly instead of riding \
+into the scored envelope silently. The source's shape, verbatim at the pin \
+(tools/spec-declaration.sh:94-97): 'Each decoder has its OWN structural ceiling and its \
+OWN contract block. The structural ceiling is the outer type/range guard (the knob \
+accepts a declared integer, not a hardcoded value); the contract's permitted set is the \
+tighter, AUTHORITATIVE one enforced below when the value is enabled.' — and the \
+tripwire's own law (tools/test-spec-declaration.sh:14-19): 'If a future fixture edit \
+ever WIDENS mtp_head.permitted_draft_depths past 7, or dflash_drafter.permitted_draft_\
+depths past 16, the matching case below turns this test red -- that is the tripwire.' \
+TWO-LAYER ADMISSION: layer 1 the structural ceiling (an integer outside 0..SPEC_MAX \
+refuses THERE, by name, naming the entity — 'outside the permitted range 0..8 for \
+decoder mtp'); layer 2 the contract membership (the authoritative set — depth 8 is \
+INSIDE mtp's structural 0..8 ceiling but OUTSIDE permitted_draft_depths, and the INNER \
+layer refuses it). THE ENVELOPES ARE INDEPENDENT: depth 16 is permitted for dflash and \
+refused for mtp; depth 3 is mtp-permitted and dflash-refused — one entity's envelope \
+never widens another's. THE PRE-SPAWN LAW: every refusal happens at the parse seam, \
+'before any engine spawns' — an enabled depth outside the declared envelope must be \
+refused at the gate, never discovered by a serve that booted a depth the scored \
+envelope would refuse. ⛔ KINSHIP (adjudicated): per-item-bound-not-batch-max (Batch \
+375) is the nearest — it owns per-ITEM bounds validated against the batch-wide max (the \
+validating-side cap axis); THIS owns the per-ENTITY envelope's DRIFT DIRECTION (the \
+widen tripwire + the two-layer structure + the per-entity independence) — compose on \
+per-entity bounds; request-amplification-guard-before-expensive-path (Batch 374) owns \
+the per-unit refusal BEFORE the expensive path — the pre-spawn half of THIS law is its \
+scheduling twin, cite; retired-mode-named-refusal-not-deletion (this batch) owns what \
+the refusal SAYS — THIS owns what the envelope ADMITS and how its widening is caught \
+(compose: one grammar, one gate); length-prefix-validate-before-alloc owns the alloc \
+face — no overlap (the envelope bounds a policy knob, not a buffer). REGIME: any \
+configurable scored envelope keyed per entity (decoder depths, track ceilings, model \
+context limits, per-tenant quotas) whose widening changes what the scoreboard \
+measures. ANTI-REGIME: envelopes identical across all entities (no independence to \
+pin); internal limits with no scored envelope (widening is a perf choice, not a policy \
+change). Suggest-only (the tripwire shape and the layered grammar are per-envelope \
+contracts). Detector note: none at landing — the tripwire needs the tested-envelope \
+history, not the syntax. Fixture: `fixtures/b412_sec_fixtures.rs` F2 (the per-entity \
+independence arm, the two-layer arm, the widen-tripwire red arm, the malformed arm). \
+Batch 412 / Plan 411 / Research 445."
+                .to_string(),
+            buggy_code: "/// NAIVE: one shared ceiling for all entities, no permitted set,\n/// no tripwire — a fixture edit that widens the limit rides into\n/// the scored envelope silently.\nconst MAX_TOKENS: i64 = 16;\n\nfn admit(entity: &str, tokens: i64) -> Result<(), String> {\n    if tokens > MAX_TOKENS {\n        return Err(format!(\"tokens {tokens} exceed {MAX_TOKENS}\"));\n    }\n    Ok(())\n}\n"
+                .to_string(),
+            fixed_code: "/// The per-entity envelope: structural ceiling (outer guard) +\n/// contract membership (the authority) + the widen tripwire pinning\n/// the first depth above each set.\nstruct Envelope {\n    entity: &'static str,\n    structural_ceiling: i64,\n    permitted: &'static [i64],\n}\n\nfn admit(e: &Envelope, tokens: i64) -> Result<(), String> {\n    if tokens > e.structural_ceiling {\n        return Err(format!(\n            \"outside the permitted range 0..{} for entity {}\",\n            e.structural_ceiling, e.entity\n        ));\n    }\n    if tokens > 0 && !e.permitted.contains(&tokens) {\n        return Err(format!(\n            \"not a contract-permitted {} draft depth\",\n            e.entity\n        ));\n    }\n    Ok(())\n}\n\nfn widen_tripwire(e: &Envelope, first_refused: i64) -> Result<(), String> {\n    if admit(e, first_refused).is_ok() {\n        return Err(format!(\n            \"TRIPWIRE: entity {} now admits {} — the tested envelope was WIDENED\",\n            e.entity, first_refused\n        ));\n    }\n    Ok(())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+
     ]
 }
 
