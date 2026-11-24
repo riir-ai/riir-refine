@@ -464,11 +464,26 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // std macro allowlist, unit-tail blocks, if-no-else, loops,
             // unique same-scope file-local unit fns); named patterns gate
             // on zero later references; the writeln!/write! io::Result
+            // writeln!/write! io::Result
             // class REFUSES — the must_use suppression is a lint-behavior
             // regression the compile gate cannot see (warnings are not
             // errors). The intake's own bench shape (`let _ =
             // sealed.verify().expect(..)`) is a METHOD CHAIN — the
             // documented divergence (typeck-only), never fired here.
+            // Issue 255 T2 class-4 guard (2026-11-24, 926d1608): the
+            // `is_provably_unit` loop arm was WRONG for `Expr::Loop` —
+            // `loop { … break now; }` carries the break VALUE's type, not
+            // `()`; the riir-ai shop_seek binding (`let released_at =` in
+            // a loop breaking with `now`, read twice downstream) drafted
+            // a used-binding deletion (the census's class 4: success=1,
+            // fix EMPTY, escalated-revert). The guard refuses via
+            // `loop_breaks_with_value` (wholesale descent; a nested
+            // loop's value-break refuses conservatively — this corpus
+            // row's convention is missed fires, never wrong fires);
+            // `while`/`for` stay unconditionally unit (break-with-value
+            // is illegal there by language law). Reproducer recovered
+            // via `corpus_diagnose --dump-shapes let_unit_value` (the
+            // raw-row probe added in the same commit, report-only).
             buggy_code: "fn probe() {\n    let _ = println!(\"hello\");\n    let _ = assert!(1 < 2);\n    let _y = unit_fn();\n}\nfn unit_fn() {}"
                 .to_string(),
             fixed_code: "fn probe() {\n    println!(\"hello\");\n    assert!(1 < 2);\n    unit_fn();\n}\nfn unit_fn() {}"

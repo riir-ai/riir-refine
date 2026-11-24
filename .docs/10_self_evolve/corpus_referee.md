@@ -36,6 +36,11 @@ CARGO_TARGET_DIR=/tmp/referee cargo build --release --features latent_retrieval 
 /tmp/referee/release/corpus_diagnose --referee <rule>          # one case
 /tmp/referee/release/corpus_diagnose --enroll <rule> --edit-epoch <8hex> \
   --edit-ts <unix> --pre-attempts N --pre-fails M [--batches K]  # seed a case
+/tmp/referee/release/corpus_diagnose --dump-shapes <needle>    # the raw-row reproducer probe (issue 255 T0):
+                                                               # prints every store row whose lint_key/shape matches
+                                                               # <needle> VERBATIM (pre-fold, report-only, returns before
+                                                               # any fold/referee logic — the store row IS the evidence
+                                                               # a guard or corpus fixture needs)
 ```
 
 The read is REPORT-ONLY over the stores but persists the batch counter (live

@@ -247,7 +247,32 @@ pub(super) fn entries() -> Vec<PerfRule> {
             category: "allocation".to_string(),
             buggy_code: "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 0..n { v.push(i as u32); }\n    v\n}".to_string(),
             fixed_code: "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::with_capacity(n);\n    for i in 0..n { v.push(i as u32); }\n    v\n}".to_string(),
-            context_notes: None,
+            // Issue 255 T3 (2026-11-24, zed-896d73d6@amo): the class-5 guard
+            // record. The i250 census (riir-ai store) caught this generator
+            // emitting `Vec::with_capacity(<non-usize const>)` — a typed
+            // const (u64/u32) or non-usize call in the capacity position is
+            // E0308; every instance burned an escalated compile round and
+            // reverted to `Vec::new()`. GUARDS LANDED in the proposer
+            // (vec_with_capacity.rs, a666ddfd): (a) `file_const_int_types`
+            // — the in-file const census (file/impl/fn-local, ident-keyed,
+            // conflicting names DROP); (b) `cast_as_usize_if_known_non_usize`
+            // — under verify-mode (untyped_paths) a proven non-usize int
+            // const emits `(<expr>) as usize` (NodePlusOne composes —
+            // `as` binds tighter than `+`); DEFAULT posture UNCHANGED
+            // (non-param paths still decline — the usize gate holds at
+            // parse-only); (c) `usize_text` separator-strip (`6_u64` → `6`,
+            // interior separators intact) — the census's truncated-literal
+            // emit shape (`6_`) can never emit again (empirical: `6_`
+            // compiles, so that instance's revert rode its run's overall
+            // gate — normalized regardless). The census's ×6 u64/u32
+            // E0308 breaks now draft compilable casts instead of burning
+            // the round; the miss class is closed at the source, not at
+            // the verify loop. Fixable (the rewrite is local; the cast is
+            // rustc-checked under verify).
+            context_notes: Some(
+                r##"Issue 255 T3 class-5 guard record (2026-11-24, zed-896d73d6@amo): the i250 census (riir-ai store) caught this generator emitting `Vec::with_capacity(<non-usize const>)` — a typed const (u64/u32) or non-usize call in the capacity position is E0308, and every census instance burned an escalated compile round then reverted to `Vec::new()`. GUARDS LANDED in the proposer (vec_with_capacity.rs, a666ddfd): (a) `file_const_int_types` — the in-file const census (file/impl/fn-local, ident-keyed, conflicting-name declarations DROP to absent); (b) `cast_as_usize_if_known_non_usize` — under verify-mode (untyped_paths) a PROVEN non-usize int const emits `(<expr>) as usize` (NodePlusOne composes: `as` binds tighter than `+`); DEFAULT posture UNCHANGED (non-param paths still decline — the usize gate holds at parse-only, pinned by test); (c) `usize_text` separator-strip (`6_u64` → `6`, interior separators intact) — the census's truncated-literal emit shape (`6_`) can never emit again (empirical rustc probe: `6_` COMPILES, so that one instance's revert rode its run's overall gate — normalized regardless, clean literals only). The ×6 u64/u32 E0308 breaks now draft compilable casts instead of burning the round; the miss class is closed at the source, not at the verify loop. Benchable as before (the capacity hint's allocation win has its own Pareto spec — the guards touch only the emit's typing, never the measured shape).
+"##.to_string(),
+            ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(vec_with_capacity_bench_spec()),
         },
