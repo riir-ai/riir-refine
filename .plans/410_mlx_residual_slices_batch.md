@@ -1,7 +1,6 @@
 # Plan 410 — Batch 411: the four mlx residual slices (vendored mlx tree, slice 3 residue)
 
-**Status:** CLAIMED — 2026-11-24, session zed-amo-i411@amo
-**Claimed:** zed-amo-i411@amo, 1795491000, expires 2026-11-26T03:30:00Z
+**Status:** LANDED — 2026-11-24, session zed-amo-i411@amo (Research 444; claim closed by the landing; the four rules in entries_gpu_167, gates green, fixtures 16/16 pre-entry at debug AND -O; the router annotation floor re-pinned 97/195 with measured pre-batch attribution).
 
 Queue head: plan 409's own staged residue (Research 443 §"Staged for the next
 batch") — the four slices Batch 410 recorded but did not author, all from the
@@ -27,27 +26,39 @@ License: ml-explore/mlx MIT (re-verify at clone). Transcription law: Metal/C++
 source → ORIGINAL Rust fixtures, suggestion-only `NotBenchable-by-domain` (no
 Metal runner in the validator) unless a rule is host-benchable.
 
-- [ ] T0 — re-clone ml-explore/mlx at pin `c69303b0` (blob:none, checkout the sha);
+- [x] T0 — re-clone ml-explore/mlx at pin `c69303b0` (blob:none, checkout the sha);
       LICENSE re-check; verify the four slice sites' quotes/lines at the pin
-- [ ] T1 — dedup greps at 3+ vocabularies over `src/domains/kernel_opt/` +
+- [x] T1 — dedup greps at 3+ vocabularies over `src/domains/kernel_opt/` +
       `src/domains/rust_perf/` (bitmask/bounds/mask-precompute; dilation/odometer/
       phase-base/tap; simd-reduce/width-dispatch/threadgroup/launch-cap;
-      tier/2pass/longcolumn/partition) — record zero-owner or adjudicate
-- [ ] T2 — two parallel reader subagents (conv-side: S1+S2; reduce-side: S3+S4);
-      coordinator re-verifies every quoted line at the clone
-- [ ] T3 — author corpus entries (`entries_gpu_167.rs`, ~4 rules) + count-neutral
-      faces if any pole folds onto an owner; per-entry adjudications vs the named
-      kin (S1 vs gpu_166 R4; S4 vs the 2pass rule), in-rule both directions;
+      tier/2pass/longcolumn/partition) — S1's only kin is gpu_166 R4 (the named
+      pole, compose); S2/S3/S4 zero owners; the loose-word grep hits
+      (gpu_117 constexpr-capacity, gpu_04 mask-sentinel, gpu_92/164) adjudicated
+      distinct in-rule
+- [x] T2 — two parallel reader subagents (conv-side: S1+S2; reduce-side: S3+S4);
+      coordinator re-verified every quoted line at the clone; reader corrections
+      carried (mask_t short + n-check asymmetry; clamp bites at row ≥ 2049;
+      widening ×4 longcolumn-only; per-thread-rounds constant/aggregate-scaling;
+      the trip-count clause load-bearing)
+- [x] T3 — author corpus entries (`entries_gpu_167.rs`, 4 rules; D/D/N/D joins);
+      per-entry adjudications vs the named kin, in-rule both directions;
       suggestion-only NotBenchable annotations with the domain reason
-- [ ] T4 — fixtures `b411_fixtures` standalone-compiled AND executed pre-entry
-      (debug AND -O; the four-arm discipline; the gate must catch planted defects)
-- [ ] T5 — gates at the isolated CARGO_TARGET_DIR (/tmp/b411_tgt): default lib;
-      kernel+latent lib; retrieval floors BOTH lanes (hold or re-pin with the
-      delta recorded); clippy -D ×3 postures; fmt gate; numbering gate;
-      pins_manifest (kernel_opt 1121 → expected +4); count web one-landing
-      (router pin + category table + health_views + README + AGENTS +
-      kernel_opt.md + re-pin trail); score-bench/freeze NOT owed if zero
-      clippy_lints delta; release-set binary NOT owed if corpus-only
-      suggestion-only delta (the standing disclosure)
-- [ ] T6 — Research 444 batch record; snapshot claim → LANDED reshape; commit +
-      push; teardown the clone + /tmp targets
+- [x] T4 — fixtures `b411_fixtures` standalone-compiled AND executed pre-entry
+      (debug AND -O, 16/16, zero warnings; the gate caught THREE fixture
+      defects: the masked path's missing weight multiply, the cost model's
+      double-scaled narrow weight, the tamper expectation's wrong
+      surviving-row value)
+- [x] T5 — gates at the isolated CARGO_TARGET_DIR (/tmp/b411_tgt): default lib
+      3981/0; kernel+latent 4128/0; retrieval floors kernel-variants 30/0 HELD,
+      router annotation RE-PINNED 97/195 (measured 102/195 at landing; the
+      pre-batch worktree at ccbcb76fb measured 108/195 — the batch cost 6
+      annotations, the B223 mechanism amplified; delta recorded in the arm);
+      clippy -D ×3 postures 0 (16 mechanicals healed via cargo clippy --fix —
+      the stale-binary fallback, disclosed); fmt PASSED; numbering PASSED;
+      pins_manifest agrees (1125); count web one-landing (router 1125 + the
+      Plan-003 category table D274/N105 + health_views 1125/1795 + README +
+      AGENTS + kernel_opt.md + the re-pin trail + the census count 168);
+      score-bench/freeze NOT owed (zero clippy_lints delta); release-set binary
+      NOT owed (corpus-only suggestion-only delta — the standing disclosure)
+- [x] T6 — Research 444 batch record; snapshot claim → LANDED reshape; commit +
+      push; teardown the clone + /tmp targets + the attribution worktree

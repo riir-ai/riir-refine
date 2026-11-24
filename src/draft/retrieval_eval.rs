@@ -2511,7 +2511,23 @@ mod tests {
                     // vocabulary shares tokens with clean spans). Floor =
                     // measured − 5 = 100 per the Plan-030 convention.
                     // Annotation only; gating stays killed (85% bar).
-                    100.0 / 188.0
+                    // Batch 411 re-pin (2026-11-24, Plan 410 / Research 444,
+                    // the four mlx residual slices — B410's staged leads):
+                    // MEASURED 102/195 (52.3%) — population 188 → 195 at the
+                    // pin (the intervening kernels' spans + this batch's 4);
+                    // the DELTA is the batch's own and it is LARGE: the
+                    // pre-batch detached worktree at the B410 landing
+                    // (riir-refine-b411pre @ ccbcb76fb, isolated tmp target)
+                    // measured 108/195 (55.4%) — the batch's four rules cost
+                    // SIX correct annotations (−3.1pp), the B223 mechanism
+                    // amplified: the bitmask/odometer/launch-cap/tier-ladder
+                    // vocabulary (mask, row, table, dispatch, ladder, cap)
+                    // is token-dense generic kernel dispatch vocabulary that
+                    // attracts clean spans to the kernel centroid AND steals
+                    // correct routes from neighboring domains' spans. Floor
+                    // = measured − 5 = 97 per the Plan-030 convention.
+                    // Annotation only; gating stays killed (85% bar).
+                    97.0 / 195.0
                 }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file

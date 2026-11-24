@@ -1969,6 +1969,7 @@ mod entries_gpu_163;
 mod entries_gpu_164;
 mod entries_gpu_165;
 mod entries_gpu_166;
+mod entries_gpu_167;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2197,6 +2198,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_164::entries());
     entries.extend(entries_gpu_165::entries());
     entries.extend(entries_gpu_166::entries());
+    entries.extend(entries_gpu_167::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -3070,6 +3072,35 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 411 +3 (Plan 410 / Research 444, mlx @ c69303b0 —
+            // B410's own staged leads converted):
+            // per-row-bounds-bitmask-hoisted-loader — the input-side
+            // pole of the tile hoist: rows that straddle the spatial
+            // edges per k-iteration (no tile predicate exists) get a
+            // per-row precomputed bitmask built once in the loader
+            // constructor; the hot tap loop pays two ANDs + one test,
+            // zero coordinate arithmetic; the zero-pad arm is the
+            // additive identity; mask_t is a 16-bit short (wS <= 15
+            // per axis is the small-filter regime); composes with
+            // whole-tile-inbounds (the same tile can carry both).
+            "per-row-bounds-bitmask-hoisted-loader",
+            // dilation-base-table-tap-odometer — the
+            // congruence-subsequence precompute: each output's
+            // contributing taps are {base + k·f_wgt_jump} keyed on
+            // position mod f_out_jump; the host solves {base, size}
+            // per phase once (the ONLY idil modulo in the lane), the
+            // device iterator starts at the base and wraps to the
+            // base never zero, and the table SIZES the K loop — tail
+            // taps never visited; the scalar half is gpu_04's
+            // derived-scalar instance (cite, never re-owned).
+            "dilation-base-table-tap-odometer",
+            // strided-reduce-shape-ratio-assumption-guarded-tier-ladder
+            // — the four-tier ordered dispatch (small <32 / longcolumn
+            // stride<32 && R>=1024 / 2pass >256 && out/32<1024 /
+            // looped) where each guard is exactly the assumption its
+            // tier makes, first-satisfied-wins; the widening rider is
+            // longcolumn-only (32→128 at total >= 32768; 2pass fixed).
+            "strided-reduce-shape-ratio-assumption-guarded-tier-ladder",
             // Batch 410 +2 (Plan 409 / Research 443, mlx @ c69303b0):
             // winograd-admission-budget-floor-routes-to-generalist —
             // the fast-conv admission law: shape conjuncts + a
@@ -4216,6 +4247,19 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            // Batch 411 +1 (Plan 410 / Research 444, mlx @ c69303b0):
+            // reduce-simd-width-fallback-launch-cap-pairing — the
+            // width-keyed execution split (sizeof < 8 the hardware
+            // simd primitive, == 8 a 5-round shuffle-down fallback)
+            // PAIRED with the host launch clamp keyed on the SAME
+            // predicate (itemsize == 8 → min 512) — a fallback whose
+            // launch budget is not reduced runs its slowest at the
+            // largest occupancy; bites at row >= 2049; exactly ONE
+            // clamp site in the backend (looped + all-reduce pass-1
+            // size without it, the honest residue); the read-type
+            // remap law (gpu_166's bitcast rule) composes in the same
+            // call chain, never merged.
+            "reduce-simd-width-fallback-launch-cap-pairing",
             // Batch 410 +1 (Plan 409 / Research 443, mlx @ c69303b0):
             // winograd-fixed-transform-as-simdgroup-mma-chain — the
             // transform-as-mma law: a FIXED small transform (the
