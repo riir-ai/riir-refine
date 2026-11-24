@@ -1,0 +1,32 @@
+# Plan 407 — Batch 408 nominal: the TKCC road-blog transcription (staged leads 2026-11-17, Research 440 / riir-ai R402 / riir-infer note 030)
+
+**Status:** IN FLIGHT — claimed from the mining-queue snapshot's staged-leads addendum (2026-11-17, zed-m3-tkcc-road staging; "Queue after: unclaimed; claim plan-first per the pools; conversion = the next Protocol-A blog-transcription batch"). POST-ONLY source — the blog URL is the pin (the B353/B363 live-fetch precedent); zero clone, zero GPU.
+**Claimed:** zed-amo-i407@amo, 1795480316, expires 2026-11-26T01:00Z
+
+## Source
+
+- together.ai/blog/road-to-together-compiler — published 2026-11-16, POST-ONLY (no repo). Staging verdict: the five leads below, every atom dedup-grepped 3+ vocabularies over kernel_opt + rust_perf at staging; riir-infer `.research/030` carries the evidence table (allocation 29→30); riir-ai R402 owns the private-side convergences + the agentic-loop falsification (NOT claimed here).
+- Staging note: "fixtures CPU-testable; NotBenchable-by-domain disclosed per atom at conversion".
+
+## Batch shape (from the staged addendum)
+
+- **rust_perf +3 measurement-honesty (all suggestion-only NotBenchable, bench_spec None):** lead 1 `benchmark-input-distribution-realism` · lead 2 `isolated-bench-cache-state-vs-live` · lead 3 `harness-overhead-contaminates-us-kernels` (marked THIN at staging — keep-or-face decision at authoring; fold candidate = the launch-overhead face on `wall-clock-ungated-shared-ci-noise-floor`).
+- **kernel_opt +0 rules / +4–5 count-neutral rider faces on their OWNERS:** gpu_111 `pdl-admission-by-image-set-marker` (the inter-kernel cost decomposition ns table + wait-before-FIRST-READ recovers ~98% + megakernel sync advantage over graphs+PDL ≈ 0) · gpu_23 `grid-dependency-wait-scoped-to-dependent-operands` (the quantified instance + the 3-of-5-full-barrier census) · gpu_57 (the split-from-fused-dispatch POSITIVE pole: Kimi K3 MoE copy-engine dispatch +6.9% over MoK megakernel; FlashInfer MegaMoE +17% factored out) · gpu_44 `spill-fragility-law-accumulator-regcap-cliff` (the fixed-launch-envelope-forced-on-GEMM instance, 1.2–1.5× at Hopper, Blackwell tcgen05 exempt) + the `instruction-cache-thrash-whole-model-binary` decision (own rule vs an envelope-family face — sm_90-class evidence, no in-stack consumer today → expect a face or suggestion-only, never a benchable claim).
+- **Folds into lead 1's rule (the staging's own note):** the sibling instances — random routing activates 13–38% more MoE experts; the top-k histogram kernel 20 µs random → 62 ms on real ReLU-zeros.
+- sm_90-class PDL/graph numbers: lane-intel for the 4090/Metal lanes only — recorded as provenance, never a bar (the gpu_57 negative-ledger precedent).
+
+## Tasks
+
+- [ ] **T0 — live re-verification (the pin is the URL).** Fetch the blog live (`https://r.jina.ai/<url>` per the search rule); byte-verify every staged quote + datum (2.1× embedding, 4–21% grouped-GEMM, 13–38% experts, 20 µs→62 ms histogram, the ns table, 98% PDL recovery, 6.9%/17%, 1.2–1.5×) against the live text; drift = re-pin with the correction recorded (never silently quote from staging).
+- [ ] **T1 — dedup re-verification at landing HEAD.** 3+ vocabularies per atom over BOTH corpora dirs; the landed-batches delta check — Plans 402–407 landed since the 11-17 staging (Bench 129–156 era, kernel_route_narrow/calibrated_dispatch/span_shape/index_cache/elo_k_eff faces + Batches 402–407) — re-grep for any new owner the staging missed; in-rule adjudications drafted per atom: lead 1 vs entries_94 `calibration-probe-swept-band-single-point-outlier` (compose — sweep-vs-point axis vs distribution-SHAPE axis) + gpu_60 `operand-residency` (adoption-trial axis, distinct) + cold-l3 (deliberate chill, distinct); lead 2 vs gpu_60 + cold-l3 (the deliberate-cold pole — first-touch claims WANT cold) + entries_94; lead 3 vs `wall-clock-ungated-shared-ci-noise-floor` (environment vs timer-FLOOR axis) + `degenerate-output-invalidates-throughput-claim` (output quality, distinct) + `instruction-count-cache-blindness` (locality axis, distinct — entries_79).
+- [ ] **T2 — rust_perf authoring.** The three measurement-honesty rules with full context_notes (verbatim quotes at the live pin), regime conditions, bench_spec None; lead 1 carries the sibling-instance folds (13–38% experts, the histogram datum); lead 3's keep-or-face verdict recorded either way.
+- [ ] **T3 — kernel_opt rider faces on their OWNERS** (count-neutral — compose, never merge; each face cites the blog datum + the same-law-different-silicon disclosure).
+- [ ] **T4 — fixtures** `fixtures/b408_fixtures.rs`: standalone-compiled AND executed pre-entry (debug AND -O, zero warnings); CPU-testable laws — lead 1 (lookup keyed by all-zero vs uniform-random vs realistic-skew distributions — the band brackets the truth; tamper arm = the confident single-point synthetic read), lead 2 (warmed-predecessor vs flushed selection flip), lead 3 (timer-floor vs the op's true cost); the four-arm discipline incl. the tamper/negative arms.
+- [ ] **T5 — counts + gates:** pins_manifest --write in-landing (the corpus genuinely moves); the count web one-landing (AGENTS rust_perf/kernel_opt counts + .docs/11_domains/rust_perf.md + health_views total + the kernel-side witness); the gen2/gen3 freeze-table regeneration in the SAME batch (plan 137 T7.5); `cargo refine --score-bench` at the landed tip; clippy -D warnings postures + lib tests + fmt on touched files.
+- [ ] **T6 — landing:** one commit (corpus + fixtures + pins + docs); HISTORY.md batch record; lease folded to `**Lease closed:**`; numbering gate + dual_allocation_gate clean; push.
+
+## Caveats (carried from staging)
+
+- POST-ONLY: no repo pin exists; the blog URL is the sole provenance — every quote lives or dies at T0's live fetch.
+- sm_90-class PDL/graph numbers are other-silicon serving evidence: provenance never headroom; the 4090/Metal lanes get lane-intel lines, never bars.
+- lead 3 is THIN — the honest drop is admissible (the drop IS the record, the entries-file header precedent).
