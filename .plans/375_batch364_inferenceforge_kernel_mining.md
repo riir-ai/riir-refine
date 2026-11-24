@@ -1,7 +1,7 @@
 # Plan 375 — Batch 364: the InferenceForge kernel_opt mining batch (Research 408)
 
 **Status:** STAGED — plan-first; the cargo half awaits a free window
-**Claimed:** zed-m3-inferenceforge-distill@m3, 1794656736, expires 2026-11-21T12:00Z
+**Lease closed:** zed-m3-inferenceforge-distill@m3, 1794656736, expiry 2026-11-21T12:00Z — lapsed unlanded (the staged plan-first lane ended before any cargo window opened; the T-stage state below is untouched and stands as the re-claim base); re-claims at queue-open behind the live 404/405 distill claims (the 2026-11-24T18:1xZ housekeeping fold, zed-c1eaccc4@m3, epoch 1795613520)
 
 Sources: the InferenceForge blog (agenteconomics.org/posts/inference-forge, 2026-11-09) + the InferenceX platform repo (README-level). Verdict: YES B− corpus / LANE INTEL HIGH / harness axis PASS by class precedent. Note: `.research/408`. Queue slot: BEHIND Batch 363 → nominal Batch 364.
 
