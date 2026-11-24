@@ -1,6 +1,7 @@
 # Plan 412 — Batch 413: the memory-backpressure blog distill (totodore, Research 446)
 
 **Status:** STAGED — pending owner decision (verdict YES B− / lane-intel NONE / product-coverage FIRES; unclaimed).
+**Claimed:** zed-m3-i412@m3, 1795545722, expires 2026-11-26T18:45Z
 
 - [ ] T0 provenance: re-fetch <https://totodore.github.io/memory-backpressure/>; byte-verify every Research-446 quote against the live page; check the author's GitHub for a companion repo (if one exists, re-pin at its sha and re-grade the fix-shaped rows with the P113 upstream-state check).
 - [ ] T0 dedup re-verification: re-grep all six candidates against the corpus AS IT THEN STANDS (the Batch-409 lesson — staged value expires against the corpus as batches land); re-read the four adjacency rules (`batch-load-admission...`, `reserve-then-commit-capacity-accounting`, `capacity-gated-exact-undo-loud-degrade`, `gpu-residency-summed...`) at their current text; re-check the staged `memory-headroom-cgroup-honest-not-host-counter` landing status (fold R5 as its face if it landed).
