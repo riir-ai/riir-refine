@@ -140,6 +140,14 @@ pub struct TrajRowDoc {
     /// rows (serde default keeps old rows decoding as unattributed).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub component: Option<crate::component::ComponentClass>,
+    /// Issue 257 — the oracle-quiet reward-hack reason when a fix at this
+    /// shape silenced the oracle BY SHAPE (the
+    /// [`crate::oracle_quiet::Reason::label`] wire form), stamped beside
+    /// the outcome. REPORT-ONLY metadata: it never moves the counters, the
+    /// tier, or the direction — the corrected heal figures READ it. Old
+    /// rows decode as `None` (serde default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oracle_quiet: Option<String>,
     /// riir-dapps Issue 119 T2: the repo-relative path (forward slashes) of
     /// the file the CURRENT `shape`/`fix` snippet came from — refreshed by
     /// every SOURCED write ([`TrajStore::sourced`]); unsourced writes leave
@@ -703,6 +711,21 @@ impl SourcedTraj<'_> {
         )
     }
 
+    /// [`TrajStore::stamp_oracle_quiet`], sourced.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn stamp_oracle_quiet(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        self.store.stamp_oracle_quiet(lint_key, shape, fix, reason)
+    }
+
     /// [`TrajStore::record_journey`], sourced.
     ///
     /// # Errors
@@ -742,6 +765,13 @@ impl SourcedTraj<'_> {
         self.store
             .record_applied_src(lint_key, shape, fix, run_id, Some(self.src_path), rejected)
     }
+}
+
+/// The lint candidate a row's key carries: the segment before the
+/// strategy suffix (`code:strategy`), or the whole key.
+#[must_use]
+fn lint_candidate(lint_key: &str) -> &str {
+    lint_key.split(':').next().unwrap_or(lint_key)
 }
 
 impl TrajStore {
@@ -901,6 +931,32 @@ impl TrajStore {
         // (trajectory counters for retrieval, direction evolution for
         // learn observability).
         self.learn_step(lint_key, fix, success, run_id)
+    }
+
+    /// Issue 257 — stamp the oracle-quiet reward-hack reason on the row an
+    /// outcome JUST landed under. `fix` must match the row's current fix
+    /// text (the classifier named THIS outcome; a stale call is a no-op —
+    /// never a cross-contamination). REPORT-ONLY: counters, tier and
+    /// direction untouched. Best-effort at the call site (the
+    /// `record_traj` posture).
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn stamp_oracle_quiet(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        let key = Self::row_key(lint_key, shape);
+        let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
+        if row.fix != fix {
+            return Ok(()); // not the outcome the classifier named
+        }
+        row.oracle_quiet = Some(reason.to_string());
+        self.put_row(&key, &row)
     }
 
     /// Issue 105 — record one run's journey credit for a key that kept an
@@ -1176,8 +1232,61 @@ impl TrajStore {
                     bd_attempts: 0,
                     bd_successes: 0,
                     rescue_depth: 0,
+                    oracle_quiet: None,
                 }
             })
+    }
+
+    /// Issue 257 T4 — the report-only BACKFILL census: classify every
+    /// stored trajectory row by the span-free shapes (attribute-insertion /
+    /// stub-replacement) using the row's OWN stored texts — `shape` is the
+    /// pre-fix source, `fix` the replacement, so the baseline law holds
+    /// (an allow the pre-fix text already carried stays clean) and the
+    /// attribute's lint list is checked against the row's lint key (an
+    /// allow for an unrelated lint stays clean). WRITES NOTHING: no tier,
+    /// no counter, no flag moves — the counts come back as (rule → judged,
+    /// hacked) rows for the corrected-figure baseline, and the verdict's
+    /// per-rule demotion threshold reads THEM, never the store.
+    ///
+    /// Returns (`judged_total`, per-rule rows sorted by rule name:
+    /// (`lint_key`, judged, hacked)).
+    #[must_use]
+    pub fn backfill_census(&self) -> (usize, Vec<(String, usize, usize)>) {
+        let mut by_rule: std::collections::BTreeMap<String, (usize, usize)> =
+            std::collections::BTreeMap::new();
+        let mut judged = 0usize;
+        for (_, v) in self.kv.scan_prefix(b"traj:") {
+            let Ok(row) = serde_json::from_slice::<TrajRowDoc>(&v) else {
+                continue;
+            };
+            judged += 1;
+            // The span-free shapes, judged on the row's own stored texts:
+            // `shape` is BOTH the pre-fix source and the replaced span (the
+            // baseline law: an allow the pre-fix text already carried
+            // stays clean). A stub replacement is the hack outright; an
+            // inserted attribute is the hack iff its lint list COVERS the
+            // row's lint (an unrelated-lint allow stays clean).
+            let stub_hack =
+                crate::oracle_quiet::classify_span_free(&row.shape, &row.fix, &row.shape)
+                    == Some(crate::oracle_quiet::Reason::StubReplacement);
+            let attr_hack = crate::oracle_quiet::extract_covering_attr(
+                &row.fix,
+                &row.shape,
+                &row.shape,
+                lint_candidate(&row.lint_key),
+            )
+            .is_some();
+            let hacked = stub_hack || attr_hack;
+            let e = by_rule.entry(row.lint_key.clone()).or_insert((0, 0));
+            e.0 += 1;
+            if hacked {
+                e.1 += 1;
+            }
+        }
+        (
+            judged,
+            by_rule.into_iter().map(|(k, (j, h))| (k, j, h)).collect(),
+        )
     }
 
     /// Encode + put one row + keep the BM25 axis live (the shared tail of

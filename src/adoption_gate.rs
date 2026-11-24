@@ -68,7 +68,7 @@ pub const SEAT_TAG: &str = "escalation_seat_pick";
 /// The on-disk row format version. Written on every row; the loader
 /// accepts any `v` it can decode row-wise (a foreign `v` fails that row
 /// LOUD — corrupt lines are never silently skipped).
-pub const OUTCOME_ROW_VERSION: u32 = 1;
+pub const OUTCOME_ROW_VERSION: u32 = 2;
 
 /// Rows-per-file compaction ceiling: when an append pushes the file past
 /// this many rows it is rewritten keeping the newest
@@ -106,6 +106,15 @@ pub struct OutcomeRow {
     /// The seat receipt's build fingerprint — seat rows only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build: Option<String>,
+    /// Issue 257 — the oracle-quiet reward-hack reason when the fix
+    /// silenced the oracle by SHAPE without fixing the finding (the
+    /// [`crate::oracle_quiet::Reason::label`] wire form). `None` = a clean
+    /// fix (or the run had no oracle feed). REPORT-ONLY metadata: it never
+    /// moves the digest (the outcome identity is (tag, payload)) nor the
+    /// gate verdicts — the corrected heal figures READ it, never write it.
+    /// v1 rows decode as `None` (serde default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oracle_quiet: Option<String>,
 }
 
 /// Why a demote/readmit/swap consult answered the way it did. `Abstain`
@@ -305,7 +314,17 @@ impl AdoptionWindow {
     /// updates nothing and writes no row), append best-effort. A write
     /// failure warns ONCE per window and never fails the caller (the
     /// `record_traj` posture): the in-memory gate still scored the event.
-    pub fn record(&mut self, tag: &str, accepted: bool, payload: &str, build: Option<&str>) {
+    /// `oracle_quiet` is the issue-257 shape flag (the reason's wire
+    /// label) when the classifier named this fix oracle-quiet — carried on
+    /// the row beside the digest, never folded into it.
+    pub fn record(
+        &mut self,
+        tag: &str,
+        accepted: bool,
+        payload: &str,
+        build: Option<&str>,
+        oracle_quiet: Option<&str>,
+    ) {
         let digest = outcome_digest(tag, payload);
         if !self.gate.ingest(accepted, digest) {
             return; // already filed — never double-file
@@ -321,6 +340,7 @@ impl AdoptionWindow {
             accepted,
             digest_hex: hex_of(bytes),
             build: build.map(str::to_string),
+            oracle_quiet: oracle_quiet.map(str::to_string),
         };
         if let Err(e) = self.append_row(&row) {
             if !self.warned_append {

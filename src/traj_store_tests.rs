@@ -847,6 +847,7 @@ fn stats_report_migration_rows_report_no_activity() {
             bd_attempts: 0,
             bd_successes: 0,
             rescue_depth: 0,
+            oracle_quiet: None,
         })
         .unwrap();
     let report = store.stats_report(0);

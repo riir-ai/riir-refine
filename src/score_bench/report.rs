@@ -569,8 +569,9 @@ fn print_provenance_families(
 /// score-bench read; the same strata ride the appended JSONL row (the
 /// trend-across-generations half — what the T5 per-batch blocker could not
 /// measure on the outcome feed, unblocked here because every bench row IS
-/// generation-tagged).
-pub fn print_strata(strata: &[super::ProvenanceStratum]) {
+/// generation-tagged). `edits_total` is the oracle-quiet line's judged
+/// denominator (issue 257).
+pub fn print_strata(strata: &[super::ProvenanceStratum], edits_total: usize) {
     if strata.is_empty() {
         println!("provenance strata: (none — no ran fixtures attributed)");
         return;
@@ -592,6 +593,25 @@ pub fn print_strata(strata: &[super::ProvenanceStratum]) {
             s.created,
             s.n_clean,
             s.heal_rate * 100.0
+        );
+    }
+    // Issue 257 — the corrected heal figure (silent-when-zero). PRIMARY =
+    // the exact subtraction (each classified edit is labeled individually,
+    // so the true non-hack count is known); Noeri's ratio form rides beside
+    // it for comparability with the published figures (Research 447). The
+    // judged denominator is the run's total applied edits.
+    let hacked: usize = strata.iter().map(|s| s.n_hacked).sum();
+    if hacked > 0 {
+        let credited_nonhack = edits_total.saturating_sub(hacked);
+        let noeri = edits_total as f64 * (1.0 - hacked as f64 / edits_total.max(1) as f64);
+        let per_class: Vec<String> = strata
+            .iter()
+            .filter(|s| s.n_hacked > 0)
+            .map(|s| format!("{} {}", s.class, s.n_hacked))
+            .collect();
+        println!(
+            "⚠️ oracle-quiet (hacked): {hacked}/{edits_total} applied edits ({}) — credited_nonhack = {credited_nonhack}; Noeri cross-check {noeri:.4}",
+            per_class.join(", ")
         );
     }
 }
@@ -860,6 +880,7 @@ mod tests {
             resolved: 3,
             created: 0,
             heal_rate: 0.75,
+            n_hacked: 0,
         }]);
         let line = serde_json::to_string(&stratified).unwrap();
         assert!(line.contains("\"strata\":"), "{line}");

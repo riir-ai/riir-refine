@@ -298,6 +298,11 @@ pub mod clippy_oracle;
 // already in the tree).
 pub mod oracle_cache;
 
+// Issue 257 — the oracle-quiet reward-hack classifier (parse-light,
+// std-only, report-only; the shapes + the baseline law live in the module
+// doc).
+pub mod oracle_quiet;
+
 // The shared manifest-gate parser substrate (feature tables + target rows +
 // the required-features census) — UNGATED for the same reason: the oracle's
 // gap-arming census consumes it at every feature posture, and `fix_verify`'s

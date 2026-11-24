@@ -39,7 +39,7 @@ fn scratch_root(tag: &str) -> PathBuf {
 /// Record a synthetic outcome under `tag` with payload `pN` — the digest
 /// seam's identity (the same tag + payload = the same outcome).
 fn record(window: &mut AdoptionWindow, tag: &str, accepted: bool, payload: &str) {
-    window.record(tag, accepted, payload, None);
+    window.record(tag, accepted, payload, None, None);
 }
 
 /// G1 — the EXACT producer-fixture replay through the seam: the same
@@ -242,7 +242,7 @@ fn seat_swap_watch_stands_down_on_regression_evidence() {
     // the REJECTED ring: record head B's pick as REJECTED (the verifier
     // reverted it) — that row IS the repeat evidence.
     let build_row = |w: &mut AdoptionWindow, build: &str, accepted: bool, payload: &str| {
-        w.record(SEAT_TAG, accepted, payload, Some(build));
+        w.record(SEAT_TAG, accepted, payload, Some(build), None);
     };
     build_row(&mut w, "headA", true, "pickA0");
     build_row(&mut w, "headA", true, "pickA1");

@@ -763,6 +763,7 @@ mod tests {
     ) -> crate::score_bench::FixtureOutcome {
         crate::score_bench::FixtureOutcome {
             id: id.to_string(),
+            oracle_quiet: Vec::new(),
             ran: true,
             vocab_before: vocab.iter().map(ToString::to_string).collect(),
             all_before: BTreeSet::new(),

@@ -6893,6 +6893,7 @@ fn migrate_envelope_once(store: &riir_refine::traj_store::TrajStore) {
             bd_attempts: 0,
             bd_successes: 0,
             rescue_depth: 0,
+            oracle_quiet: None,
         };
         if store.import_row(&row).is_ok() {
             imported += 1;
@@ -6983,6 +6984,7 @@ fn record_traj(
     run_id: &str,
     component: Option<riir_refine::component::ComponentClass>,
     rejected: Option<&[String]>,
+    oracle_quiet: Option<&str>,
 ) {
     if let Some(store) = store {
         if let Err(e) = store.sourced(src_path).record_classified(
@@ -6996,6 +6998,17 @@ fn record_traj(
             rejected,
         ) {
             eprintln!("self-evolve: store record failed: {e}");
+        }
+        // Issue 257 — the reward-hack stamp rides BESIDE the outcome row
+        // (report-only; a stale call is a no-op inside the stamp).
+        if let Some(reason) = oracle_quiet {
+            if let Err(e) =
+                store
+                    .sourced(src_path)
+                    .stamp_oracle_quiet(rule_id, restore, replacement, reason)
+            {
+                eprintln!("self-evolve: oracle-quiet stamp failed: {e}");
+            }
         }
     }
 }
@@ -7029,7 +7042,42 @@ fn record_traj_fail(
         run_id,
         Some(class),
         rejected,
+        None,
     );
+}
+
+/// Issue 257 — classify one KEPT edit by diff shape against the run's
+/// oracle feed (the flagged spans, in PRE-fix coordinates) with the
+/// PRE-fix source as the baseline. Report-only; reads the diff, never the
+/// oracle's verdict — posture-independent within the fix_verify record
+/// lane (the classify happens on every kept edit, `clippy_verify` armed
+/// or not).
+#[cfg(feature = "fix_verify")]
+fn classify_kept_edit(
+    clippy_feed: Option<&[ClippyDiagnostic]>,
+    b: &riir_refine::fix_verify::FileEditSet,
+    e: &riir_refine::fix_verify::EditAtLine,
+) -> Option<riir_refine::oracle_quiet::Reason> {
+    let edit = riir_refine::oracle_quiet::AppliedEdit {
+        original: &b.original,
+        fixed: &b.fixed,
+        restore: &e.restore,
+        replacement: &e.replacement,
+        final_line: e.final_line,
+    };
+    // The feed's `file` is cargo-convention workspace-relative; match by
+    // right-aligned components so an absolute walk path still joins.
+    let flagged: Vec<riir_refine::oracle_quiet::FlaggedLint> = clippy_feed
+        .into_iter()
+        .flatten()
+        .filter(|d| b.path.ends_with(std::path::Path::new(&d.file)))
+        .map(|d| riir_refine::oracle_quiet::FlaggedLint {
+            lint: d.lint.clone(),
+            line: d.line,
+            byte_range: d.span,
+        })
+        .collect();
+    riir_refine::oracle_quiet::classify(&b.path, &edit, &flagged)
 }
 
 /// Issue 220 — record one fix outcome into the adoption window
@@ -11579,7 +11627,7 @@ fn run_score_bench(generation: u8) {
     // trend across generations becomes measurable (every bench row is
     // generation-tagged; the outcome-feed per-batch blocker does not apply).
     let strata = sb::stratify(&fixture_list, &score);
-    sb::report::print_strata(&strata);
+    sb::report::print_strata(&strata, score.edits_total);
     // Issue 190 (`elo_k_eff`) — the REPORT-ONLY regime readout: one line
     // classifying the run's (selection-state, score) series. No exit-code
     // change, no auto-demotion; the feature-off build prints nothing.
@@ -16822,6 +16870,18 @@ fn main() {
     // `n_anchored_missing` is a span total and cannot be partitioned.
     let mut missing_by_span: Vec<Vec<String>> = Vec::new();
     let mut n_fixed_edits = 0usize;
+    // Issue 257 — the oracle-quiet reward-hack census (report-only):
+    // every KEPT edit is classified by diff shape against the run's
+    // oracle feed + the PRE-fix source (the baseline law); the counts
+    // land on the outcome rows and in the run-end line
+    // (silent-when-zero). Reads the diff, never the oracle verdict.
+    // Declared at the run level: the run-end line reads them outside the
+    // `--fix` block that fills them.
+    let mut oq_judged = 0usize;
+    let mut oq_by_reason: std::collections::BTreeMap<&'static str, usize> =
+        std::collections::BTreeMap::new();
+    let mut oq_credited = 0usize;
+    let mut oq_hacked_credited = 0usize;
     // P21: oracle-anchored edits actually APPLIED in the fix lane.
     let mut n_oracle_edits = 0usize;
     // P30 bench-guard: rust_perf edits declined on bench targets, run total.
@@ -18892,6 +18952,8 @@ fn main() {
 
         // Post-verify review: report what SURVIVED (the fix review for
         // reverted edits would be misleading).
+        // Issue 257 — the census accumulators live at the run level (the
+        // run-end line reads them outside this block); the loop fills them.
         for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
             // riir-dapps Issue 119 T2: every verdict below is a snippet of
             // THIS file — its repo-relative path rides the row (the sync
@@ -18937,7 +18999,7 @@ fn main() {
                             .then(|| seat_build_by_path.get(&b.path))
                             .flatten()
                             .map(String::as_str);
-                        w.record(&e.rule_id, false, &e.replacement, seat_build);
+                        w.record(&e.rule_id, false, &e.replacement, seat_build, None);
                     }
                 }
                 continue;
@@ -18978,6 +19040,19 @@ fn main() {
                         .get(&(b.path.clone(), e.final_line))
                         .copied(),
                 );
+                // Issue 257 — the reward-hack classification (report-only;
+                // reads the diff, never the verdict).
+                let oq_reason = classify_kept_edit(clippy_feed.as_deref(), b, e);
+                oq_judged += 1;
+                if let Some(reason) = oq_reason {
+                    *oq_by_reason.entry(reason.label()).or_default() += 1;
+                }
+                if success {
+                    oq_credited += 1;
+                    if oq_reason.is_some() {
+                        oq_hacked_credited += 1;
+                    }
+                }
                 let verified = oracle_verified
                     && verify_ended_clean
                     && !posture_compiled.contains(&(b.path.clone(), e.final_line));
@@ -19009,6 +19084,7 @@ fn main() {
                     &heal_run_id,
                     fail_signal.as_ref().map(riir_refine::component::classify),
                     rejected_opt(&e.rejected),
+                    oq_reason.map(riir_refine::oracle_quiet::Reason::label),
                 );
                 // Issue 220: the window records an ACCEPTED outcome only
                 // when the run has a verdict — a kept edit under a
@@ -19022,7 +19098,13 @@ fn main() {
                             .then(|| seat_build_by_path.get(&b.path))
                             .flatten()
                             .map(String::as_str);
-                        w.record(&e.rule_id, success, &e.replacement, seat_build);
+                        w.record(
+                            &e.rule_id,
+                            success,
+                            &e.replacement,
+                            seat_build,
+                            oq_reason.map(riir_refine::oracle_quiet::Reason::label),
+                        );
                     }
                 }
             }
@@ -19056,7 +19138,7 @@ fn main() {
                         .then(|| seat_build_by_path.get(&b.path))
                         .flatten()
                         .map(String::as_str);
-                    w.record(&e.rule_id, false, &e.replacement, seat_build);
+                    w.record(&e.rule_id, false, &e.replacement, seat_build, None);
                 }
             }
             println!(
@@ -19472,6 +19554,26 @@ fn main() {
                 println!("🛠️ lower the unfixed share: `cargo refine join` for self-evolve");
             }
         }
+    }
+    // Issue 257 — the oracle-quiet reward-hack line (silent-when-zero, the
+    // Issue-165 discipline). PRIMARY = the exact subtraction (each fix row
+    // is labeled individually, so the true non-hack count is known —
+    // Noeri's proportional form would subtract a guess where we have the
+    // number); the ratio form rides beside it for comparability with the
+    // published figures (Research 447).
+    if oq_judged > 0 && !oq_by_reason.is_empty() {
+        let oq_hacked: usize = oq_by_reason.values().sum();
+        let nonhack = oq_credited.saturating_sub(oq_hacked_credited);
+        let noeri = oq_credited as f64 * (1.0 - (oq_hacked as f64 / oq_judged.max(1) as f64));
+        let reasons: Vec<String> = oq_by_reason
+            .iter()
+            .map(|(r, n)| format!("{r} {n}"))
+            .collect();
+        println!(
+            "⚠️ oracle-quiet: {oq_hacked}/{oq_judged} applied ({}) — credited_nonhack = {nonhack}/{} credited (judged = {oq_judged}); Noeri cross-check {noeri:.4}",
+            reasons.join(", "),
+            oq_credited
+        );
     }
     // The scanned/count detail line rides BELOW the emoji summary (the
     // owner's UX law: the call-to-action lines first; the run's own stats

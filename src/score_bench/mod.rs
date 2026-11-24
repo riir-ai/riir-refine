@@ -183,9 +183,13 @@ pub struct ProvenanceStratum {
     pub resolved: usize,
     /// Σ lints (any) newly created by healing.
     pub created: usize,
-    /// `resolved / vocab_before` (0.0 when the class had no findings) — the
-    /// aggregate `heal_rate` semantics, per class.
+    /// `resolved / vocab_before` (0.0 when the class had no findings) —
+    /// the aggregate `heal_rate` semantics, per class.
     pub heal_rate: f32,
+    /// Issue 257 — Σ applied edits this class's fixtures had classified
+    /// oracle-quiet (span-free shapes; report-only — the corrected heal
+    /// figures read it, never write it).
+    pub n_hacked: usize,
 }
 
 /// Stratify one finished bench run by fixture provenance class (Issue 089
@@ -201,6 +205,10 @@ pub struct ProvenanceStratum {
 /// An outcome whose id matches no fixture is defensive-counted into `other`
 /// (never silently dropped — the run and the stratify call share one
 /// fixture list, so a miss is a bug this makes visible instead of hiding).
+/// One class's running totals ([`stratify`]'s accumulator row): ran,
+/// healable, clean, `vocab_before`, resolved, created, hacked.
+type ClassAccum = (usize, usize, usize, usize, usize, usize, usize);
+
 #[must_use]
 // Fractions over usize/u32 counters — the report's quantity; allowed.
 #[allow(clippy::cast_precision_loss)]
@@ -210,17 +218,17 @@ pub fn stratify(fixture_list: &[BenchFixture], score: &BenchScore) -> Vec<Proven
         .iter()
         .map(|fx| (fx.id, ood::ood_set_family(fx)))
         .collect();
-    // Per-class accumulators: (ran, healable, clean, vocab_before, resolved, created).
-    let mut acc: BTreeMap<ProvenanceClass, (usize, usize, usize, usize, usize, usize)> =
-        BTreeMap::new();
+    // Per-class accumulators: (ran, healable, clean, vocab_before, resolved, created, hacked).
+    let mut acc: BTreeMap<ProvenanceClass, ClassAccum> = BTreeMap::new();
     for o in &score.outcomes {
         if !o.ran {
             continue;
         }
         let family = families.get(o.id.as_str()).copied().unwrap_or("other");
         let class = provenance_class(family);
-        let e = acc.entry(class).or_insert((0, 0, 0, 0, 0, 0));
+        let e = acc.entry(class).or_insert((0, 0, 0, 0, 0, 0, 0));
         e.0 += 1;
+        e.6 += o.oracle_quiet.len();
         let vb = o.vocab_before.len();
         if vb == 0 {
             e.2 += 1;
@@ -240,7 +248,7 @@ pub fn stratify(fixture_list: &[BenchFixture], score: &BenchScore) -> Vec<Proven
     canonical
         .into_iter()
         .filter_map(|class| {
-            let (n_ran, n_healable, n_clean, vocab_before, resolved, created) =
+            let (n_ran, n_healable, n_clean, vocab_before, resolved, created, n_hacked) =
                 acc.remove(&class)?;
             if n_ran == 0 {
                 return None;
@@ -258,6 +266,7 @@ pub fn stratify(fixture_list: &[BenchFixture], score: &BenchScore) -> Vec<Proven
                 } else {
                     resolved as f32 / vocab_before as f32
                 },
+                n_hacked,
             })
         })
         .collect()
@@ -287,6 +296,12 @@ pub struct FixtureOutcome {
     pub parses: bool,
     /// Frozen-label drift detected (fresh != frozen).
     pub drifted: bool,
+    /// Issue 257 — the oracle-quiet reasons the fixture's applied edits
+    /// classified as (span-free shapes only: attribute-insertion /
+    /// stub-replacement — deletion needs a span to separate a hack from a
+    /// legit dead-code removal, so it is deliberately not judged here).
+    /// Report-only metadata; empty = clean.
+    pub oracle_quiet: Vec<&'static str>,
 }
 
 impl FixtureOutcome {
@@ -368,6 +383,10 @@ pub struct BenchScore {
     /// single-target fixtures — a shaped fixture with ≠1 `vocab_before`
     /// lint counts in the rates above but NOT here (recorded, not guessed).
     pub shaped_half_counts: Vec<(String, u32)>,
+    /// Issue 257 — Σ applied edits classified oracle-quiet across the ran
+    /// fixtures (span-free shapes; report-only, never a scored axis). The
+    /// denominator is [`Self::edits_total`] (every applied edit is judged).
+    pub n_hacked: usize,
 }
 
 /// The shaped-verdict value (Issue 089 T7): a heal that clears its target
@@ -610,6 +629,22 @@ pub fn heal_fixpoint_lane(
     ovr: &ComponentOverride,
     lane: Option<&[String]>,
 ) -> (String, usize, usize) {
+    let (out, edits, passes, _) = heal_fixpoint_lane_classified(source, candidates, ovr, lane);
+    (out, edits, passes)
+}
+
+/// [`heal_fixpoint_lane`] with the Issue-257 oracle-quiet census: every
+/// applied splice is classified by diff shape (span-free shapes only —
+/// attribute-insertion / stub-replacement; deletion needs a span, and the
+/// bench lane has no span feed). The reasons vector carries one entry per
+/// classified splice, in apply order.
+#[must_use]
+pub fn heal_fixpoint_lane_classified(
+    source: &str,
+    candidates: &[(&str, &str)],
+    ovr: &ComponentOverride,
+    lane: Option<&[String]>,
+) -> (String, usize, usize, Vec<&'static str>) {
     const MAX_FIX_PASSES: usize = 4;
     let clippy_order: Vec<&str> = match lane {
         Some(plan) => plan.iter().map(String::as_str).collect(),
@@ -618,6 +653,7 @@ pub fn heal_fixpoint_lane(
     let mut current = source.to_string();
     let mut edits_applied = 0usize;
     let mut passes = 0usize;
+    let mut oracle_quiet: Vec<&'static str> = Vec::new();
     for _ in 0..MAX_FIX_PASSES {
         // Candidate lane first: the incoming rule gets its chance on its
         // exact shapes before the proposers compose over the result.
@@ -672,12 +708,22 @@ pub fn heal_fixpoint_lane(
         if !splices.is_empty() {
             passes += 1;
         }
+        // Issue 257 — the span-free census over this pass's splices (the
+        // splice coordinates are the pass INPUT = `current`'s).
+        for s in &splices {
+            let restore = current.get(s.start..s.end).unwrap_or_default();
+            if let Some(reason) =
+                crate::oracle_quiet::classify_span_free(&current, &s.replacement, restore)
+            {
+                oracle_quiet.push(reason.label());
+            }
+        }
         current = next;
         if !changed {
             break;
         }
     }
-    (current, edits_applied, passes)
+    (current, edits_applied, passes, oracle_quiet)
 }
 
 /// The after-heal verdict half of one fixture: never score broken output
@@ -843,8 +889,8 @@ fn run_bench_inner(
         let vocab_before: BTreeSet<String> = before.lints.intersection(&vocab).cloned().collect();
         let drifted = warn_label_drift(fx, &vocab_before);
 
-        let (healed, edits, passes) =
-            heal_fixpoint_lane(fx.code, candidates, ovr, lane_plan.as_deref());
+        let (healed, edits, passes, oq_reasons) =
+            heal_fixpoint_lane_classified(fx.code, candidates, ovr, lane_plan.as_deref());
         let (after_lints, output_ok, vocab_persist, created) =
             after_verdict(oracle, &healed, &vocab, &vocab_before, &before.lints);
 
@@ -860,7 +906,9 @@ fn run_bench_inner(
             passes,
             parses: output_ok,
             drifted,
+            oracle_quiet: oq_reasons,
         };
+        score.n_hacked += outcome.oracle_quiet.len();
 
         if vocab_before.is_empty() {
             acc.clean_total += 1;
@@ -1022,6 +1070,7 @@ mod tests {
             passes: usize::from(edits > 0),
             parses,
             drifted: false,
+            oracle_quiet: Vec::new(),
         }
     }
 
@@ -1038,6 +1087,7 @@ mod tests {
             passes: 1,
             parses: true,
             drifted: false,
+            oracle_quiet: Vec::new(),
         }
     }
 
@@ -1204,6 +1254,7 @@ mod tests {
                 passes: 0,
                 parses: true,
                 drifted: false,
+                oracle_quiet: Vec::new(),
             }
         };
         let score = BenchScore {
@@ -1261,6 +1312,7 @@ mod tests {
                 passes: 1,
                 parses,
                 drifted: false,
+                oracle_quiet: Vec::new(),
             };
         // Clean clear → 1.0.
         let clean_clear = mk(&["a"], &[], &[], true);
@@ -1304,6 +1356,7 @@ mod tests {
             passes: 1,
             parses: true,
             drifted: false,
+            oracle_quiet: Vec::new(),
         };
         assert!(single.is_shaped());
         assert_eq!(single.vocab_before.len(), 1);

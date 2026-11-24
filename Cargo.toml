@@ -2449,3 +2449,7 @@ name = "similarity_floor_census"
 
 [[example]]
 name = "read_episode_census"
+[[example]]
+name = "oracle_quiet_backfill"
+path = "examples/oracle_quiet_backfill.rs"
+required-features = ["latent_retrieval"]

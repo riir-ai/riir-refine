@@ -857,6 +857,7 @@ mod tests {
             bd_attempts: 0,
             bd_successes: 0,
             rescue_depth: 0,
+            oracle_quiet: None,
         }
     }
 

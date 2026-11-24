@@ -317,6 +317,7 @@ mod tests {
         };
         FixtureOutcome {
             id: format!("fx-{rule}-{resolved}-{broken}"),
+            oracle_quiet: Vec::new(),
             ran: true,
             vocab_before: before.clone(),
             all_before: before.clone(),

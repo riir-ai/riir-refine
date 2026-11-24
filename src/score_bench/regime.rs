@@ -271,6 +271,7 @@ mod tests {
         use super::super::FixtureOutcome;
         let mk = |rule: &str, resolved: bool| FixtureOutcome {
             id: String::new(),
+            oracle_quiet: Vec::new(),
             ran: true,
             vocab_before: [rule.to_string()].into_iter().collect(),
             all_before: [rule.to_string()].into_iter().collect(),
@@ -322,6 +323,7 @@ mod tests {
             passes: 1,
             parses: true,
             drifted: false,
+            oracle_quiet: Vec::new(),
         };
         // 4 steps < warmup 16 → the honest warming line.
         let mut score = BenchScore::default();
