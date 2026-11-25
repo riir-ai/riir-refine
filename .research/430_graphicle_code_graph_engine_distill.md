@@ -1,6 +1,6 @@
 # 430 — Graphicle code-graph engine distill (Graphicle-AI/graphicle)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED — Batch 415 (2026-11-25, `entries_102` rust_perf + the sec pair; the R1 WAL feed landed as the staged Plan-385 R2's authoring with this note's second instance folded in; R2 decided FACE on entries_62, R5 decided FACE on entries_78; see the snapshot LANDING row)
 
 - Source: https://github.com/Graphicle-AI/graphicle — PIN `b0bb41407d1ffe863221181112656c28c483046c`, tip 2026-11-21T17:44:08+05:30, Apache-2.0, 606★, 357 commits, ~392k lines of Rust across three crates (`graphicle-graph` the engine lib, `graphicle` the runtime/service bin, `graphicle-memory` the memory lib). Shallow clone `riir-refine/.raw/graphicle`, REMOVED at close.
 - Inspection date: 2026-11-21 (m3, zero cargo, zero GPU — docs-only verdict lane).

@@ -3620,6 +3620,98 @@ Batch 412 / Plan 411 / Research 445."
             family: SecFamily::InputValidation,
         },
 
+        // ══ Batch 415 (2026-11-25) — the graphicle transcription's sec    ══
+        // ══ half (Plan 396 / Research 430, Graphicle-AI/graphicle @       ══
+        // ══ b0bb41407d1ffe863221181112656c28c483046c Apache-2.0, the      ══
+        // ══ pin re-verified tip-unmoved 2026-11-25). TWO suggest-only     ══
+        // ══ InputValidation entries; fixtures b415_sec_fixtures.rs        ══
+        // ══ (standalone-compiled AND executed before entry, debug AND     ══
+        // ══ -O). The batch's rust_perf half (the WAL valve + 2 faces)     ══
+        // ══ lands in rust_perf/corpus/entries_102.rs.                     ══
+        // ── egress-resolve-pinned-address-validate (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "egress-resolve-pinned-address-validate".to_string(),
+            sec_concept: "an outbound dial that validates the NAME but connects by the NAME \
+re-resolves at connect time, so the address the policy checked and the address the \
+socket opens are two different lookups — a captured or crafted authority (or a \
+rotating record) answers the second lookup with an internal/metadata address and the \
+allowlist never saw it (the outbound DNS-rebind window). The bounded repair is \
+RESOLVE-ONCE-AT-THE-POLICY-SEAM: resolve at the seam, check EVERY resolved address \
+(all families) against the blocked-range tables, and connect ONLY the validated \
+pinned SocketAddr — never a second resolve; a cloud-metadata hostname refuses \
+pre-resolve; 'no usable address resolved' is a typed refusal, never a fallback to \
+the name. SOURCE (Graphicle-AI/graphicle @ b0bb4140, Apache-2.0, quotes verified at \
+the pin): crates/graphicle-graph/src/security.rs:243-248 the metadata refusal \
+verbatim ('Blocked cloud metadata endpoint') + :250-263 the all-addresses loop \
+('for address in addresses { if ip_is_blocked(address.ip()) { return Err(...) } }') \
+over the BLOCKED_V4/V6 u128 range tables (ip_policy_data.rs) + :276-290 \
+`resolve_and_validate` verbatim — returns the PINNED address ('Ok(address)') and \
+refuses 'no usable address resolved' typed, never falls back to the name. Suggest-only: \
+the blocked ranges are deployment policy (which ranges are internal is the \
+operator's answer). Honest recall limits: fires on resolve-then-name-connect in one \
+fn over shared host/port vocabulary; an IP-literal target never fires (nothing to \
+resolve); blocked/private/loopback/policy vocabulary suppresses; cross-fn resolution \
+undetected. ADJUDICATION: `unvalidated-egress-url` (Batch 258) owns the URL-CHOICE \
+axis (scheme/host policy on the STRING — no resolution anywhere in its law); THIS \
+owns the RESOLUTION axis (the name-policy is sound, the second lookup betrays it) \
+— compose (the allowlist gates the name, the pinned-socket policy gates every \
+address the name ever resolves to); `browser-reachable-service-host-origin-rebinding-gate` \
+(Batch 329) owns the INBOUND handshake gate (a server checking Host/Origin headers) \
+— the outbound direction was unowned; `connect-timeout-walk-over-resolved-addrs` \
+(rust_perf entries_55) owns the per-address connect-TIMEOUT walk (resilience/latency \
+over the resolved set) — compose: the walk consumes exactly the PINNED addresses \
+this rule validates; `egress-control-bypass-flag` (Batch 342) owns a flag DEFEATING \
+a control — a different layer. Fixture: `fixtures/b415_sec_fixtures.rs` F1 (the \
+captured-resolver arm, the fixed pinned-connect arm, the all-safe arm, the \
+first-address-only tamper arm). Batch 415 / Plan 396 / Research 430 (the fixture \
+is an original synthesis)."
+                .to_string(),
+            buggy_code: "/// NAIVE: policy on the NAME, connect by the NAME — two lookups,\n/// the second one ungoverned.\nconst ALLOWED_HOSTS: [&str; 1] = [\"reports.internal\"];\n\nfn host_allowed(host: &str) -> bool {\n    ALLOWED_HOSTS.contains(&host)\n}\n\nfn fetch_report(host: &str, port: u16) -> Result<Vec<u8>, String> {\n    if !host_allowed(host) {\n        return Err(String::from(\"host not allowed\"));\n    }\n    // re-resolves: whatever the resolver says NOW is where the socket\n    // opens — the allowlist checked a DIFFERENT answer.\n    let mut sock = std::net::TcpStream::connect((host, port))\n        .map_err(|e| e.to_string())?;\n    let mut out = Vec::new();\n    std::io::Read::read_to_end(&mut sock, &mut out).map_err(|e| e.to_string())?;\n    Ok(out)\n}\n"
+                .to_string(),
+            fixed_code: "/// FIXED: resolve ONCE at the policy seam, check EVERY resolved\n/// address, connect only the pinned SocketAddr — never a second lookup.\nconst ALLOWED_HOSTS: [&str; 1] = [\"reports.internal\"];\nconst BLOCKED: [std::net::IpAddr; 2] = [\n    std::net::IpAddr::from([169, 254, 169, 254]), // cloud metadata\n    std::net::IpAddr::from([10, 0, 0, 1]),        // internal peer\n];\n\ntype Resolver = fn(&str, u16) -> Vec<std::net::IpAddr>;\n\nfn resolve_and_validate(\n    host: &str,\n    port: u16,\n    resolver: &Resolver,\n) -> Result<std::net::SocketAddr, String> {\n    let addresses = resolver(host, port);\n    for address in &addresses {\n        if BLOCKED.contains(address) {\n            return Err(format!(\n                \"SSRF blocked: IP {address} resolved from '{host}' is internal\"\n            ));\n        }\n    }\n    addresses\n        .first()\n        .map(|a| std::net::SocketAddr::new(*a, port))\n        .ok_or_else(|| format!(\"SSRF blocked: no usable address resolved from '{host}'\"))\n}\n\nfn fetch_report(\n    host: &str,\n    port: u16,\n    resolver: &Resolver,\n) -> Result<Vec<u8>, String> {\n    if !ALLOWED_HOSTS.contains(&host) {\n        return Err(String::from(\"host not allowed\"));\n    }\n    // connect the VALIDATED address — the policy's answer is the wire's.\n    let addr = resolve_and_validate(host, port, resolver)?;\n    let mut sock = std::net::TcpStream::connect(addr).map_err(|e| e.to_string())?;\n    let mut out = Vec::new();\n    std::io::Read::read_to_end(&mut sock, &mut out).map_err(|e| e.to_string())?;\n    Ok(out)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── sqlite-store-path-nofollow-parent-resolve (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "sqlite-store-path-nofollow-parent-resolve".to_string(),
+            sec_concept: "a symlink-refusing open policy is defeated by PATH SEMANTICS, not by \
+the policy's own flag: a nofollow flag scoped to the final component (POSIX \
+O_NOFOLLOW) lets a SYMBOLIC-LINKED PARENT silently redirect the store somewhere \
+else (the flag's promise unkept — the file lands outside the audited tree), while a \
+whole-path-strict policy (SQLite's SQLITE_OPEN_NOFOLLOW refuses a link anywhere in \
+the path) breaks on LEGITIMATE parent links — macOS temporary folders sit under \
+/var, a link to /private/var, so the honest layout itself refuses. The bounded \
+repair covers both directions: canonicalize (resolve) the PARENT directory only — \
+NEVER the final file name, so a file that is itself a link is still refused — then \
+apply the nofollow flag to the resolved parent + the original name. SOURCE \
+(Graphicle-AI/graphicle @ b0bb4140, Apache-2.0, quotes verified at the pin): \
+crates/graphicle/src/db.rs:2311-2315 verbatim: 'SQLite's NOFOLLOW refuses a link \
+anywhere in the path, not only at the file (macOS temporary folders sit under /var, \
+a link to /private/var). Resolve the folder, never the file, so a file that is a \
+link is still refused.' — the resolution is parent-only by construction \
+(path.file_name() carried through the canonicalized parent, db.rs:2316-2328). \
+Suggest-only: which paths are peer-writable is deployment policy. Honest recall \
+limits: fires on an open-with-nofollow-vocabulary over a caller-shaped path in one \
+fn; canonicalize/resolve vocabulary suppresses (the policy is present); POSIX path \
+semantics — a Windows \\\\\\?\\\\\\?prefixed literal is out of scope, disclosed; \
+cross-fn path assembly undetected. ADJUDICATION: `untrusted-path-join-escape` \
+(Batch 328) owns the MEMBER-NAME escape (untrusted names joined into a destination, \
+the components() walk) and its Batch-329 rider owns the symlink-LISTING re-check — \
+THIS owns the OPEN-FLAG integrity axis (a symlink-refusing flag defeated by which \
+components the flag actually checks); `untrusted-archive-extract-paths` (Batch 328) \
+owns the zip-slip class — sink-distinct. Fixture: `fixtures/b415_sec_fixtures.rs` \
+F2 (the parent-link arm, the linked-file arm, the all-safe arm, the over-resolution \
+tamper arm). Batch 415 / Plan 396 / Research 430 (the fixture is an original \
+synthesis)."
+                .to_string(),
+            buggy_code: "use std::path::Path;\n\n/// NAIVE: nofollow on the FINAL component only — a linked parent\n/// redirects the store outside the audited tree and the flag never sees\n/// it (the store lands wherever the parent points).\npub fn open_store_naive(path: &Path) -> Result<String, String> {\n    // pretend open-with-O_NOFOLLOW: the flag checks the file component.\n    let name = path\n        .file_name()\n        .ok_or_else(|| String::from(\"no file name\"))?;\n    if name.to_string_lossy().ends_with(\".link\") {\n        // the ONLY link check: the final name's suffix\n        return Err(String::from(\"linked file refused\"));\n    }\n    // the parent is opened AS GIVEN — a symlinked parent is followed\n    let parent = path.parent().unwrap_or(Path::new(\".\"));\n    Ok(format!(\"opened {} inside {}\", name.display(), parent.display()))\n}\n"
+                .to_string(),
+            fixed_code: "use std::path::{Path, PathBuf};\n\n/// FIXED: canonicalize the PARENT, carry the FILE NAME through — the\n/// parent's links resolve legitimately (macOS /var -> /private/var), a\n/// linked FILE still refuses at the final component.\npub fn open_store(path: &Path) -> Result<String, String> {\n    let name = path\n        .file_name()\n        .ok_or_else(|| String::from(\"no file name\"))?;\n    let parent = path\n        .parent()\n        .filter(|p| !p.as_os_str().is_empty())\n        .unwrap_or_else(|| Path::new(\".\"));\n    let resolved: PathBuf =\n        std::fs::canonicalize(parent).map_err(|e| e.to_string())?;\n    if name.to_string_lossy().ends_with(\".link\") {\n        return Err(String::from(\"linked file refused\"));\n    }\n    Ok(format!(\n        \"opened {} inside {} (parent resolved, file name kept)\",\n        name.display(),\n        resolved.display()\n    ))\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+
     ]
 }
 
@@ -3666,6 +3758,77 @@ mod tests {
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                 "rule id {id} must be kebab-case (digits allowed — the \
                  rust_perf convention, e.g. usize-index-to-u32)"
+            );
+        }
+    }
+
+    #[test]
+    fn batch415_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            (
+                "egress-resolve-pinned-address-validate",
+                SecFamily::InputValidation,
+            ),
+            (
+                "sqlite-store-path-nofollow-parent-resolve",
+                SecFamily::InputValidation,
+            ),
+        ];
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-415 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-415 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 415 / Plan 396 / Research 430"),
+                "batch-415 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept
+                    .contains("b0bb41407d1ffe863221181112656c28c483046c")
+                    || r.sec_concept.contains("Graphicle-AI/graphicle @ b0bb4140"),
+                "batch-415 {id} must cite the graphicle pin"
+            );
+            assert!(
+                r.sec_concept.contains("Suggest-only"),
+                "batch-415 {id} must be suggest-only"
+            );
+        }
+        // the egress rule's adjudication both directions
+        let egress = all
+            .iter()
+            .find(|r| r.rule_id == "egress-resolve-pinned-address-validate")
+            .unwrap();
+        for needle in [
+            "unvalidated-egress-url",
+            "browser-reachable-service-host-origin-rebinding-gate",
+            "connect-timeout-walk-over-resolved-addrs",
+            "egress-control-bypass-flag",
+            "resolve_and_validate",
+            "never a second resolve",
+        ] {
+            assert!(
+                egress.sec_concept.contains(needle),
+                "egress adjudication needle {needle:?} missing"
+            );
+        }
+        // the nofollow rule's parent-resolve law verbatim
+        let nofollow = all
+            .iter()
+            .find(|r| r.rule_id == "sqlite-store-path-nofollow-parent-resolve")
+            .unwrap();
+        for needle in [
+            "Resolve the folder, never the file, so a file that is a link is still refused",
+            "macOS temporary folders sit under /var",
+            "untrusted-path-join-escape",
+            "OPEN-FLAG integrity axis",
+        ] {
+            assert!(
+                nofollow.sec_concept.contains(needle),
+                "nofollow needle {needle:?} missing"
             );
         }
     }

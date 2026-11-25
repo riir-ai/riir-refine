@@ -218,7 +218,22 @@ changes loud-mode output). Wave: Batch 329 / Plan 337 / Research 367. Cite: \
 tembo/voxl @ eba3b7ced9f60e885bb7b3a96a12e3ccb347fdcd - src/video.rs \
 (ThreadGovernor + CostFit + stripe_worker's want() call with the changed-count \
 input; encoder reopen at the switch: 'A fresh encoder opens with an IDR on its next \
-frame'), Batch 329 / Plan 337.".to_string(),
+frame'), Batch 329 / Plan 337. FACE (Batch 415, Plan 396 / Research 430, count-neutral \
+— the platform-measured io derate as the ladder's OPENING rung; face-or-rule decided \
+FACE — one platform class, one measurement, a second instance promotes it): \
+Graphicle-AI/graphicle @ b0bb41407d1ffe863221181112656c28c483046c (Apache-2.0), \
+par.rs:26-31 verbatim: 'On macOS, opens from more than about six threads contend in \
+the kernel: measured on an M3 Pro, reading and hashing 11k files took 0.44 s on 4-6 \
+threads and 0.67 s on 12-16. Elsewhere this is workers.' + 'GRAPHICLE_MAX_WORKERS \
+still caps it; results never depend on it.' — a STATIC measured platform derate \
+below available_parallelism for io-dominated work (file opening/hashing). THE AXIS \
+SPLIT: entries_62 owns the DYNAMIC axis (the online fit + the reopen hysteresis \
+select the mode WHILE running); the derate owns the STATIC-DEFAULT axis (what the \
+worker count is BEFORE any fit exists — the ladder's opening rung on a platform \
+class whose io work measures WORSE past the derate; opening the ladder at \
+available_parallelism there spends the hysteresis window rediscovering a measured \
+fact). Compose on a governor (open at the measured derate, the fit owns the \
+dynamics), never merge.".to_string(),
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
