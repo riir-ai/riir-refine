@@ -2,9 +2,9 @@
 
 **Status:** open — staged verdict (Research 439), NOT landed
 
-**Claimed:** zed-m3-artex-distill@m3, 1795407218, expires 2026-11-25T18:00Z
+**Claimed:** zed-2b94512c@m3, 1795630824, expires 2026-11-27T18:20Z
 
-Batch: nominal **Batch 405** (the "Batch 404" name belongs to Plan 403's mlx PR #4927 lane). Domain: sec (transcription-only — source AGPL-3.0, Go; fixtures are ORIGINAL Rust syntheses; source never pasted). Source pin `38c7477c51636c9221c78683f4aa9c4f08f65c19` (BaaRai/ARTEX; upstream Autumn-27 removed Oct 2026 — provenance in Research 439).
+Batch: nominal **Batch 419** (re-derives at landing HEAD — 416 coreutils + 417 cuda-rust + 418 tunazip landed; plan 415's staged row holds the competing nominal 419, first-landed keeps it, the other shifts). Domain: sec (transcription-only — source AGPL-3.0, Go; fixtures are ORIGINAL Rust syntheses; source never pasted). Source pin `38c7477c51636c9221c78683f4aa9c4f08f65c19` (BaaRai/ARTEX; upstream Autumn-27 removed Oct 2026 — provenance in Research 439).
 
 - [ ] T0 re-clone `.raw/artex` at pin `38c7477c` + tip-move check + byte-quote re-verification per candidate row (R1-R8 quotes in Research 439)
 - [ ] T0b unread-residue re-read: `intercept/target_*.go` bodies + `target_dial.go`, `intercept/prompt.go`/`review_context.go`/`risk.go`, `alwaysallow_denylist.go`, `guard/guard.go` (reconcile the guard/ vs intercept/ dual path), `agent/planner.go`/`worker.go`, `llmpool`, `archivestore/s3.go`, `notify/mask.go`, `mcphttp/client.go` — new candidates join only under the 4-6-rule size discipline
