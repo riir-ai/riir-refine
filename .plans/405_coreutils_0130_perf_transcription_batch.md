@@ -1,7 +1,7 @@
 # Plan 405 — uutils/coreutils 0.13.0 perf transcription batch (nominal Batch 406)
 
 **Status:** STAGED — plan-first, zero corpus edits until the cargo window opens (verdict: Research 440, YES B− Claude-adjudicated round 3 AGREE, session f1c2a64e; rounds 1–2 REVISE; R2 B+ until its materialization-cost cell measures)
-**Claimed:** zed-m3-coreutils-distill@m3, 1795417515, expires 2026-11-25T07:05Z
+**Claimed:** zed-e534a86f@m3, 1795591551, expires 2026-11-27T07:25Z
 
 ## Source
 
