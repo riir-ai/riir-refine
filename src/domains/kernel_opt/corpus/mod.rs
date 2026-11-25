@@ -1971,6 +1971,7 @@ mod entries_gpu_165;
 mod entries_gpu_166;
 mod entries_gpu_167;
 mod entries_gpu_168;
+mod entries_gpu_169;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
@@ -2201,6 +2202,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_166::entries());
     entries.extend(entries_gpu_167::entries());
     entries.extend(entries_gpu_168::entries());
+    entries.extend(entries_gpu_169::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2621,6 +2623,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "verify-ubatch-full-prestage-lane-token-gate-broadcast",
             "j16-warp-fragment-direct-no-smem-tile",
             "mbarrier-staged-in-structural-padding",
+            // Batch 417 +1 (Plan 413 / Research 448, NVIDIA/cuda-rust @
+            // f35d6ccc2e): the mbarrier INIT-PHASE asymmetry — empty-side
+            // barriers of a double-buffered pipeline start ARRIVED (the
+            // buffers genuinely free), full-side start un-arrived; B106
+            // owns the sizing trick, gpu_141 the declaration order, THIS
+            // the init phase (zero prior owner).
+            "pre-arrive-empty-side-barriers-of-double-buffered-pipeline",
             // Batch 259 +1 (the uzu e744e7c chunked-GDN prefill pack, Plan 263 /
             // Research 295): the conv stage packs each tile's 3 previous rows
             // into O(tiles) scratch and the scan runs the tiles IN PLACE with a
@@ -3589,6 +3598,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "glm-top1-chance-rides-pick-word",
             "tiny-proj-aux-stream-overlap-size-gated",
             "route-bound-at-construction-hot-closure-shape-predicate-only",
+            // Batch 417 +1 (Plan 413 / Research 448, NVIDIA/cuda-rust @
+            // f35d6ccc2e): the launch-contract three-way placement law —
+            // host-checkable preconditions checked ONCE at dispatch
+            // (checked u64 arithmetic), device-provable properties stay
+            // in-body; zero owner of the placement axis before.
+            "launch-invariant-guard-checks-once-at-dispatch",
         ],
     ),
     // E: Parallelism patterns (99 rules; Batch 400 +1: parked-waiters-release-off-worker (the mvm 60c42deb transcription, Plan 400 / Research 435 — waiter custody off the runnable queue + the second parked budget, PARK_STALL fail-closed)); Batch 333 +2: fail-stop-deadline-trap-bounded-cross-rank-wait (sgl-nvidia-mega c396f2ab — the co-resident-launch fail-stop ENFORCEMENT law: %globaltimer deadline on a poll subset every 1024 spins, out-of-line store-to-faulting-address-then-trap, watchdog-derived deadline compiled into every reachable wait path, no partial output; gpu_118 policy + gpu_60 host-poll compose, the enforcement layer was unowned) + peer-mailbox-rotation-depth-reader-residency-plus-one (the cross-launch peer-mailbox recycling law: rotation depth = proven reader residency + 1, never-zero per-writer epoch from per-CTA launch counts, one atomic-width {tag, payload} record, zero-init reads empty; gpu_61 counter-gated rings + gpu_138 scheduler fences compose); Batch 317 +1: row-owns-output-k-full-reduce-exchange-carries-no-arithmetic (the TensorFold e06a6eef+fccb46ac rank-partition law — partition by OUTPUT rows so the exchange is a pure copy, the no-arithmetic exchange contract, the fault reified into the shared id word so every rank refuses together, keepIfAll wire votes; the 'distributed' next-category candidate RECORDED in-rule, Plan 317); the header sat at measured truth 95 (repaired at Batch 310 — the Research-353-flagged drift class); Batch 310 +1: barriers-declared-before-slots-one-free-run (cubecl 4549408 + 07cd07a, the Stages::free atom — SMEM declaration order is an allocation-fragmentation control: persistent barriers first as one run, transient slot data after, or the freed space is pieces that fit nothing, 64->131 KiB past a 99 KiB ceiling, Plan 315); Batch 303 +1: quad-lane-softmax-two-shuffle-16b-store (the splash cabbad27 fused-row quad — four lanes per row, two xor shuffles for max+sum, one 16-byte bf16 store per lane), Plan 308 / Research 345); Batch 299 +1: mma-window-admission-output-width-occupancy-floor (the TensorFold 85571acb width floor — the admission family's starvation-FLOOR pole), Plan 304 / Research 342); Batch 281 +1: all-threads-reach-workgroup-barrier-no-pre-barrier-return (the #26631 patch-4 webgpu face — arrival universality, the gate moves to the post-barrier stores, Plan 285 / Research 318); Batch 277 +1: stream-k-tail-sequenced-deterministic-lockword-reuse (the Humming+Chord pair, Plan 281 / Research 316); Batch 272 +2: ipc-peer-mapping-collective-teardown-pin-on-failure + relaxed-spin-acquire-confirm-metadata-flag-wait (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- the cross-process mapping teardown as a pinned-order collective whose failures pin to process exit; the two-tier relaxed-spin/acquire-confirm wait with three-way fault classification + deadline + backoff + interleaved peer-fault poll); Batch 268 +1: splitk-tier-ladder-per-tier-ceiling-min-partition-inputs (the splash wave — split-K depth from a tier ladder of occupancy triggers with per-tier ceilings and partition-input floors, ceiling 16 tier-keyed, reassociation disclosed); Batch 253 +1: stream-k-grid-capped-at-useful-work-quanta (the MMQ Stream-K #30553 grid cap — min(nsm, nwork) with nwork = tiles * ceil(K/K_vram), never below the SM default, never an empty-range block; fixup sizing rides the capped grid; the ceiling side stays the B58 measured null); Batch 249 slice 3 +3: per-stream-buffers-by-value-seg-kernel-copies (da676b0d) + fill-foreground-then-fewest-remaining-tokens (c4d07a54) + pool-wait-bound [STALE-COMMENT REPAIR at Batch 253 — this header read 79 through B249's +3; the tests table pinned 82]; Batch 242 +2: the mlx-serve pack — spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge; Batch 240 +1: the subgroup tail-lane clamp law (llama.cpp #30421 — every lane of a collective stays LIVE, its loads CLAMP to a valid row (gid_s = min(gid, LINE_STRIDE_A - 1)) at every read site, only its stores gate on the real bound; the pair/splitk store splits into per-element guards); Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
@@ -3759,6 +3774,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "staggered-segments-two-queue-fences",
             "bounded-cross-worker-barrier-protocol-polling-fan-in-ladder",
             "own-slice-coprime-stride-steal-claimant-invariant",
+            // Batch 417 +1 (Plan 413 / Research 448, NVIDIA/cuda-rust @
+            // f35d6ccc2e): the CLC hardware work queue — the THIRD stealing
+            // mechanism (the pending set lives in hardware, zero counter),
+            // beside B187 (grain + shared-counter) and B223 (per-slice
+            // cursors + coprime fan-out); compose-not-merge in-rule.
+            "hardware-work-queue-steals-pending-tiles",
             "warp-role-split-phase-overlap-cross-chunk-prefetch",
             "subgroup-tail-lane-clamp-live-loads-gate-stores",
             "spec-tree-parents-first-walk-register-restart-states",

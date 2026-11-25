@@ -1,6 +1,6 @@
 # Research 448 — distill verdict: NVIDIA/cuda-rust (cuda-oxide SIMT + oxide-proofs-preview + the provably-safe-GPU-kernels blog)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED (Batch 417, plan 413 — 2026-11-25, amo-i413-cudarust@amo; pin re-verified at the NEW tip f35d6ccc2e per the B414 re-pin discipline; 3 kernel_opt + 1 rust_perf landed, 4 drops recorded below; the yield estimate 2–3 met at 4 with all four suggestion-only NotBenchable)
 Source: <https://github.com/NVIDIA/cuda-rust> (Apache-2.0) + the announcement blog <https://nihalpasham.github.io/posts/provably-safe-gpu-kernels/> (the blog documents the same `oxide-proofs-preview` the repo carries; one source, two artifacts).
 Inspection date: 2026-11-25, m3, zero cargo, zero GPU.
 Pin: **`5e5c77b19a4b3204d6542bab2f0fde2a4eed824b`** (shallow clone `.raw/cuda-rust`, REMOVED at verdict commit — re-clone at the pin for batch T0; Apache-2.0, root LICENSE covers cuda-oxide + cutile-rs + host crates; 4.1k stars, 1,649 commits, NVIDIA official, early-stage research posture self-declared in README: "Expect bugs, incomplete features, and API breakage").
