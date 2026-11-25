@@ -1,8 +1,8 @@
 # Plan 388 — relate storage/durability batch (nominal Batch 372)
 
-**Status:** STAGED → **CLAIM TAKEN OVER 2026-11-25 (zed-b020af55@m3)** — the predecessor lease lapsed unexecuted (the plan-385 window it awaited cleared 2026-11-22; no landing since; none of the rule names in the corpus at the takeover); executing T0–T8 below. Heavy cargo gates (fixtures, lib suites, the R1 GOAT cell) defer to a quiet window per the m3-BUSY guard — the claim holds the head.
+**Status:** LANDED — Batch 414 (nominal; the number re-derived from the score_history tail at landing, the B370 precedent), 2026-11-25, commit `b4fc98a17` (pushed): rust_perf 406→412 (entries_101, R1–R6 + 3 faces), fixtures 6/6, GOAT cell `.benchmarks/166_batch414_goat_cells.md` (R1 ParetoDominant 3/0/0 two-run stable), gates + count web + teardown all in-landing. T0–T8 all [x].
 **Lease closed:** zed-m3-relate, 1795013546, was expires 2026-11-25T00:00Z — lapsed unexecuted: claimed 2026-11-19 for the post-codegraph window, the window cleared 2026-11-22 (Batch 373/389 landed), zero corpus landing, no live holder at the takeover (rig status m3 + list_threads checked 2026-11-25T03:50Z); taken over per the claim-lease law (expired = claimable again; fold = the record below).
-**Claimed:** zed-b020af55@m3, 1795578675, expires 2026-11-27T03:50Z
+**Lease closed:** zed-b020af55@m3, 1795578675, was expires 2026-11-27T03:50Z — closed at the landing (commit `b4fc98a17`, 2026-11-25; all T0–T8 done, the batch landed the same session it claimed)
 **Executes:** Research 422 (`relatedb/relate` distill, YES A−) — `.research/422_relate_embedded_cypher_graph_db_distill.md`.
 **Provenance:** relatedb/relate @ `c20fc310f140db90f990bb848dc4be218f257bdd` (Apache-2.0; issues-only upstream — decision content only, no PR lane).
 **Proof path:** every entry lands with its fixture (original Rust reproduction) + falsification arm + pre-registered gate; the benchable lead (R1) runs the perf-bench Pareto validator + alloc-count axis; suggestion-only entries carry `NotBenchable-by-domain` + `bench_spec: None`. Ungoat law: an entry failing its gate at landing is DEMOTED in the landing commit.
