@@ -1,6 +1,7 @@
 # Issue 259 — the rulewright's `while_let_on_iterator` rewrite moves an iterator the loop body still reads (E0382)
 
 **Status:** OPEN — filed 2026-11-25 (katgpt-rs-dc@amo) from a wrong heal found while unblocking riir-train Plan 342 B5; unclaimed.
+**Claimed:** zed-efbee190@amo, 1795617389, expires 2026-11-27T14:30Z
 
 ## The wrong heal (measured)
 
