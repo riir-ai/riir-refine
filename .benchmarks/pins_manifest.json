@@ -6,7 +6,7 @@
   "dist_rules": 8,
   "docker_rules": 31,
   "kernel_opt": {
-    "rules": 1133,
+    "rules": 1140,
     "witness": {
       "activity_dim": 8,
       "experts": 15,
