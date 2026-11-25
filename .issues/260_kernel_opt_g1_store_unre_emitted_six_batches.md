@@ -1,6 +1,7 @@
 # 260 — the kernel_opt G1 store went UNRE-EMITTED for 6 batches; 4 fixture fails landed UNRECORDED
 
 **Status:** open — surfaced at the Batch 419 landing (the standing G1 full emit found them); repair owned by the next maintained kernel_opt lane.
+**Claimed:** amo-idle-i260@amo, 1795639776, expires 2026-11-27T20:49Z
 
 ## The finding
 
