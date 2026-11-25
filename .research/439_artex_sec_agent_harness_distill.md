@@ -1,6 +1,6 @@
 # Research 439 — ARTEX (BaaRai/ARTEX): sec agent-harness distill verdict
 
-**Status:** DISTILLED — pending owner decision (staged, NOT claimed as a batch; Plan 404 is the batch plan, nominal Batch 405 window — the "nominal Batch 404" name belongs to the mlx PR #4927 lane, Plan 403).
+**Status:** DISTILLED — batch-420-landed 2026-11-25 (zed-2b94512c@m3; sec +5 → 94 rules, all suggest-only InputValidation; the T0 RE-PIN to tip 3cb0638 with ALL R1–R8 quotes re-verified byte-exact — upstream revived, 20 commits / 99 Go files past the verdict pin; R9 = the T0b census find `credential-rebind-partial-update-explicit-position`; R3 folded into R2 with the denylist face, R5/R8 faces on their owners, R7 stays intake thin; yield 4 rules + 5 faces + 2 positive instances (PinnedDialer → batch-415's egress-resolve rule, the masked-hint → B330) from 9 candidates — the ~50% falsification held; gates lib 4502/0 at sec + clippy -D ×2 + fixtures b420_sec 20 arms standalone (debug AND -O, 3 arm defects caught pre-entry); full receipts in .plans/404 + the queue-snapshot LANDING row).
 
 ## Source & pin
 
