@@ -343,7 +343,7 @@ pub(super) fn entries() -> Vec<PerfRule> {
             category: "dispatch".to_string(),
             buggy_code: "trait Op { fn apply(&self, x: f64) -> f64; }\nfn run(ops: &[Box<dyn Op>], vals: &[f64]) -> f64 {\n    let mut acc = 0.0;\n    for &x in vals { let mut v = x; for op in ops { v = op.apply(v); } acc += v; }\n    acc\n}".to_string(),
             fixed_code: "enum Op { Scale(f64), Offset(f64), Square }\nimpl Op {\n    fn apply(&self, x: f64) -> f64 {\n        match self { Op::Scale(s) => x * s, Op::Offset(o) => x + o, Op::Square => x * x }\n    }\n}\nfn run(ops: &[Op], vals: &[f64]) -> f64 {\n    let mut acc = 0.0;\n    for &x in vals { let mut v = x; for op in ops { v = op.apply(v); } acc += v; }\n    acc\n}".to_string(),
-            context_notes: None,
+            context_notes: Some("FACE (Batch 416, Plan 405 / Research 440, count-neutral — the closed-ops-set positive instance): uutils/coreutils 0.13.0 @ 07b76df463 (MIT, src/uu/tr/src/simd.rs, read at the pin) dispatches its translate tiers as a fixed enum of strategies (the per-block tier dispatch borrows / run-copies / compacts through a chosen arm, never a Box<dyn Strategy>) — the same devirtualize-a-CLOSED-SET law at the strategy-dispatch axis, with the tier choice made once per block (cheap, predictable). Face-verdict class: count-neutral positive instance — the face carries no new timing claim; the underlying mechanism was MEASURED at the standalone fixture (b416_perf_fixtures.rs, the Batch-416 preflight arms).".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(dyn_to_enum_bench_spec()),
         },
@@ -503,7 +503,7 @@ pub(super) fn entries() -> Vec<PerfRule> {
             category: "complexity".to_string(),
             buggy_code: "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
             fixed_code: "use rustc_hash::FxHashMap;\nuse rustc_hash::FxHashSet;\nfn lookup(map: &FxHashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
-            context_notes: None,
+            context_notes: Some("FACE (Batch 416, Plan 405 / Research 440, count-neutral — the DFS ancestor-set positive instance): uutils/coreutils 0.13.0 @ 07b76df463 (MIT, src/uu/ls/src/ls.rs:1247, read at the pin) runs its cycle-detection ancestor set as FxHashSet::default() over DirId — non-adversarial internally-generated ids, exactly this rule's hasher-choice shape; the SET-LIFETIME half (the Exit-marker rule) is owned by explicit-stack-dfs-ancestor-set-exit-marker, entries_103. Face-verdict class: count-neutral positive instance — the face carries no new timing claim; the underlying mechanism was MEASURED at the standalone fixture (b416_perf_fixtures.rs, the Batch-416 preflight arms).".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(fxhashmap_bench_spec()),
         },

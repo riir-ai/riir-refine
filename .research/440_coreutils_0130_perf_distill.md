@@ -1,6 +1,6 @@
 # Research 440 — uutils/coreutils 0.13.0 perf distill verdict
 
-**Status:** DISTILLED — verdict YES B− (Claude-adjudicated round 3 AGREE, session f1c2a64e; rounds 1–2 REVISE, text corrections applied each round), Plan 405 staged
+**Status:** RECORD-landed — Batch 416 / Plan 405 landed 2026-11-25 (entries_103; 6 rules + R1 demoted at its own G2 falsifier to a face on prefilter-skip-density-demotion; R2 Mixed measured k=1 0.383 / k=8 crossover 1.212; R5 ParetoDominant 71x-25545x; R6 0.838/0.838 across rustc 1.98.1/1.99.0; T2b the sort-by-key mechanism correction landed same batch; the T0 body reads: Line::create confirmed the R2 framing, map_err_context struck, the od residue CONFIRMED as the log-write-direct face)
 
 ## Source
 

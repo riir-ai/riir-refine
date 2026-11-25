@@ -9,7 +9,32 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 389 entries across 15 categories as of Batch 399 (+2: the mlx-serve ANE seed's `rust_perf` half,
+//! 419 entries across 15 categories as of Batch 416 (+6: the uutils/coreutils 0.13.0
+//! perf transcription — `sort-key-lazy-when-comparisons-per-item-low`
+//! (complexity BENCHABLE, MEASURED Mixed: k=1 lazy/pre 0.383 with the
+//! crossover MEASURED at k=8 1.212; the zero-owner `sort_by_cached_key`
+//! counterpart; a count bar ARITHMETICALLY FORBIDDEN — the primary axis is
+//! key MATERIALIZATION cost) + `in-loop-interior-remove-single-pass-fold`
+//! (complexity BENCHABLE, ParetoDominant 71x/4392x/25545x all-adjacent — the
+//! tail shift is 8.7 SECONDS at 262K vs the fold's 341us) +
+//! `opaque-call-out-of-line-protects-caller-hot-state` (layout BENCHABLE,
+//! 0.838/0.838 reproduced across rustc 1.98.1 AND 1.99.0 — the ALWAYS-taken
+//! opposite regime of the cold-confirm law) + `chain-follow-depth-cap-not-
+//! visited-set` (complexity decision-only — a growing chain cannot be
+//! stopped by a visited set; SYMLINK_FOLLOW_LIMIT = 40 verified) +
+//! `explicit-stack-dfs-ancestor-set-exit-marker` (allocation — the insert-only
+//! ancestor set held every visited node; the Exit marker removes on exit;
+//! peak = depth not N, fixture-instrumented 2000-depth vs 3500-N) +
+//! `stat-once-per-path-consumers-share-the-result` (io — one stat classifies
+//! and feeds the size/mode consumers; the is_dir() link-following descent;
+//! count fixture 8->3); the R1 A- GOAT lead DEMOTED AT ITS OWN G2 CELL (the
+//! pre-registered falsifier fired: 18/21 density x size cells SLOWER than the
+//! best single arm — the scalar word-probe gate pass costs the dispatch; the
+//! upstream win is REAL SIMD count + memchr) as a count-neutral FACE on
+//! `prefilter-skip-density-demotion` + 7 more count-neutral FACES on their
+//! OWNERS + T2b the sort-by-key mechanism correction) — uutils/coreutils tag
+//! `0.13.0` = `07b76df463` MIT, quotes verified at the pin; Plan 405 /
+//! Research 440, `entries_103`; prior: 389 entries across 15 categories as of Batch 399 (+2: the mlx-serve ANE seed's `rust_perf` half,
 //! `entries_94`; Batch 408 (+3: the TKCC road-blog transcription, `entries_98` — three
 //! measurement-honesty rules `benchmark-input-distribution-realism` /
 //! `isolated-bench-cache-state-vs-live` / `harness-overhead-contaminates-us-kernels`,
@@ -945,6 +970,7 @@ mod entries_10;
 mod entries_100;
 mod entries_101;
 mod entries_102;
+mod entries_103;
 mod entries_11;
 mod entries_12;
 mod entries_13;
@@ -1442,6 +1468,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_100::b413_rules());
     entries.extend(entries_101::b414_rules());
     entries.extend(entries_102::b415_rules());
+    entries.extend(entries_103::b416_rules());
     Corpus::new(entries)
 }
 
