@@ -153,9 +153,12 @@ const TOP_LEVEL_WORST: usize = 19; // the other level sharing the stack
 struct Node { left: u32, count: u32 } // count == 0: interior
 
 /// binned SAH, depth UNBOUNDED: a pathological centroid layout
-/// (clusters in clusters) drives the depth past anything.
+/// (clusters in clusters) drives the depth past anything — the mock
+/// models it as the one-per-level peel the heuristic pick produces.
 fn build_sah_unbounded(boxes: &[(u32, u32)]) -> Vec<Node> {
-    let mut nodes = Vec::new();
+    // the seed IS the root slot: the first split's children must land
+    // past it, never alias index 0 (the opt builder seeds identically)
+    let mut nodes = vec![Node { left: 0, count: 0 }];
     let mut stack = vec![(0usize, 0usize, boxes.len(), 0usize)];
     while let Some((ni, start, end, _depth)) = stack.pop() {
         let count = end - start;
@@ -163,9 +166,11 @@ fn build_sah_unbounded(boxes: &[(u32, u32)]) -> Vec<Node> {
             nodes[ni] = Node { left: start as u32, count: 1 };
             continue;
         }
-        // split at the cheapest bin boundary, never asking what the
-        // depth is doing
-        let mid = start + count / 2;
+        // the pathological peel: the heuristic's cost model never sees
+        // that this centroid layout splits off ONE item per level —
+        // depth grows one per item, unbounded, and the builder never
+        // asks what the depth is doing
+        let mid = start + 1;
         let left = nodes.len();
         nodes.push(Node { left: 0, count: 0 });
         nodes.push(Node { left: 0, count: 0 });
@@ -200,9 +205,6 @@ fn tree_depth(nodes: &[Node], root: usize) -> usize {
 const WALKER_STACK: usize = 64;
 const TOP_LEVEL_WORST: usize = 19;
 const MESH_BUDGET: usize = WALKER_STACK - TOP_LEVEL_WORST; // 45
-
-#[derive(Clone, Copy)]
-struct Node { left: u32, count: u32 }
 
 fn levels(n: usize) -> usize { n.max(1).next_power_of_two().trailing_zeros() as usize }
 

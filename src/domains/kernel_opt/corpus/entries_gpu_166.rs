@@ -197,9 +197,9 @@ fn admit_winograd(
 
 #[test]
 fn batch410_admission_floor_routes_to_generalist() {
-    // a tiny working set forces safe_n = 2; with 10 tiles per n the
+    // a 48 KiB working set forces safe_n = 2; with 10 tiles per n the
     // tile carries 2*10 = 20 rows < 32 — the floor refuses.
-    let admitted = admit_winograd(64, 32, 32, 10, 512 * 1024, 0);
+    let admitted = admit_winograd(64, 32, 32, 10, 48 * 1024, 0);
     assert_eq!(admitted, None, "under-amortized tiling must route out");
     // the same shape with a roomy budget fits untiled: the floor is
     // gated on safe_n < total_n and never fires.
@@ -444,6 +444,7 @@ fn truthy_float(v: f32) -> bool {
 }
 
 /// the width table: same-width signed read for the bits-only class.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ReadType {
     I8,
     I16,

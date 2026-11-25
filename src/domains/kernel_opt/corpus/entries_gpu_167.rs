@@ -128,7 +128,10 @@ fn masks_kill_the_hot_loop_arithmetic() {
     let masks = build_masks(&rows, 3);
     // closed form: bit kh set iff ih_base + kh in [0, 7)
     assert_eq!(masks[0], (0b110, 0b110));
-    assert_eq!(masks[3], (0b011, 0b011));
+    // row (0,5,3): the H taps reach ih 5..7 and lose kh=2 (0b011);
+    // the W taps sit at iw 3..5 — all three fit (0b111). The axes are
+    // NOT symmetric: each mask reads its own base.
+    assert_eq!(masks[3], (0b011, 0b111));
     // hot loop: 4 rows x 9 taps x 2 ANDs = 72 ops (vs 324)
     assert_eq!(masked_tap_load(&masks, 3), 72);
     // build cost: 4 rows x 6 taps x ~3 comparisons = 60 (once)
@@ -146,7 +149,9 @@ fn masks_kill_the_hot_loop_arithmetic() {
             gpu_concept: "MECHANISM (per-phase alignment precompute + wrap-to-base odometer; category D — dispatch): with input dilation idil, a conv tap t contributes to an output whose dilated input coordinate is congruent to 0 mod idil — so each output's contributing taps are an ARITHMETIC SUBSEQUENCE {base + k·f_wgt_jump} of the weight, where f_wgt_jump = lcm(idil, kdil)/kdil is the tap stride between aligned taps and base is the smallest tap with the congruence. Which subsequence depends only on the output position MOD f_out_jump = lcm(idil, str)/str (the REDUCED period — not stride×dilation), so the host solves the alignment ONCE per phase ('int wh_base = 0; while (wh_base < conv_params.wS[0] && ih_loop % conv_params.idil[0] != 0) { wh_base++; ih_loop += jump_h; } int wh_size = ((conv_params.wS[0] - wh_base) + f_wgt_jump_h - 1) / f_wgt_jump_h; base_h[i] = {wh_base, wh_size};', conv.cpp:522-534, the jump/init vocabulary at :511-520, Conv2DGeneralBaseInfo {weight_base, weight_size} at params.h:97-100), ships the table as a kernel buffer, and the device tap iterator STARTS at the phase base ('weight_h(base_wh_), weight_w(base_ww_)' in BOTH loaders' constructors, loader_general.h:79-80 + :277-278) and WRAPS TO THE PHASE BASE, NEVER TO ZERO ('weight_w += jump_params->f_wgt_jump_w; if (weight_w < params->wS[1]) { return; } weight_w = base_ww; weight_h += jump_params->f_wgt_jump_h; if (...) return; weight_h = base_wh; src += BK;', :361-377 weight twin, :187-208 input twin advancing n_rows pointers). The inner loop NEVER evaluates the modulo and never misses the subsequence start — every visited tap is aligned by construction — and THE TABLE SIZES THE LOOP ITSELF: 'int gemm_k_iterations = base_wh_size * base_ww_size * gemm_params->gemm_k_iterations;' (steel_conv_general.h:124-125), so tail taps past the subsequence are never visited at all, not merely skipped; the per-threadgroup table lookup is two loads at kernel start ('const int base_wh = base_h[base_oh].weight_base;', :80-87) over the phase plane grid z = f_out_jump_h × f_out_jump_w (conv.cpp:624). THE NEGATIVE SPACE IS THE PROOF: grep '% idil' over the device conv tree returns ZERO modulo sites — the only idil modulo in the lane is the HOST build loop (conv.cpp:526, 540). ⛔ KINSHIP (adjudicated both directions): derived-scalar-host-computed-in-uniform (gpu_04) owns the SINGLE-config-derived-scalar half — S2's f_wgt_jump/f_out_jump scalars ARE that rule's shape (a citable instance, never re-owned); the NEW axis is the per-PHASE TABLE (one {base, size} row per residue class, indexed by the tid_z-derived phase) + the wrap-to-base iteration discipline + the table-sized trip count — none of which is 'a scalar passed as a uniform'. compute-experts-before-router-lookup-fixup (gpu_152) is optimistic device-side compute with a fixup path under a deliberate race — S2 is fully deterministic precompute, no snapshot, no lie class, the table is authoritative before the kernel starts. loop-invariant-dispatch-resolution-hoist (rust_perf entries_48) is the same resolve-once GENUS on a different axis — it hoists a loop-invariant resolution out of a hot loop so the body is the bare call; S2 resolves an ALIGNMENT SUBSEQUENCE per phase on the host and replays it with an odometer whose wrap-to-base is an iteration invariant, not a hoisted branch (gpu_166 already names entries_48 as its kin; S2 joins the genus on the third axis). REGIME: dilated / input-dilated / strided implicit-GEMM convs where idil > 1 (non-trivial f_wgt_jump, skipped taps exist) or f_out_jump > 1 (multiple phases exist); any tap iterator whose participation predicate is a congruence on position mod period. ANTI-REGIME: idil == 1 (everything aligned: f_wgt_jump = 1, base 0, size = wS — the table degenerates to the trivial full range and the win is zero; the mechanism degrades gracefully, pinned as the all-safe arm); wS == 1; single-output launches where the (bounded, ≤ wS × f_out_jump-step) host solve wouldn't amortize. GOAT: the fixture pins the host solve verbatim in i32 (config A wS=6 str=2 pad=1 kdil=2 idil=3 → table {(2,2),(1,2),(0,2)}, tap sets {2,5},{1,4},{0,3}) against the congruence cross-check ((2i−1+2t) % 3 == 0), the naive census (18 alignment tests for 6 productive taps vs zero in the walk), the degenerate phase (idil=1 → trivial table, no wrap), config B (phase size can be 1 — one visit, wrap without an in-range second step), and the tamper arm (wrap-to-ZERO injects unaligned taps over the second channel block: fixed {2,5,2,5} vs defective {2,5,0,3}, each injected tap violating the congruence). NotBenchable-by-domain (the win is dead ALU + dead taps on Metal threadgroups — no validator hosts that; the table, the visit sets, and the congruence are CPU-testable and pinned exact). P113: upstream's own landed decision — decision content only. Source: ml-explore/mlx @ c69303b0 (MIT) — mlx/backend/metal/conv.cpp:483-547 + :624 + kernels/steel/conv/params.h:97-100 + kernels/steel/conv/kernels/steel_conv_general.h:80-125 + kernels/steel/conv/loaders/loader_general.h:44-91 + :187-208 + :248-377. Quotes byte-verified at the clone at the pin this session. MIT. Batch 411 / Plan 410 / Research 444.".to_string(),
             ref_shape: r"// NAIVE: every output re-tests tap alignment with a modulo in the
 // hot loop — and visits the taps the congruence excludes.
-fn naive_dilated_walk(phases: usize, w_s: usize, kdil: i32, idil: i32) -> (u64, u64, Vec<i32>) {
+fn naive_dilated_walk(
+    phases: usize, w_s: usize, str_: i32, pad: i32, kdil: i32, idil: i32,
+) -> (u64, u64, Vec<i32>) {
     let mut align_tests = 0u64;
     let mut visits = 0u64;
     let mut aligned = Vec::new();
@@ -154,8 +159,10 @@ fn naive_dilated_walk(phases: usize, w_s: usize, kdil: i32, idil: i32) -> (u64, 
         for t in 0..w_s as i32 {
             align_tests += 1;
             visits += 1;
-            // the hot-loop modulo the device must never pay
-            if (i as i32 * (2 * kdil) - 1 + kdil * t) % idil == 0 {
+            // the hot-loop modulo the device must never pay: the same
+            // congruence the host solve answers, (i*str - pad + kdil*t)
+            // % idil == 0 — evaluated per tap here, once per phase there
+            if (i as i32 * str_ - pad + kdil * t) % idil == 0 {
                 aligned.push(t);
             }
         }
@@ -165,10 +172,12 @@ fn naive_dilated_walk(phases: usize, w_s: usize, kdil: i32, idil: i32) -> (u64, 
 
 #[test]
 fn naive_retests_alignment_per_tap() {
-    let (tests, visits, aligned) = naive_dilated_walk(3, 6, 2, 3);
+    let (tests, visits, aligned) = naive_dilated_walk(3, 6, 2, 1, 2, 3);
     assert_eq!(tests, 18);
     assert_eq!(visits, 18); // 12 of the 18 are dead visits
-    assert_eq!(aligned, vec![0, 3, 1, 4, 2, 5]);
+    // phase order 0,1,2: sets {2,5} {1,4} {0,3} — the opt table's bases
+    // (2,2) (1,2) (0,2) name the same sets by their first tap
+    assert_eq!(aligned, vec![2, 5, 1, 4, 0, 3]);
 }
 ".to_string(),
             opt_pattern: r"// opt_pattern: the host solve (the while loop, verbatim in i32 —
