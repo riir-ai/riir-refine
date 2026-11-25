@@ -1,7 +1,7 @@
 # Plan 416 — Batch 421: the cuda-async non-reactor residue (the B419 T0b staged lane)
 
 **Status:** LANDED 2026-11-25 (`a473fc11`) — T0–T7 done; the authoring lane's yield: 7 rules (entries_gpu_171, D +6 / A +1), corpus 1133→1140, the leak.rs face folded into R4, 5 faces dropped; fixtures b421 22/22 pre-entry (the gate caught 3 arm defects — the lease's wrong-cell restore, the waiter handshake's timing race, the corpus arm's consuming-take probe — all fixed pre-entry); G1 full emit 296/296 green / 0 FAIL / 1140 rows (the Issue-260 landing rule's first application); lib 4003/0 + 4034/0 rust_perf_bench; clippy -D x3; fmt PASS (incl. the b420_sec entry-clean adjudication row — the m3 lane's landed bytes verified rustfmt-clean AT entry 9cede889 and byte-identical since, the b342/b351/b352/b366/b367/b402 precedent); pins_manifest 1140 agree; Layer 5b2 30/0 + the priced synth floor PASS — floors held, no re-pin; T8 teardown pending at commit time
-**Claimed:** amo-idle-i260@amo, 1795639776, expires 2026-11-27T20:49Z
+**Lease closed:** amo-idle-i260@amo (claim record: amo-idle-i260@amo, epoch 1795639776, was expires 2026-11-27T20:49Z) — the plan LANDED a473fc11 inside its window
 
 ## T1 verdict block (the authoring lane's input, 2026-11-25)
 
