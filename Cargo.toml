@@ -2432,6 +2432,14 @@ required-features = ["evolve_novelty"]
 name = "fix_verify_failure_matrix"
 required-features = ["fix_verify"]
 
+# Issue 259 T3 — the derived required-features verify posture: the fake-cargo
+# arms assert the exact cargo argv (the derived `--features`, the fallback
+# re-check, the ungated no-op). fix_verify-gated like the matrix above — a
+# default-posture run would print the green zero this row refuses.
+[[test]]
+name = "fix_verify_feature_derivation"
+required-features = ["fix_verify"]
+
 # Issue 256 — the fix-trajectory census example's gates: the T0 probe
 # answer shape, the T1 audit's typed verdicts, every census refusal, and
 # the ring-parser edge arms. Needs katgpt-core closure_audit (the T1

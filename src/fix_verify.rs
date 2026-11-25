@@ -192,6 +192,17 @@ pub struct VerifyReport {
     /// cfg-gated edits were genuinely compiled by the gate — the P20
     /// audit reads them against the all-features set.
     pub escalated_pkgs: Vec<PathBuf>,
+    /// Issue 259 T3: per package, the required-features the derived
+    /// verify posture enabled BEYOND the invocation posture — the packages
+    /// whose baseline proved the gated targets compile with these
+    /// features. The P43 audit reads the augmented set, so a kept edit in
+    /// a covered gated target is no longer marked unverified. A package
+    /// that fell back (see `feature_fallbacks`) never appears here.
+    pub verified_features: std::collections::BTreeMap<PathBuf, Vec<String>>,
+    /// Packages whose derived required-features baseline did not compile
+    /// (pre-existing breakage in the gated targets, the unedited tree) —
+    /// the package checks at the invocation posture instead, disclosed.
+    pub feature_fallbacks: Vec<PathBuf>,
     /// Packages whose escalation fell back to the default posture
     /// mid-verify: the escalated (pre-edit) baseline did not compile —
     /// pre-existing all-features breakage, disclosed, never a refusal
@@ -479,8 +490,12 @@ impl FixVerifier {
         let pkg_of = pkg_index_of(&touched, &by_pkg);
 
         // 1. Baseline on the unmodified tree (nothing has been written
-        // yet — a broken tree cannot host a verification).
-        if let Err(msg) = self.run_baseline(&pkgs, &mut report) {
+        // yet — a broken tree cannot host a verification). Issue 259 T3:
+        // the posture includes the touched targets' required-features the
+        // invocation does not enable (per package), so the gated code the
+        // edits live in is genuinely compiled before anything is kept.
+        let pkg_missing = self.derive_pkg_missing_features(&touched, &pkgs);
+        if let Err(msg) = self.run_baseline(&pkgs, &pkg_missing, &mut report) {
             report.error = Some(msg);
             self.finalize_escalation(&mut report);
             return report;
@@ -518,17 +533,18 @@ impl FixVerifier {
         let mut must_check: Vec<bool> = vec![true; pkgs.len()];
         let mut graph: Option<PackageGraph> = None; // lazy: only when a skip is possible
         for _round in 0..max_rounds {
-            let (error_lines, dirty) = match self.check_round(&pkgs, &must_check, &mut report) {
-                Ok(r) => r,
-                Err(e) => {
-                    // cargo could not run — restore everything, leave
-                    // nothing unverified behind.
-                    report.error = Some(e);
-                    restore_all(&touched);
-                    self.finalize_escalation(&mut report);
-                    return report;
-                }
-            };
+            let (error_lines, dirty) =
+                match self.check_round(&pkgs, &must_check, &pkg_missing, &mut report) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        // cargo could not run — restore everything, leave
+                        // nothing unverified behind.
+                        report.error = Some(e);
+                        restore_all(&touched);
+                        self.finalize_escalation(&mut report);
+                        return report;
+                    }
+                };
 
             if error_lines.is_empty() {
                 ended_clean = true;
@@ -582,6 +598,7 @@ impl FixVerifier {
         &self,
         pkgs: &[PathBuf],
         must_check: &[bool],
+        missing_by_pkg: &HashMap<PathBuf, Vec<String>>,
         report: &mut VerifyReport,
     ) -> Result<(HashMap<PathBuf, Vec<(usize, usize)>>, Vec<bool>), String> {
         let mut error_lines: HashMap<PathBuf, Vec<(usize, usize)>> = HashMap::new();
@@ -592,7 +609,8 @@ impl FixVerifier {
                 report.skipped_checks += 1;
                 continue;
             }
-            match self.classified_check(pkg, report) {
+            let missing = missing_by_pkg.get(pkg).map_or([].as_slice(), Vec::as_slice);
+            match self.classified_check(pkg, missing, report) {
                 // Errors present: merge them for attribution. Clean:
                 // nothing to do.
                 Ok(Some(json)) => {
@@ -654,11 +672,22 @@ impl FixVerifier {
     /// `Err` = cargo could not run; `Ok` with `report.baseline_clean ==
     /// false` = the tree already fails to compile (the error message is
     /// set on the report).
-    fn run_baseline(&self, pkgs: &[PathBuf], report: &mut VerifyReport) -> Result<(), String> {
+    fn run_baseline(
+        &self,
+        pkgs: &[PathBuf],
+        missing_by_pkg: &HashMap<PathBuf, Vec<String>>,
+        report: &mut VerifyReport,
+    ) -> Result<(), String> {
         for pkg in pkgs {
-            if !self.baseline_clean_for(pkg, report)? {
+            let missing = missing_by_pkg.get(pkg).map_or([].as_slice(), Vec::as_slice);
+            if !self.baseline_clean_for(pkg, missing, report)? {
                 report.baseline_clean = false;
                 return Ok(()); // message set by the caller from the flag
+            }
+            if !missing.is_empty() && !report.feature_fallbacks.contains(pkg) {
+                report
+                    .verified_features
+                    .insert(pkg.clone(), missing.to_vec());
             }
         }
         report.baseline_clean = true;
@@ -672,22 +701,52 @@ impl FixVerifier {
     /// default posture and re-checks — the fallback is disclosed on the
     /// report, never a refusal. `false` = the FINAL posture's baseline is
     /// broken.
-    fn baseline_clean_for(&self, pkg: &Path, report: &mut VerifyReport) -> Result<bool, String> {
-        let mut clean = self.baseline_check_clean(pkg, report)?;
+    /// One package's baseline verdict, with the i250 cfg-gate escalation
+    /// fallback: an escalated package checks at `--all-features` first;
+    /// a broken escalated baseline is PRE-EXISTING all-features breakage
+    /// (this is the unedited tree), so the package falls back to the
+    /// default posture and re-checks — the fallback is disclosed on the
+    /// report, never a refusal. `false` = the FINAL posture's baseline is
+    /// broken. Issue 259 T3 mirrors that doctrine for the derived
+    /// required-features posture: a baseline broken AT `default + derived`
+    /// is pre-existing breakage in the gated targets, so the package drops
+    /// the derived features, re-checks at default, and lands on the
+    /// report's `feature_fallbacks` (the P43 audit keeps its marks —
+    /// nothing was proven at the gated posture).
+    fn baseline_clean_for(
+        &self,
+        pkg: &Path,
+        missing: &[String],
+        report: &mut VerifyReport,
+    ) -> Result<bool, String> {
+        let mut clean = self.baseline_check_clean(pkg, missing, report)?;
         if !clean && self.escalation_active(pkg) {
             report.escalation_fallbacks.push(pkg.to_path_buf());
             self.escalation_fallbacks
                 .borrow_mut()
                 .insert(pkg.to_path_buf());
-            clean = self.baseline_check_clean(pkg, report)?;
+            clean = self.baseline_check_clean(pkg, missing, report)?;
+        }
+        if !clean && !missing.is_empty() && !self.escalation_active(pkg) {
+            // The gated targets were already broken on the unedited tree —
+            // the derived posture cannot host a verification. Fall back to
+            // the invocation posture, disclosed; the P43 audit keeps its
+            // marks because `verified_features` will not name this package.
+            report.feature_fallbacks.push(pkg.to_path_buf());
+            clean = self.baseline_check_clean(pkg, &[], report)?;
         }
         Ok(clean)
     }
 
     /// One baseline check, counted and classified through the shared
     /// verdict (Issue 841: Errors AND Incomplete both refuse).
-    fn baseline_check_clean(&self, pkg: &Path, report: &mut VerifyReport) -> Result<bool, String> {
-        let outcome = match self.run_check(pkg) {
+    fn baseline_check_clean(
+        &self,
+        pkg: &Path,
+        missing: &[String],
+        report: &mut VerifyReport,
+    ) -> Result<bool, String> {
+        let outcome = match self.run_check(pkg, missing) {
             Ok(o) => o,
             Err(e) => {
                 tally_run_check_err(report, &e);
@@ -711,9 +770,10 @@ impl FixVerifier {
     fn classified_check(
         &self,
         pkg: &Path,
+        missing: &[String],
         report: &mut VerifyReport,
     ) -> Result<Option<String>, String> {
-        let outcome = match self.run_check(pkg) {
+        let outcome = match self.run_check(pkg, missing) {
             Ok(o) => o,
             Err(e) => {
                 tally_run_check_err(report, &e);
@@ -741,17 +801,25 @@ impl FixVerifier {
 
     /// One `cargo check --all-targets --message-format=json` run in `pkg`,
     /// delegated to the shared [`CheckRunner`] (Plan 019 T0.3) with the
-    /// package's escalation posture appended (i250: `--all-features` while
-    /// armed and not fallen back). Fails (Err) only when cargo could not
-    /// run at all — compile errors come back as `Ok(outcome)` with
+    /// package's posture appended (i250: `--all-features` while armed and
+    /// not fallen back; Issue 259 T3: the touched targets' required-features
+    /// the invocation posture does not enable). Fails (Err) only when cargo
+    /// could not run at all — compile errors come back as `Ok(outcome)` with
     /// `exit_ok = false` + error diagnostics in the JSON.
-    fn run_check(&self, pkg: &Path) -> Result<CheckOutcome, String> {
-        let extra: &[&str] = if self.escalation_active(pkg) {
-            &["--all-features"]
+    fn run_check(&self, pkg: &Path, missing: &[String]) -> Result<CheckOutcome, String> {
+        let extra: Vec<String> = if self.escalation_active(pkg) {
+            vec!["--all-features".to_string()]
+        } else if !missing.is_empty() {
+            // Repeated `--features` flags union in cargo; the derived set is
+            // disjoint from the caller's `--verify-args` set by construction
+            // (the derivation only keeps features the posture does not
+            // enable).
+            vec!["--features".to_string(), missing.join(",")]
         } else {
-            &[]
+            Vec::new()
         };
-        let outcome = self.runner.run_check_with(pkg, extra)?;
+        let extra_ref: Vec<&str> = extra.iter().map(String::as_str).collect();
+        let outcome = self.runner.run_check_with(pkg, &extra_ref)?;
         Ok(CheckOutcome {
             json: outcome.json,
             exit_ok: outcome.exit_ok,
@@ -762,6 +830,59 @@ impl FixVerifier {
     /// the caller AND not yet fallen back (the fallback flips mid-verify).
     fn escalation_active(&self, pkg: &Path) -> bool {
         self.escalated_pkgs.contains(pkg) && !self.escalation_fallbacks.borrow().contains(pkg)
+    }
+
+    /// Issue 259 T3: per package, the union of required-features across
+    /// the touched files' covering targets that the invocation posture does
+    /// NOT enable — the `--features` set the verify rounds and baseline
+    /// must add so gated code is genuinely compiled (never default-only).
+    /// Escalated packages verify at `--all-features` and are skipped
+    /// (everything is enabled there). The user's `--verify-args` feature
+    /// set is honored (a feature it enables is not re-added).
+    fn derive_pkg_missing_features(
+        &self,
+        touched: &[&FileEditSet],
+        pkgs: &[PathBuf],
+    ) -> HashMap<PathBuf, Vec<String>> {
+        let mut out: HashMap<PathBuf, Vec<String>> = HashMap::new();
+        let verify_args = self.runner.extra_args().join(" ");
+        let fs_args = if verify_args.is_empty() {
+            None
+        } else {
+            Some(verify_args.as_str())
+        };
+        let mut sets: HashMap<PathBuf, crate::manifest_gate::FeatureSet> = HashMap::new();
+        for pkg in pkgs {
+            if self.escalation_active(pkg) {
+                continue; // --all-features enables everything
+            }
+            let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
+                continue;
+            };
+            let set = sets
+                .entry(pkg.clone())
+                .or_insert_with(|| feature_set_from_args(&text, fs_args));
+            let (rows, auto) = manifest_targets(&text);
+            let mut missing: Vec<String> = Vec::new();
+            for f in touched {
+                let Ok(rel) = f.path.strip_prefix(pkg) else {
+                    continue;
+                };
+                let rel = rel.to_string_lossy().replace('\\', "/");
+                for row in covering_targets(&rel, &rows, auto) {
+                    for feat in &row.required_features {
+                        if !set.contains(feat) && !missing.contains(feat) {
+                            missing.push(feat.clone());
+                        }
+                    }
+                }
+            }
+            if !missing.is_empty() {
+                missing.sort();
+                out.insert(pkg.clone(), missing);
+            }
+        }
+        out
     }
 
     /// Fold the escalation bookkeeping into the report — called at every

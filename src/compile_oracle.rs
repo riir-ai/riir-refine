@@ -144,6 +144,13 @@ impl CheckRunner {
         self
     }
 
+    /// The appended extra args (the `--verify-args` passthrough) — read
+    /// back by the verify posture derivation (Issue 259 T3).
+    #[must_use]
+    pub fn extra_args(&self) -> &[String] {
+        &self.extra_args
+    }
+
     /// Explicit cargo binary override (defaults to `$CARGO`, then `cargo`).
     /// The kill-path e2e points this at a fake cargo that simulates a
     /// mid-check death; production callers never need it.

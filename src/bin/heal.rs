@@ -18784,7 +18784,35 @@ fn main() {
         // covers at all) read "verified" without ever compiling. A
         // MANIFEST-level gate, invisible to the cfg audit above (which sees
         // only `#[cfg]` attributes). Report-only disclosure, the same re-run
-        // suggestion shape.
+        // suggestion shape. Issue 259 T3: the verify loop now DERIVES the
+        // missing required-features per package and verifies at them (the
+        // report's `verified_features`) — covered edits stop being marked;
+        // the remaining marks name only what the derived posture could not
+        // prove (feature-fallback packages, orphan files).
+        {
+            let derived: Vec<String> = report
+                .verified_features
+                .iter()
+                .map(|(p, f)| format!("  verified at +features {}: {}\n", p.display(), f.join(",")))
+                .collect();
+            if !derived.is_empty() {
+                eprintln!(
+                    "[verify] derived required-features posture (i259 T3):\n{}",
+                    derived.concat()
+                );
+            }
+            let fallbacks: Vec<String> = report
+                .feature_fallbacks
+                .iter()
+                .map(|p| format!("  fallback (gated baseline pre-broken): {}\n", p.display()))
+                .collect();
+            if !fallbacks.is_empty() {
+                eprintln!(
+                    "[verify] required-features posture fallbacks:\n{}",
+                    fallbacks.concat()
+                );
+            }
+        }
         {
             let mut marks: Vec<riir_refine::fix_verify::ReqFeatUnverified> = Vec::new();
             let mut sets: std::collections::HashMap<
@@ -18804,12 +18832,21 @@ fn main() {
                     };
                     // i250: an escalated-and-surviving package verified at
                     // --all-features — the audit reads the all-features set.
+                    // Issue 259 T3: a package whose derived required-features
+                    // posture survived the baseline verified AT those
+                    // features — the audit reads the augmented set, so a
+                    // kept edit in a covered gated target is no longer
+                    // marked unverified. A feature-fallback package keeps
+                    // its marks (nothing was proven at the gated posture).
                     let fs_args: Option<&str> = if report.escalated_pkgs.contains(&pkg) {
                         Some("--all-features")
                     } else {
                         args.verify_args.as_deref()
                     };
-                    let set = riir_refine::fix_verify::feature_set_from_args(&text, fs_args);
+                    let mut set = riir_refine::fix_verify::feature_set_from_args(&text, fs_args);
+                    if let Some(derived) = report.verified_features.get(&pkg) {
+                        set.names.extend(derived.iter().cloned());
+                    }
                     sets.insert(pkg.clone(), (text, set));
                 }
                 let Some((text, set)) = sets.get(&pkg) else {
