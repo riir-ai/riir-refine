@@ -16,6 +16,21 @@
 //! rounds — the win for non-adversarial keys (game state, internal caches),
 //! used pervasively in rustc itself (Bench 013: `ParetoDominant` 3.3-4.2x).
 //!
+//! **The provenance bound (Batch 414 face, Plan 388 / Research 422 —
+//! relatedb/relate @ 144a9c14de…):** "non-adversarial" is a KEY-PROVENANCE
+//! verdict, not a habit — pick by who can choose the key. Keys the engine
+//! generates or a client cannot choose (allocated ids, allocator/ASLR-picked
+//! addresses) qualify; keys a client can influence (property values,
+//! strings, anything decoded from the wire or statement text) can be
+//! pre-collided offline against Fx because it is not a keyed function. And
+//! do NOT reach for a seeded `FxHash` as the middle ground: `FxHasher::write`
+//! compresses a byte string through `hash_bytes` with fixed constants
+//! BEFORE the seeded state is touched, so any two identifiers that collide
+//! in that compression collide under every seed — the seed cannot defeat
+//! precomputation for string keys (relate/relate-front/src/ident_hash.rs:21-27,
+//! verbatim; the corpus rule `hasher-choice-by-key-provenance-not-habit`
+//! owns the policy, this proposer owns the mechanical swap).
+//!
 //! **Honest scope limits:**
 //! - The proposer self-gates on an existing `rustc_hash` import in the
 //!   target file — a span-preserving splice can add a `use` line but
