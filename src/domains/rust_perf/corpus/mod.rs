@@ -15,18 +15,18 @@
 //! crossover MEASURED at k=8 1.212; the zero-owner `sort_by_cached_key`
 //! counterpart; a count bar ARITHMETICALLY FORBIDDEN — the primary axis is
 //! key MATERIALIZATION cost) + `in-loop-interior-remove-single-pass-fold`
-//! (complexity BENCHABLE, ParetoDominant 71x/4392x/25545x all-adjacent — the
+//! (complexity BENCHABLE, `ParetoDominant` 71x/4392x/25545x all-adjacent — the
 //! tail shift is 8.7 SECONDS at 262K vs the fold's 341us) +
 //! `opaque-call-out-of-line-protects-caller-hot-state` (layout BENCHABLE,
 //! 0.838/0.838 reproduced across rustc 1.98.1 AND 1.99.0 — the ALWAYS-taken
 //! opposite regime of the cold-confirm law) + `chain-follow-depth-cap-not-
 //! visited-set` (complexity decision-only — a growing chain cannot be
-//! stopped by a visited set; SYMLINK_FOLLOW_LIMIT = 40 verified) +
+//! stopped by a visited set; `SYMLINK_FOLLOW_LIMIT` = 40 verified) +
 //! `explicit-stack-dfs-ancestor-set-exit-marker` (allocation — the insert-only
 //! ancestor set held every visited node; the Exit marker removes on exit;
 //! peak = depth not N, fixture-instrumented 2000-depth vs 3500-N) +
 //! `stat-once-per-path-consumers-share-the-result` (io — one stat classifies
-//! and feeds the size/mode consumers; the is_dir() link-following descent;
+//! and feeds the size/mode consumers; the `is_dir()` link-following descent;
 //! count fixture 8->3); the R1 A- GOAT lead DEMOTED AT ITS OWN G2 CELL (the
 //! pre-registered falsifier fired: 18/21 density x size cells SLOWER than the
 //! best single arm — the scalar word-probe gate pass costs the dispatch; the
@@ -971,6 +971,7 @@ mod entries_100;
 mod entries_101;
 mod entries_102;
 mod entries_103;
+mod entries_104;
 mod entries_11;
 mod entries_12;
 mod entries_13;
@@ -1469,6 +1470,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_101::b414_rules());
     entries.extend(entries_102::b415_rules());
     entries.extend(entries_103::b416_rules());
+    entries.extend(entries_104::b418_rules());
     Corpus::new(entries)
 }
 
