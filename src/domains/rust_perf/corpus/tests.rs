@@ -13403,10 +13403,10 @@ fn batch413_rules_present_and_pinned() {
 /// Research 422, relatedb/relate @ 144a9c14de…, Apache-2.0, RE-PINNED
 /// 2026-11-25 past the verdict pin c20fc310 — the docs-wide commit #742
 /// moved the WAL sources; every quote re-verified at the NEW pin): presence
-/// + category + syn-parse gate over all six rules, plus the load-bearing
-///   needles from the re-verified quotes. Fixtures
-///   `fixtures/b414_perf_fixtures.rs` (6/6 executed at debug AND -O before
-///   entry — the two arm defects the gate caught are the record).
+/// and category and syn-parse gates over all six rules, plus the
+/// load-bearing needles from the re-verified quotes. Fixtures
+/// `fixtures/b414_perf_fixtures.rs` (6/6 executed at debug AND -O before
+/// entry — the two arm defects the gate caught are the record).
 #[allow(clippy::too_many_lines)] // exhaustive registration table: one row per rule, the file's own gate style
 #[test]
 fn batch414_rules_present_and_pinned() {

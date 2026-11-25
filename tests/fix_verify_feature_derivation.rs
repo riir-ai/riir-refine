@@ -174,7 +174,7 @@ fn arm_prebroken_gated_baseline_falls_back() {
     let report = FixVerifier::with_cargo_bin(script.display().to_string()).verify(&[fx.edit_set()]);
     assert!(report.ran, "the loop ran: {report:?}");
     assert!(
-        report.verified_features.get(&fx.dir).is_none(),
+        !report.verified_features.contains_key(&fx.dir),
         "the fallback package verifies nothing at the gated posture: {report:?}"
     );
     assert!(
