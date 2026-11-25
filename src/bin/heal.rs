@@ -7698,6 +7698,14 @@ USAGE:
                     buggy_code, resolution Q = fixed_code — over neutral probe
                     spans; report-only, feature half_split_agreement).
                     Report-only, exit unchanged; needs an oracle feed for anchors.
+    --rule-rebuild-audit [--rule-rebuild-cap <usd>] [--rule-rebuild-writer replay|hosted]
+                    Issue 242: the rule-rebuild description-fidelity audit (the
+                    iWSP text-bottleneck metric over the frozen 30-rule sample;
+                    report-only, feature rule_rebuild_audit). The hosted posture
+                    (default) requires the cap recorded, the armed seat manifest
+                    row and the snippet egress consent — each refusal names its
+                    piece; `replay` is the no-seat self-test (prints the
+                    UNSCOREABLE census, proves the pipeline, no spend).
     --multiplicity-report
                     Issue 232 T3: the multiplicity-gate readout over the real
                     fixer surface (.refine/trajectories.kv per-rule encounter
@@ -8593,6 +8601,21 @@ struct Args {
     /// verdict, report-only. Refuses exit 2 on a build without the features
     /// (the corpus-gap shape; the store half needs latent_retrieval too).
     multiplicity_report: bool,
+    /// Issue 242 (`rule_rebuild_audit` feature): `--rule-rebuild-audit` runs
+    /// the rule-rebuild description-fidelity audit — the frozen 30-rule
+    /// paired iWSP rebuild metric over the corpus (description arm vs
+    /// description-less control), report-only. Refuses exit 2 on a build
+    /// without the feature (the corpus-gap shape); the hosted posture
+    /// additionally refuses without the cap + the armed seat + the egress
+    /// consent (the run itself stays owner-gated on the credential).
+    rule_rebuild_audit: bool,
+    /// The run cap in USD (`--rule-rebuild-cap`); REQUIRED in the hosted
+    /// posture (refuse to start without the cap recorded), ignored in the
+    /// replay self-test posture.
+    rule_rebuild_cap: Option<f64>,
+    /// The writer posture (`--rule-rebuild-writer replay|hosted`); default
+    /// hosted (the audit's real posture), `replay` = the no-seat self-test.
+    rule_rebuild_writer: Option<String>,
     /// Issue 232 T4 (`source_case_gate` feature): `--source-case-report`
     /// runs the source-case confusion readout over the lived store (the
     /// NoOp/Uphill decline classes vs lived outcomes, weighted by the
@@ -8762,6 +8785,9 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         corpus_gap: false,
         half_split_report: false,
         multiplicity_report: false,
+        rule_rebuild_audit: false,
+        rule_rebuild_cap: None,
+        rule_rebuild_writer: None,
         source_case_report: false,
         composition_report: false,
         propose_reversal: false,
@@ -8966,6 +8992,27 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "--corpus-gap" => args.corpus_gap = true,
             "--half-split-report" => args.half_split_report = true,
             "--multiplicity-report" => args.multiplicity_report = true,
+            "--rule-rebuild-audit" => args.rule_rebuild_audit = true,
+            "--rule-rebuild-cap" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--rule-rebuild-cap requires a value (USD, e.g. 10)");
+                    usage();
+                };
+                match value.parse::<f64>() {
+                    Ok(v) => args.rule_rebuild_cap = Some(v),
+                    Err(_) => {
+                        eprintln!("--rule-rebuild-cap expects a number, got {value:?}");
+                        usage();
+                    }
+                }
+            }
+            "--rule-rebuild-writer" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--rule-rebuild-writer requires a value (replay | hosted)");
+                    usage();
+                };
+                args.rule_rebuild_writer = Some(value);
+            }
             "--source-case-report" => args.source_case_report = true,
             "--composition-report" => args.composition_report = true,
             "--propose-reversal" => args.propose_reversal = true,
@@ -13596,6 +13643,18 @@ fn main() {
         std::process::exit(2);
     }
 
+    // Issue 242: `--rule-rebuild-audit` is feature-gated — a build without
+    // `rule_rebuild_audit` refuses LOUD (exit 2, naming the rebuild) before
+    // any dispatch (the corpus-gap shape).
+    #[cfg(not(feature = "rule_rebuild_audit"))]
+    if args.rule_rebuild_audit {
+        eprintln!(
+            "rule-rebuild-audit: this build lacks the rule_rebuild_audit feature — rebuild with: \
+             cargo build --features rule_rebuild_audit"
+        );
+        std::process::exit(2);
+    }
+
     // Issue 232 T4: `--source-case-report` is feature-gated — same shape
     // as T3's refusal (the corpus-gap law: a build without the feature
     // refuses LOUD instead of silently doing nothing). The store half
@@ -14983,6 +15042,28 @@ fn main() {
             Err(msg) => {
                 eprintln!("{msg}");
                 std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // ── Issue 242: --rule-rebuild-audit — the rule-rebuild description-
+    // fidelity audit over the frozen 30-rule sample. Report-first (the
+    // frontier-report law): exit 0 on every successful read; exit 2 on an
+    // arming/posture refusal (cap / seat / consent / writer-mode — the
+    // message names its piece; the hosted RUN itself stays owner-gated on
+    // the credential), exit 1 on a run failure. The flag is refused
+    // pre-dispatch without the feature (above); this arm is gated with it.
+    #[cfg(feature = "rule_rebuild_audit")]
+    if args.rule_rebuild_audit {
+        match riir_refine::rule_rebuild_audit::cli_run(
+            args.rule_rebuild_cap,
+            args.rule_rebuild_writer.as_deref(),
+        ) {
+            Ok(text) => print!("{text}"),
+            Err((msg, code)) => {
+                eprintln!("{msg}");
+                std::process::exit(code);
             }
         }
         return;

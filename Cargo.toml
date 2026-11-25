@@ -568,6 +568,19 @@ consumed_window_ledger = []
 # shared-path edits — new gated code only).
 half_split_agreement = []
 
+# Issue 242 (opt-in, report-only): the rule-rebuild description-fidelity
+# audit lane (the iWSP text-bottleneck metric, arXiv:2611.18114 distill) —
+# `--rule-rebuild-audit`. 30 frozen rules, paired description-arm vs
+# description-less-control, scored by mandatory rustc compile +
+# alpha-equivalence (syn visitor) + the authored tests spliced against the
+# redraft (verdict-lane-negotiated design, 3 rounds, AGREE-with-conditions
+# 2026-11-25). Implies the three sampled corpora + hosted_expert (the seat
+# arm — same EgressConsent / Decline / llm_spend machinery); the hosted RUN
+# itself stays owner-gated on the credential (token + R1 row + egress
+# consent; the <=$10 cap recorded pre-run). NOT in default, NOT in the
+# release set — compile-time cost only until invoked.
+rule_rebuild_audit = ["clippy_lints", "rust_perf", "kernel_opt", "hosted_expert", "escalation_manifest"]
+
 # Issue 232 T3 (Research 495, the T³ holdout-epistemology extraction): the
 # multiplicity-gated arming predicate — L1's ordering law. A holdout-flavored
 # arm fires only when the surface's per-unit encounter multiplicity has
@@ -1416,6 +1429,19 @@ required-features = ["kernel_opt"]
 [[test]]
 name = "epiplexity_census_gates"
 required-features = ["epiplexity_census"]
+
+# Issue 242: the rule-rebuild audit's hermetic gate battery — the digest /
+# sample / blind-fixture pins, the identity + mutated + renamed-equivalent
+# (all 30 frozen rules, proving the normalizer + macro handling + test-item
+# removal on the real corpus) + non-compiling-but-token-close +
+# UNDECIDED-signature + vacuous-tests + fence-refusal + cap-refusal +
+# prompt-contract gates — all over the fake compiler (no rustc, no seat).
+# Whole-file `#![cfg(feature = "rule_rebuild_audit")]` + this row = the
+# required-features discipline (the repo-birth gate law). Run:
+#   cargo test --test rule_rebuild_audit_gates --features rule_rebuild_audit
+[[test]]
+name = "rule_rebuild_audit_gates"
+required-features = ["rule_rebuild_audit"]
 
 # Issue 126 lane (b) — the Lemma-4.2 likelihood-ratio tier guard's
 # store-level G1/G3 arms (poisoned wrong-goal credit excluded / clean

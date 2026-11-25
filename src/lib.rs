@@ -712,6 +712,13 @@ pub mod consumed_window;
 #[cfg(feature = "half_split_agreement")]
 pub mod half_split;
 
+// Issue 242 (the iWSP text-bottleneck rebuild audit): the rule-rebuild
+// description-fidelity lane — the frozen 30-rule paired audit, the
+// alpha-normalized + compiled + authored-tests scoring, the replay/hosted
+// writer seam. Report-only; the hosted run stays owner-gated.
+#[cfg(feature = "rule_rebuild_audit")]
+pub mod rule_rebuild_audit;
+
 // Issue 232 T3 (Research 495): the multiplicity-gated arming predicate —
 // L1's ordering law: arms fire only past a locally measured knee
 // (encounter-mass median, integer-exact), sigmoid over the unit's own

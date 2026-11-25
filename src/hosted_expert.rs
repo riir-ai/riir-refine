@@ -349,8 +349,113 @@ impl HostedExpertL4 {
     }
 
     /// The full call: consent โ’ deadline โ’ reserve โ’ wire โ’ reconcile.
+    /// The rule-rebuild-audit request body (issue 242): ONE prompt carrying
+    /// the pinned application step + the task payload (a prose description or
+    /// a buggy-arm snippet). The SNIPPET-ONLY law holds — the builder takes
+    /// the prompt and nothing else; what the caller chose to put in it is
+    /// the caller's disclosure, scoped by the same egress consent. The
+    /// no-retention rule rides the wire twice (system message + metadata)
+    /// exactly as the other builders ride it.
+    #[must_use]
+    pub fn build_redraft_body(&self, prompt: &str, max_tokens: u64) -> String {
+        let system = "You are a Rust code-transformation expert. You are given a task asking \
+             you to re-derive a code fix from its description or from the defective input. \
+             Output the COMPLETE fixed Rust code inside exactly one fenced rust code block, \
+             no explanation outside it. RETENTION RULE (binding): the user's content in \
+             this request must not be retained, logged, or used for training — respond to \
+             it, then discard it.";
+        let body = serde_json::json!({
+            "model": self.model,
+            "messages": [
+                { "role": "system", "content": system },
+                { "role": "user", "content": prompt },
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+            "metadata": { "retention": "none" },
+        });
+        serde_json::to_string(&body).unwrap_or_default()
+    }
+
+    /// The rule-rebuild-audit call: the same consent / deadline / reserve /
+    /// wire / reconcile taxonomy as the other generate arms (issue 242's
+    /// audit lane is the only consumer; issue 242's verdict lane pinned the
+    /// prompt contract — this method is transport only).
+    ///
+    /// # Errors
+    ///
+    /// The same [`Decline`] taxonomy; the prompt rides inside the billed
+    /// prompt (the reserve covers the snippet estimate path unchanged).
+    pub fn generate_redraft_checked_with(
+        &mut self,
+        prompt: &str,
+        deadline: Option<Instant>,
+        max_tokens: u64,
+        consent: EgressConsent,
+    ) -> Result<String, Decline> {
+        if let EgressConsent::Refused(r) = consent {
+            return Err(Decline::Egress(r));
+        }
+        if deadline.is_some_and(|d| d <= Instant::now()) {
+            return Err(Decline::DeadlineExpired);
+        }
+        let reserved = match self.spend.reserve(&self.model, prompt, max_tokens) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = self.spend.save();
+                return Err(match e {
+                    crate::llm_spend::SpendError::CapReached(c) => {
+                        Decline::CapReached(c.to_string())
+                    }
+                    crate::llm_spend::SpendError::UnknownModel(m) => Decline::Unpriced(format!(
+                        "model {m:?} is not in the pricing table — refusing to send without a cap price (add it to PRICING_TABLE + bump PRICING_VERSION)"
+                    )),
+                });
+            }
+        };
+        let _ = self.spend.save();
+        let leg = riir_llm::Leg {
+            label: "rule-rebuild-audit".to_string(),
+            base: self.endpoint.clone(),
+            bearer: self.bearer.clone(),
+            model: self.model.clone(),
+            wire: riir_llm::Wire::OpenAi,
+        };
+        let body = self.build_redraft_body(prompt, max_tokens);
+        let sent = match riir_llm::transport::post_chat_on(&self.agent, &leg, &body) {
+            Ok(raw) => raw,
+            Err(f) => {
+                self.spend.release(reserved);
+                let _ = self.spend.save();
+                return Err(Decline::Wire(f.message().to_string()));
+            }
+        };
+        let (text, usage) = match riir_llm::parse(riir_llm::Wire::OpenAi, &sent) {
+            Ok(pair) => pair,
+            Err(f) => {
+                self.spend.reconcile(reserved, &self.model, 0, 0, false);
+                let _ = self.spend.save();
+                return Err(Decline::Wire(f.message().to_string()));
+            }
+        };
+        self.spend.reconcile(
+            reserved,
+            &self.model,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.reported,
+        );
+        let _ = self.spend.save();
+        let answer = text.trim();
+        if answer.is_empty() {
+            return Err(Decline::Wire("expert returned an empty answer".to_string()));
+        }
+        Ok(answer.to_string())
+    }
+
+    /// The full call: consent → deadline → reserve → wire → reconcile.
     /// `Ok(fix)` = the hosted expert's answer; `Err(Decline)` = decline
-    /// (always safe โ€” the caller keeps the modelless result).
+    /// (always safe — the caller keeps the modelless result).
     ///
     /// # Errors
     ///

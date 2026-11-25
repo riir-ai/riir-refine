@@ -13404,9 +13404,9 @@ fn batch413_rules_present_and_pinned() {
 /// 2026-11-25 past the verdict pin c20fc310 — the docs-wide commit #742
 /// moved the WAL sources; every quote re-verified at the NEW pin): presence
 /// + category + syn-parse gate over all six rules, plus the load-bearing
-/// needles from the re-verified quotes. Fixtures
-/// `fixtures/b414_perf_fixtures.rs` (6/6 executed at debug AND -O before
-/// entry — the two arm defects the gate caught are the record).
+///   needles from the re-verified quotes. Fixtures
+///   `fixtures/b414_perf_fixtures.rs` (6/6 executed at debug AND -O before
+///   entry — the two arm defects the gate caught are the record).
 #[allow(clippy::too_many_lines)] // exhaustive registration table: one row per rule, the file's own gate style
 #[test]
 fn batch414_rules_present_and_pinned() {
@@ -13592,12 +13592,13 @@ fn batch414_rules_present_and_pinned() {
     );
 }
 
-/// Batch 415 — the graphicle transcription's rust_perf half + the staged
+/// Batch 415 — the graphicle transcription's `rust_perf` half + the staged
 /// codegraph WAL-valve candidate's landing (Plan 396 / Research 430 + Plan
 /// 385 / Research 418): presence + category + syn-parse gate over the one
 /// rule, plus the load-bearing needles from the re-verified quotes at both
 /// pins (codegraph @ cc17b69a — the Batch-371 re-pin, graphicle @ b0bb4140)./// Fixtures `fixtures/b415_perf_fixtures.rs` (4 arms executed at debug AND
 /// -O before entry).
+#[allow(clippy::too_many_lines)] // exhaustive registration table: one row per rule, the file's own gate style
 #[test]
 fn batch415_rules_present_and_pinned() {
     let corpus = build_perf_seed_corpus();
@@ -13717,6 +13718,7 @@ fn batch415_rules_present_and_pinned() {
 /// density rule — the face needle is asserted too.
 /// Fixtures `fixtures/b416_perf_fixtures.rs` (9/9 executed at debug AND -O
 /// before entry; the gate caught four arm defects).
+#[allow(clippy::too_many_lines)] // exhaustive registration table: one row per rule, the file's own gate style
 #[test]
 fn batch416_rules_present_and_pinned() {
     let corpus = build_perf_seed_corpus();

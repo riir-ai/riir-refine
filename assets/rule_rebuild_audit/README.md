@@ -102,7 +102,40 @@ For each of the 30 rules, TWO arms, paired:
 ## What remains (all seat-gated)
 
 - The seat arm: token + R1 endpoint row + egress consent on some box (owner act).
-- The run lane: the scorer over the fixtures (small, buildable at run time on a
-  credentialed box — deliberately not built here, per the 11-17 routing note: a
-  lane without its seat measures nothing).
 - The `.benchmarks/` record of the paired Δ.
+
+## The scorer lane (BUILT 2026-11-25, amo-i242-scorer) — the instrument exists; the run stays seat-gated
+
+The 2026-11-17 routing note ("a lane without its seat measures nothing") was
+UN-PARKED by a recorded Claude verdict (3 rounds, 2026-11-25: AGREE-with-
+conditions — protocol-conformant fix-match with a MANDATORY compile leg, the
+alpha-normalized PRIMARY semantic column replacing the verdict lane's first
+inversion, the authored tests as the behavioral witness, the std-macro-family
+renaming, the verdict ranking pinned, the fence refusal, and the two
+disclosure conditions below). The lane is `rule_rebuild_audit` (opt-in; NOT
+default, NOT in the release set):
+
+- `cargo refine --rule-rebuild-audit [--rule-rebuild-cap <usd>]
+  [--rule-rebuild-writer replay|hosted]` — report-only, exit 0 on a read,
+  exit 2 on an arming/posture refusal (cap / seat / consent, each naming its
+  piece). `replay` is the no-seat self-test (fake oracle, no spend).
+- Scoring: `strict` / `alpha` / `compiled` columns never pooled; the verdict
+  = MATCH (compiled AND authored-tests pass (or vacuous) AND (alpha OR
+  strict)) / UNDECIDED-shape / UNDECIDED-signature / NO MATCH; the writer's
+  own tests are a disclosed-only column.
+
+**The pre-run census (verdict round-3 condition 1 — recorded BEFORE any
+hosted call):** the replay self-test at the landing commit classifies ALL 30
+frozen rules **scoreable 30/30, UNSCOREABLE none** — every authored fixed arm
+parses as Rust (the clippy entries are fn-shaped with the doc comments
+attached to items). Both bars (kill Δ < 10 pts, pass Δ ≥ 10 pts) therefore
+compute over the FULL n=30; the low-power warning (n < 20) does not apply.
+The census re-derives at every load — a corpus change that makes an authored
+arm unparseable re-opens this note, never silently shrinks the sample.
+
+Vacuous disclosure (verdict round-3 condition 2): 6 of the 30 authored arms
+carry a `#[test]` surface (rust_perf: watchdog-deadline, batch-reserve,
+byte-flag; kernel_opt: walk-terminating-fill, dtype-branch, moe-group) — the
+other 24 score MATCH on the alpha/strict columns alone, printed per arm as
+`tests=vac` and folded into the report's vacuous line, never into a real
+pass.
