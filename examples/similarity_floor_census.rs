@@ -265,6 +265,16 @@ struct Eval {
     /// Index into [`TAU_SWEEP`] of the best false-bar-clearing τ (ties keep
     /// the first), or None when no τ is adjudicable.
     best: Option<usize>,
+    /// PR-AUC of revert prediction over SCORED eval edits (revert score =
+    /// 1 − best similarity; higher similarity ranks as lower revert risk).
+    pr_auc: Option<f64>,
+    pr_auc_scored: usize,
+    /// Perfect-catch ceiling: every reverted eval edit declined with zero
+    /// false declines — all-revert runs cost 0, mixed runs the canonical 2,
+    /// clean runs their actual. The pool's adjudicability bound for G3.
+    ceiling_red: f64,
+    ceiling_red_ex: f64,
+    ceiling_outlier_runs: usize,
 }
 
 fn reduction(sim: u64, actual: u64) -> f64 {
@@ -272,6 +282,41 @@ fn reduction(sim: u64, actual: u64) -> f64 {
         return 0.0;
     }
     1.0 - sim as f64 / actual as f64
+}
+
+/// PR-AUC over `(score, is_revert)` pairs, higher score = more revert-like.
+/// Deterministic trapezoid over the precision-recall curve, ties grouped by
+/// score threshold (the same shape as `edit_revert_head`'s).
+fn pr_auc(pairs: &[(f64, bool)]) -> Option<f64> {
+    let pos = pairs.iter().filter(|p| p.1).count();
+    if pos == 0 || pos == pairs.len() {
+        return None;
+    }
+    let mut ranked: Vec<(f64, bool)> = pairs.to_vec();
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    let mut tp = 0usize;
+    let mut fp = 0usize;
+    let mut i = 0usize;
+    while i < ranked.len() {
+        let s = ranked[i].0;
+        while i < ranked.len() && ranked[i].0 == s {
+            if ranked[i].1 {
+                tp += 1;
+            } else {
+                fp += 1;
+            }
+            i += 1;
+        }
+        pts.push((tp as f64 / pos as f64, tp as f64 / (tp + fp) as f64));
+    }
+    let mut auc = pts[0].0 * pts[0].1;
+    let mut prev = pts[0];
+    for &(rec, prec) in pts.iter().skip(1) {
+        auc += (rec - prev.0) * (prec + prev.1) / 2.0;
+        prev = (rec, prec);
+    }
+    Some(auc)
 }
 
 /// The similarity floor over `runs` (FIT = first half, EVAL = rest, split at
@@ -291,6 +336,7 @@ fn evaluate(runs: &[Run], rule_gated: bool) -> Eval {
     // Per-eval-run best similarities (None = unscoreable / degenerate → kept).
     let mut eval_scores: Vec<Vec<Option<f64>>> = Vec::new();
     let mut sims_all: Vec<f64> = Vec::new();
+    let mut pr_pairs: Vec<(f64, bool)> = Vec::new();
     let mut degenerate_rows = 0usize;
     let mut unscoreable = 0usize;
     for run in eval {
@@ -313,6 +359,7 @@ fn evaluate(runs: &[Run], rule_gated: bool) -> Eval {
             };
             if let Some(s) = score {
                 sims_all.push(s);
+                pr_pairs.push((1.0 - s, e.reverted));
             }
             sims.push(score);
         }
@@ -364,10 +411,20 @@ fn evaluate(runs: &[Run], rule_gated: bool) -> Eval {
                     }
                 }
             }
+            let had_revert = run.edits.iter().any(|e| e.reverted);
             let simc = if remaining == 0 {
                 0
             } else if remaining_all_survive {
-                CANONICAL_SURVIVE_CHECKS
+                // The canonical 2 is savings ONLY where the guard removed doomed
+                // edits from a run that actually spent revert rounds; an already
+                // clean run wasted nothing, so charging it 2 invents savings no
+                // decline caused (the decline-nothing tell: red% identical at
+                // every tau incl. tau with zero declines). Charge it its actual.
+                if had_revert {
+                    CANONICAL_SURVIVE_CHECKS
+                } else {
+                    act
+                }
             } else {
                 act
             };
@@ -412,6 +469,36 @@ fn evaluate(runs: &[Run], rule_gated: bool) -> Eval {
         }
     });
 
+    // Perfect-catch ceiling: every reverted eval edit declined, zero false
+    // declines. All-revert runs cost 0, mixed runs the canonical 2, clean
+    // runs their actual — the pool's G3 adjudicability bound.
+    let mut ceil_sim = 0u64;
+    let mut ceil_act = 0u64;
+    let mut ceil_sim_ex = 0u64;
+    let mut ceil_act_ex = 0u64;
+    let mut ceiling_outlier_runs = 0usize;
+    for run in eval {
+        let act = u64::from(run.edits.first().map(|e| e.run_checks).unwrap_or(0));
+        let had_revert = run.edits.iter().any(|e| e.reverted);
+        let all_revert = had_revert && run.edits.iter().all(|e| e.reverted);
+        let sim = if all_revert {
+            0
+        } else if had_revert {
+            CANONICAL_SURVIVE_CHECKS
+        } else {
+            act
+        };
+        let outlier = run_checks_median > 0.0 && act as f64 > OUTLIER_MULT * run_checks_median;
+        if outlier {
+            ceiling_outlier_runs += 1;
+        } else {
+            ceil_sim_ex += sim;
+            ceil_act_ex += act;
+        }
+        ceil_sim += sim;
+        ceil_act += act;
+    }
+
     sims_all.sort_by(|a, b| a.total_cmp(b));
     Eval {
         fit_runs: fit.len(),
@@ -428,6 +515,11 @@ fn evaluate(runs: &[Run], rule_gated: bool) -> Eval {
         run_checks_median,
         rows,
         best,
+        pr_auc: pr_auc(&pr_pairs),
+        pr_auc_scored: pr_pairs.len(),
+        ceiling_red: reduction(ceil_sim, ceil_act),
+        ceiling_red_ex: reduction(ceil_sim_ex, ceil_act_ex),
+        ceiling_outlier_runs,
     }
 }
 
@@ -495,6 +587,18 @@ fn print_eval(name: &str, eval: &Eval) {
     if let (Some(lo), Some(med), Some(hi)) = (eval.score_min, eval.score_median, eval.score_max) {
         println!("score spread: min {lo:.3} · median {med:.3} · max {hi:.3}");
     }
+    if let Some(auc) = eval.pr_auc {
+        println!(
+            "floor PR-AUC (EVAL): {auc:.3} over {} scored edits (revert score = 1 − similarity)",
+            eval.pr_auc_scored
+        );
+    }
+    println!(
+        "perfect-catch ceiling: all-runs {:.1}% · outlier-excluded {:.1}% ({} outlier run(s)) — the pool's G3 adjudicability bound",
+        eval.ceiling_red * 100.0,
+        eval.ceiling_red_ex * 100.0,
+        eval.ceiling_outlier_runs,
+    );
     println!(
         "  tau  decl  corr false  false%   sim actual   red%  red_ex%  (outlier = > {:.0}x median {:.0})",
         OUTLIER_MULT, eval.run_checks_median,
@@ -865,9 +969,138 @@ fn self_test() {
         "reasons: {reasons:?}"
     );
 
+    // The two repaired cost arms (the branches the 79.2%-class red% bug
+    // survived in unasserted):
+    // (a) an ALREADY-CLEAN eval run whose actual exceeds the canonical 2
+    //     (multi-package spend) must be charged its ACTUAL, never 2 — charging
+    //     2 invents savings no decline caused;
+    // (b) a revert whose similarity is HIGH (a near-copy of an accepted fix)
+    //     is never declined at any sweep tau, so it stays OUTSTANDING and the
+    //     run must be charged its ACTUAL, never the canonical 2.
+    let runs2 = vec![
+        // FIT: 1 accepted A fix.
+        Run {
+            key: "t::f1".into(),
+            ts: 1,
+            edits: vec![srow(
+                1,
+                "f1",
+                "dead_code_remove",
+                1,
+                false,
+                1,
+                2,
+                A_RESTORE,
+                A_REPLACE,
+            )],
+            checks_drift: 0,
+        },
+        // FIT: 1 accepted C fix (rule-gate contrast).
+        Run {
+            key: "t::f2".into(),
+            ts: 2,
+            edits: vec![srow(
+                2,
+                "f2",
+                "needless_borrow",
+                1,
+                false,
+                1,
+                2,
+                C_RESTORE,
+                C_REPLACE,
+            )],
+            checks_drift: 0,
+        },
+        // EVAL E1 (a): CLEAN, actual 4 (two packages). Both edits are
+        // near-copies of accepted fixes (similarity 1.0, never declined).
+        Run {
+            key: "t::e1".into(),
+            ts: 3,
+            edits: vec![
+                srow(
+                    3,
+                    "e1",
+                    "dead_code_remove",
+                    1,
+                    false,
+                    2,
+                    4,
+                    A_RESTORE,
+                    A_REPLACE,
+                ),
+                srow(
+                    3,
+                    "e1",
+                    "needless_borrow",
+                    2,
+                    false,
+                    2,
+                    4,
+                    C_RESTORE,
+                    C_REPLACE,
+                ),
+            ],
+            checks_drift: 0,
+        },
+        // EVAL E2 (b): a reverted edit that is a BYTE-COPY of the accepted A
+        // fix (similarity 1.0 — never declined) + a kept C; actual 3.
+        Run {
+            key: "t::e2".into(),
+            ts: 4,
+            edits: vec![
+                srow(
+                    4,
+                    "e2",
+                    "dead_code_remove",
+                    1,
+                    true,
+                    2,
+                    3,
+                    A_RESTORE,
+                    A_REPLACE,
+                ),
+                srow(
+                    4,
+                    "e2",
+                    "needless_borrow",
+                    2,
+                    false,
+                    2,
+                    3,
+                    C_RESTORE,
+                    C_REPLACE,
+                ),
+            ],
+            checks_drift: 0,
+        },
+    ];
+    let g2 = evaluate(&runs2, false);
+    let row2 = &g2.rows[0];
+    assert_eq!(
+        row2.declines, 0,
+        "similarity 1.0 edits never decline at tau 0.05"
+    );
+    // Both runs stay on their actuals: E1 clean-at-4 (branch a) + E2
+    // outstanding-revert-at-3 (branch b) → sim 7 = actual 7 → reduction 0.
+    assert_eq!(row2.sim_checks, 7);
+    assert_eq!(row2.actual_checks, 7);
+    assert!(row2.reduction_all.abs() < 1e-9);
+    assert!(row2.reduction_ex.abs() < 1e-9);
+    assert_eq!(g2.best, Some(0));
+    // The perfect-catch ceiling on this pool: E2's revert declined → sim 2,
+    // E1 clean → sim 4 → 6 of 7 → 1/7 ≈ 14.3% ≥ the 10% G3 bar (adjudicable).
+    assert!((g2.ceiling_red - 1.0 / 7.0).abs() < 1e-9);
+    assert!((g2.ceiling_red_ex - 1.0 / 7.0).abs() < 1e-9);
+    // PR-AUC on this pool: every edit ties at similarity 1.0 → revert score
+    // 0.0 → one PR point (recall 1.0, precision 1/4 — one revert among four
+    // scored edits) → AUC 0.25 exactly (the trapezoid over a single point).
+    assert_eq!(g2.pr_auc_scored, 4);
+    assert!((g2.pr_auc.unwrap_or(f64::NAN) - 0.25).abs() < 1e-9);
     println!(
         "self-test PASS: GLOBAL 4/3/1 false-rate 1/3 red 5/7 FAIL · \
-RULE 1/1/0 red 0 FAIL-best-tau-0.05 · empty-ref declines 0 FAIL"
+RULE 1/1/0 red 0 FAIL-best-tau-0.05 · empty-ref declines 0 FAIL · \
+repaired arms clean-4/outstanding-3 red 0 · ceiling 1/7"
     );
 }
 

@@ -322,8 +322,8 @@ fn pr_auc(scores: &[(f64, bool)]) -> Option<f64> {
         }
         pts.push((tp as f64 / pos as f64, tp as f64 / (tp + fp) as f64));
     }
-    let mut auc = 0.0;
-    let mut prev = (0.0_f64, pts[0].1);
+    let mut auc = pts[0].0 * pts[0].1;
+    let mut prev = pts[0];
     for &(rec, prec) in pts.iter().skip(1) {
         auc += (rec - prev.0) * (prec + prev.1) / 2.0;
         prev = (rec, prec);
@@ -412,15 +412,40 @@ fn realized_reduction(
     let mut sim_ex = 0.0f64;
     let mut any_ex = false;
     for run in eval_runs {
-        let remaining_kept = run
-            .rows
-            .iter()
-            .filter(|&&i| {
-                let row = &flat[i];
-                !row.reverted && scores.get(&i).copied().unwrap_or(0.0) < tau
-            })
-            .count();
-        let sim = if remaining_kept == 0 { 0.0 } else { 2.0 };
+        // T1a cost semantics verbatim (Bench 162; matches similarity_floor_census):
+        // a declined edit (score >= tau) is skipped pre-verify; the remaining
+        // (non-declined) edits compile as the batch — all survive -> 2 checks,
+        // nothing left -> 0, any outstanding revert -> the run's actual checks.
+        // (The original draft keyed sim only on remaining KEPT rows and never
+        // charged the outstanding-revert arm, overstating red% at every tau.)
+        let mut remaining = 0usize;
+        let mut remaining_all_survive = true;
+        for &idx in &run.rows {
+            let row = &flat[idx];
+            if scores.get(&idx).copied().unwrap_or(0.0) >= tau {
+                continue; // declined pre-verify
+            }
+            remaining += 1;
+            if row.reverted {
+                remaining_all_survive = false;
+            }
+        }
+        let sim = if remaining == 0 {
+            0.0
+        } else if remaining_all_survive {
+            // The canonical 2 is savings ONLY where the guard removed doomed
+            // edits from a run that actually spent revert rounds. A run that was
+            // already clean wasted nothing — charging it 2 invents savings no
+            // decline caused (the decline-nothing tell: red% identical at every
+            // tau incl. tau with zero declines). Charge it its actual.
+            if run.rows.iter().any(|&i| flat[i].reverted) {
+                2.0
+            } else {
+                run.run_checks as f64
+            }
+        } else {
+            run.run_checks as f64
+        };
         let act = run.run_checks as f64;
         act_total += act;
         sim_total += sim;
@@ -444,6 +469,195 @@ fn realized_reduction(
     (red, red_ex)
 }
 
+/// Perfect-catch ceiling: every reverted eval edit declined with zero false
+/// declines. All-revert runs cost 0, mixed runs the canonical 2 (the guard
+/// genuinely removed the doomed edits), clean runs their actual (they wasted
+/// nothing). The pool's G3 adjudicability bound — a ceiling below the bar
+/// means the pool cannot adjudicate G3 at all, whatever the scorer.
+fn ceiling_reduction(eval_runs: &[Run], flat: &[EditEventRow]) -> (f64, f64, usize) {
+    let mut checks: Vec<u32> = eval_runs.iter().map(|r| r.run_checks).collect();
+    checks.sort_unstable();
+    let checks_median = *checks.get(checks.len() / 2).unwrap_or(&0) as f64;
+    let mut act_total = 0.0f64;
+    let mut sim_total = 0.0f64;
+    let mut act_ex = 0.0f64;
+    let mut sim_ex = 0.0f64;
+    let mut any_ex = false;
+    let mut outliers = 0usize;
+    for run in eval_runs {
+        let had_revert = run.rows.iter().any(|&i| flat[i].reverted);
+        let all_revert = had_revert && run.rows.iter().all(|&i| flat[i].reverted);
+        let sim = if all_revert {
+            0.0
+        } else if had_revert {
+            2.0
+        } else {
+            run.run_checks as f64
+        };
+        let act = run.run_checks as f64;
+        act_total += act;
+        sim_total += sim;
+        let outlier = checks_median > 0.0 && act > OUTLIER_MULT * checks_median;
+        if outlier {
+            outliers += 1;
+        } else {
+            act_ex += act;
+            sim_ex += sim;
+            any_ex = true;
+        }
+    }
+    let red = if act_total > 0.0 {
+        (act_total - sim_total) / act_total
+    } else {
+        0.0
+    };
+    let red_ex = if any_ex && act_ex > 0.0 {
+        (act_ex - sim_ex) / act_ex
+    } else {
+        red
+    };
+    (red, red_ex, outliers)
+}
+
+// ---------- self-test (the repaired cost arms, pinned) ----------
+
+fn push_row(
+    flat: &mut Vec<EditEventRow>,
+    ts: u64,
+    reverted: bool,
+    run_checks: u32,
+    run_edits: u32,
+) -> usize {
+    flat.push(EditEventRow {
+        v: EDIT_EVENT_VERSION,
+        ts,
+        run_id: format!("t{ts}"),
+        path: "src/lib.rs".into(),
+        rule: "dead_code_remove".into(),
+        line: 1,
+        reverted,
+        whole_file: false,
+        run_edits,
+        run_checks,
+        restore: "AAAA BBB".into(),
+        replacement: "AAA CCC".into(),
+    });
+    flat.len() - 1
+}
+
+fn self_test() {
+    let mut flat: Vec<EditEventRow> = Vec::new();
+
+    // Branch (a): an ALREADY-CLEAN run whose actual (4, two packages) exceeds
+    // the canonical 2 must be charged its ACTUAL — never 2.
+    let clean = vec![Run {
+        ts: 1,
+        rows: vec![
+            push_row(&mut flat, 1, false, 4, 2),
+            push_row(&mut flat, 1, false, 4, 2),
+        ],
+        run_checks: 4,
+    }];
+    let scores: HashMap<usize, f64> = clean[0].rows.iter().map(|&i| (i, 0.0)).collect();
+    let (red, _) = realized_reduction(&clean, &flat, &scores, 0.5);
+    assert!(red.abs() < 1e-9, "clean run at its actual: red {red}");
+
+    // Branch (b): a run with an OUTSTANDING revert (score below tau, so not
+    // declined) must be charged its actual (3) — never the canonical 2.
+    let outstanding = vec![Run {
+        ts: 2,
+        rows: vec![
+            push_row(&mut flat, 2, true, 3, 2),
+            push_row(&mut flat, 2, false, 3, 2),
+        ],
+        run_checks: 3,
+    }];
+    let scores: HashMap<usize, f64> = outstanding[0]
+        .rows
+        .iter()
+        .map(|&i| (i, if flat[i].reverted { 0.4 } else { 0.1 }))
+        .collect();
+    let (red, _) = realized_reduction(&outstanding, &flat, &scores, 0.5);
+    assert!(red.abs() < 1e-9, "outstanding revert: red {red}");
+
+    // Whole-batch catch: every revert declined (score >= tau) in a mixed run
+    // with actual 9 → remaining all survive + had_revert → sim 2 → red 7/9.
+    let caught = vec![Run {
+        ts: 3,
+        rows: vec![
+            push_row(&mut flat, 3, true, 9, 3),
+            push_row(&mut flat, 3, true, 9, 3),
+            push_row(&mut flat, 3, false, 9, 3),
+        ],
+        run_checks: 9,
+    }];
+    let scores: HashMap<usize, f64> = caught[0]
+        .rows
+        .iter()
+        .map(|&i| (i, if flat[i].reverted { 0.9 } else { 0.1 }))
+        .collect();
+    let (red, _) = realized_reduction(&caught, &flat, &scores, 0.5);
+    assert!(
+        (red - 7.0 / 9.0).abs() < 1e-9,
+        "whole-batch catch: red {red}"
+    );
+
+    // All-revert run fully declined → 0 checks.
+    let allrev = vec![Run {
+        ts: 4,
+        rows: vec![
+            push_row(&mut flat, 4, true, 5, 2),
+            push_row(&mut flat, 4, true, 5, 2),
+        ],
+        run_checks: 5,
+    }];
+    let scores: HashMap<usize, f64> = allrev[0].rows.iter().map(|&i| (i, 0.9)).collect();
+    let (red, _) = realized_reduction(&allrev, &flat, &scores, 0.5);
+    assert!(
+        (red - 1.0).abs() < 1e-9,
+        "all-revert fully declined: red {red}"
+    );
+
+    // Ceiling on a three-run pool: clean 4 + clean 4 + revert-run 100 fully
+    // caught → sim 4 + 4 + 2 = 10 of 108; the 100-check run is the outlier
+    // (> 5× median 4) → the ex-column covers the clean runs alone → 0.0.
+    let pool = vec![
+        Run {
+            ts: 5,
+            rows: vec![
+                push_row(&mut flat, 5, false, 4, 2),
+                push_row(&mut flat, 5, false, 4, 2),
+            ],
+            run_checks: 4,
+        },
+        Run {
+            ts: 6,
+            rows: vec![
+                push_row(&mut flat, 6, false, 4, 2),
+                push_row(&mut flat, 6, false, 4, 2),
+            ],
+            run_checks: 4,
+        },
+        Run {
+            ts: 7,
+            rows: vec![
+                push_row(&mut flat, 7, true, 100, 3),
+                push_row(&mut flat, 7, true, 100, 3),
+                push_row(&mut flat, 7, false, 100, 3),
+            ],
+            run_checks: 100,
+        },
+    ];
+    let (red, red_ex, outliers) = ceiling_reduction(&pool, &flat);
+    assert!((red - 98.0 / 108.0).abs() < 1e-9, "ceiling all: {red}");
+    assert!(red_ex.abs() < 1e-9, "ceiling ex (clean-only): {red_ex}");
+    assert_eq!(outliers, 1);
+
+    println!(
+        "self-test PASS: clean-at-actual · outstanding-revert-at-actual · whole-batch 7/9 · all-revert 1.0 · ceiling 98/108 ex-0 (1 outlier)"
+    );
+}
+
 // ---------- main ----------
 
 fn main() {
@@ -455,9 +669,11 @@ fn main() {
     let mut lr = 0.05f64;
     let mut seed = 0x2500u64;
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let mut self_test_only = false;
     while !args.is_empty() {
         let arg = args.remove(0);
         match arg.as_str() {
+            "--self-test" => self_test_only = true,
             "--events" => {
                 if args.is_empty() {
                     eprintln!("{USAGE}");
@@ -511,6 +727,10 @@ fn main() {
     }
 
     println!("== i250 T2 v1 BCE trained head (hashed features, logistic SGD) ==");
+    if self_test_only {
+        self_test();
+        return;
+    }
     println!(
         "bars: G3 >= {} realized check reduction | false declines <= {} of kept | beat the per-rule prior {} | escalation stop: PR-AUC ~= floor within noise",
         G3_BAR, FALSE_DECLINE_BAR, PRIOR_TO_BEAT
@@ -614,8 +834,16 @@ fn main() {
         ),
         None => println!("head PR-AUC (EVAL): UNDECIDABLE — no positives in the scored pool"),
     }
+    let eval_owned: Vec<Run> = eval_runs.into_iter().cloned().collect();
+    let (ceil_red, ceil_red_ex, ceil_outliers) = ceiling_reduction(&eval_owned, &flat);
+    println!(
+        "perfect-catch ceiling: all-runs {:.1}% · outlier-excluded {:.1}% ({} outlier run(s)) — the pool's G3 adjudicability bound (UNADJUDICABLE when below the bar)",
+        ceil_red * 100.0,
+        ceil_red_ex * 100.0,
+        ceil_outliers,
+    );
     sweep(
-        &eval_runs.into_iter().cloned().collect::<Vec<_>>(),
+        &eval_owned,
         &flat,
         &scores,
         &[0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.9, 0.95, 0.99],
