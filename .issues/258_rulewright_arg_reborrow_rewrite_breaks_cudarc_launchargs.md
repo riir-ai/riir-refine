@@ -1,6 +1,6 @@
 # Wrong heal: `&*x` → `&x` rewrite broke the CUDA-only cudarc LaunchArgs (6× E0277, 4090 lane)
 
-**Status:** OPEN
+**Status:** OPEN — remedy 2 LANDED `6401ef1a` (the owned-binding guard in `explicit_auto_deref`, refuse-on-uncertainty; 8 guard arms + the corpus/parse fixtures moved to the owned shape; lib 4011 green, clippy -D clean, rustfmt clean). Close removes the file (git history carries it); the windows-gnu typecheck blind-spot note stays as context for that lane discussion, not a refine deliverable.
 **Claimed:** zed-d56b2230@amo, 1795716116, expires 2026-11-28T12:00Z
 **Lease closed:** zed-a4d02c1f@amo, 1773519057, was-expiry 2026-11-27T03:00Z (claimed-but-stopped: no live thread, no process inside the repo — takeover per the lease law 2026-11-27T02:28Z; remedy 1 was already landed upstream, `740cbebc`)
 
@@ -47,10 +47,17 @@ diff — those survived only because their operands happened to be owned
 
 1. riir-train fix landed: `740cbebc` (develop) — restores the exact
    working-since-`2d0eab54` reborrow spelling on the 6 grad sites.
-2. This issue = the rulewright improvement-queue row. Proposed rule name:
-   `arg-reborrow-to-ref-not-identity-on-ref-typed-operand` (or fold as a
-   divergence class: never rewrite `&*x` where `x`'s binding form is not
-   proven owned).
+2. **LANDED `6401ef1a` (2026-11-27T02:35Z)** — the guard as a
+   refuse-on-uncertainty narrowing of `explicit_auto_deref`'s kind-1 arm
+   (not a new rule, not a divergence-class note — the proposer itself now
+   refuses): fires only on owned-by-construction operands or bare paths
+   proven owned by a non-reference-init `let`; projections and unproven
+   paths refuse. Kind-2 (`&**`) is unguarded (drops the whole borrow — no
+   re-reference possible). Fixture note: the corpus's field-projection
+   arm was rustc-verified SAFE in both spellings (`&*m.b` and `&m.b` both
+   compile for a `Box` field) but is unprovable parse-only — replaced by
+   the owned-let arm; the guard trades that recall for the class kill.
+3. The windows-gnu typecheck blind spot stays open as context (below).
 
 ## The blind spot that let it ship (record, not the rulewright's fault)
 
