@@ -98,3 +98,7 @@ trufflehog detection catalogs, Issue-151 law); codex-security re-ask needs licen
   disqualifying).
 - T-B9 scorer-file read finds no Rust-shaped pairing contract → DROP.
 - Any G1 fixture that cannot separate buggy from fixed honestly → the rule dies loud, never ships.
+
+**Claimed:** zed-5426a3b4@amo, 1795686007, expires 2026-11-28T09:40:07+00:00
+(scope: tranche B — the plan's 9 contestables + the 3 faces + the positive-instance bank, nominal Batch 423, per the boss routing via zed-b636a705@m3; T0 re-clones + quote re-verifications + T1 dedup + T2 authoring-with-falsification + T3 fixture writing proceed zero-contention; fixture EXECUTION + T4 gates on the loaded box use the isolated-target precedent from the Batch 422 landing same-day; yield estimate ~5 rules + faces after the pre-named drop paths fire. NOTHING INVENTED — names/grades verbatim from Research 451 + this plan.)
+
