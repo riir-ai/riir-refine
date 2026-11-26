@@ -1,6 +1,8 @@
 # 417 — Security-Tools Sec Transcription Batch (nominal Batch 422)
 
 **Status:** STAGED — plan-first filed at verdict time (Research 451); no corpus edits yet; authoring awaits a free mining slot; claim via lease per the claim-lease law.
+**Claimed:** zed-5426a3b4@amo, 1795670039, expires 2026-11-28T05:13:59+00:00
+(scope: the plan's T0–T8 cycle per the boss work order; amo LOADED at claim (sprint!131 Exclusive + trigger-vote, load 45/30) — T0 re-clones + quote re-verifications + T1 dedup greps + T2 authoring + T3 fixture WRITING proceed zero-contention; T3 fixture EXECUTION + T4 cargo gates hold for a QUIET window per the Plan-337 discipline, the B361 precedent.)
 
 ## Goal
 
