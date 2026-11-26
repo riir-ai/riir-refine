@@ -2,6 +2,31 @@
 
 **Status: DISCHARGED 2026-10-26 18:12–18:33 +07 — the b10826 bout ran from this runbook (record = riir-ai Bench 1004; the decode hold BROKE 0.9730×, escalation → riir-infer Issue 1125; the pp4096 first-read was voided box-state and re-run per the posture; the 9e9cd0f07 prior_pin chain defect repaired in the re-pin). The file now serves as the standing runbook template; nothing pending.**
 
+---
+
+## BONSAI-2.5 RETARGET BOUT — WORK ORDER 2026-11-26 ~00:5x +07 (zed-f3b519c3@amo, pre-staged for the 4090 resident lane — riir-ai Issue 1263 T2 + T1's CUDA half)
+
+**Task:** the 4090 scored re-bout on the NEW league model + the two CUDA-side T1 pin cells + the fork CPU capture. Controlling records: riir-ai Issue 1263 (T1/T2), riir-infer Research 043 (the retarget), the b10826 PRE-STAGE below (the standing bout procedure — everything there applies except what this section overrides).
+
+**MODEL SWAP (the override that matters):** every number below the b10826 section is a PER-MODEL PREDECESSOR measurement. At 2.5:
+
+1. **Fetch + verify the new model** (git-only gitsync does NOT carry it):
+   - `E:/git/riir-train/data/Ternary-Bonsai-2.5-27B-PQ2_0.gguf`
+   - source: HF `prism-ml/Ternary-Bonsai-2.5-27B-GGUF@main`, file `Ternary-Bonsai-2.5-27B-PQ2_0.gguf` (Apache-2.0)
+   - size **7,253,354,848** bytes · sha256 **`103a11c94324029d8bae3f8152f30bba414730064cfb77438f8589db72e1aa85`** (amo-verified byte-exact 2026-11-26; re-verify on the 4090 after fetch — refuse loud on mismatch, never place)
+   - disk check first: needs 6.8 GiB; the box had 48 GB free at staging. Same-format loader (ternary g128 hadamard, qwen35-GDN arch) — no loader change expected.
+2. **Opponent = the current published `prism-b*` tag at bout time** (Issue 1263 T2's law — NOT the manifest's `d7b2896830`): fetch `E:/git/vendor/prismml-llama.cpp`, find the newest published tag, checkout, adjudicate the delta since `d7b2896830` per-arm for sm_89 (LOAD-BEARING / sm_89-relevant / inert / opt-in-off, the b10826 discipline) → that adjudication is `commit_note_<mmdd>` in the re-pin. Rebuild MSVC Release at the tag — the pinned posture (VS 2022, GGML_CUDA=ON, FA=ON, GRAPHS=ON, NATIVE=ON, ARCH=89), **`-j 4` not `-j 8`** (the ptxas-OOM lesson holds; stream to a log).
+3. **Manifest re-pin ×3** (`bonsai-4090-{decode-tg128,prefill-pp2048,prefill-pp4096}.json`): model block → 2.5 (file/size/sha, a dated swap note naming Issue 1263), opponent commit → the new tag + commit_note, `measurement` rows of the predecessor stay in `prior_pin` (prepend, chain intact). **ours_pin/G1 pins: derive, never invent** — the manifests' recorded G1 walk pins are predecessor-model FNVs; the FIRST 2.5 run reds them and the failure output prints the actuals → update the pins → re-run clean. Same for `B947_*` pin consts (below).
+4. **Bout run** (verified-idle gate): `bash scripts/perf_rematch.sh run --box 4090 --rows bonsai-4090-decode-tg128,bonsai-4090-prefill-pp2048,bonsai-4090-prefill-pp4096` from `E:/git/riir-ai` (pulled to origin/develop first — the retarget commit `2cfddce17` onward; confirm `git log --oneline -1` names 1263's lane or later).
+5. **T1 CUDA pin cells** (AFTER the bout completes — same GPU window, sequential):
+   - `bench_980` G1/G2: `CARGO_TARGET_DIR=C:/t980/target BONSAI2_G1_MODEL=E:/git/riir-train/data/Ternary-Bonsai-2.5-27B-PQ2_0.gguf cargo test -p riir-gpu --release --features ternary_gemv_cuda_raw --test bench_980_t4_bonsai2_eager_g1_g2 -- --nocapture --ignored --test-threads 1` — the eager + graph G1 argmaxes print; **the new `EXPECTED_TOP1`** is the printed value (expected ≠ 11751; the predecessor pin). Record both argmaxes + the walk.
+   - `bench_947` FA/G3 FNVs: same env + `--features ternary_gemv_cuda_raw,ternary_gemm_batched,cubecl_runtime,ternary_gemv,ternary_deltanet_chunked_prefill --test bench_947_attn_fa_e2e_ab` — run WITHOUT `B947_PIN` first (prints per-round mode/p/tok/s/argmax/FNV); **the new `FA_PIN_FNV_{2048,4096}` + `G3_PIN_FNV_{2048,4096}` + `FA_PIN_ARGMAX`** come from the printed actuals. Do NOT set B947_PIN=1 on the first 2.5 run (it asserts predecessor pins and dies before printing).
+6. **Fork CPU capture** (the opponent half of T1's test-2/4 re-pin — amo folds the pins): build has `llama-server.exe`; run it **CPU-only** (`-ngl 0`) with the 2.5 model, temperature 0, seed 4294967295, `n_probs` 50, `n_predict` 2, prompt `The capital of France is` (POST `/completion` with the same generation_settings shape as the old capture), save the RAW response JSON. Commit it as `.benchmarks/rematch/calibration/980ref_pos0_cpu_bonsai25.json` (naming keeps the 980-calibration lineage; the predecessor `980ref_pos0_cpu.json` stays untouched). Sanity: its top-1 should equal bench_980's printed eager argmax (the loader-contract cross-check — a mismatch is a FINDING, report it, never fold it silently).
+7. **-mtp axis: OUT of this bout** (riir-infer Issue 1253 T2 load-census + T5 intake-cell undecided — no MTP rows exist in the manifests; do not add one).
+8. **Fold + report:** ONE riir-ai commit (manifests ×3 + the capture fixture + the bout outputs already under `.benchmarks/rematch/`), push `origin/develop`, then mail `zed-f3b519c3@amo`: the three ratios + the new pins (bench_980 argmax ×2, bench_947 FNV ×4 + argmax, capture top-1 + top-5) + the fork tag sha + the commit hash. amo folds the cargo-test const swaps (T1) + the league doc row.
+
+---
+
 ## b10826 PRE-STAGE COMPLETE 2026-10-26 ~14:2x +07 (shikuwa/4090 idle lane — GPU held by the sibling QRR cell A until ~14:45; all prep zero-GPU)
 
 **Timeline correction (found this session):** Bench 1000 (`229007fe8`) ALREADY discharged the b10819 bout 10-25 ~13:1x (decode 92.83/90.68 = 1.0237× — the hold narrowed BELOW 1.05 first time; pp2048 4099/3400.45 = 1.2054× BEST; pp4096 3897/3380.56 = 1.1531×; G1 ×4 EXACT; one-pass). Then `9e9cd0f07` re-pinned ×3 to b10822 `bf8c069fde8c` + rebuilt (22:45) — run never scored (queued behind the sibling 22:55 cell-B window, then superseded). The prior_pin chain from that re-pin is DEFECTIVE — repaired in this window's re-pin:
