@@ -1,6 +1,8 @@
 # Issue 241: disk-clean assessment — amo scratch + target survey (2026-11-17)
 
 **Status:** Open — housekeeping assessment (list-first, deletions per the disk-clean contract).
+**Lease closed:** zed-3fbc05dd@amo, 1795726800, was expires 2026-11-28T20:30:00+00:00 (claim record: zed-3fbc05dd@amo, epoch 1795726800, was expires 2026-11-28T20:30:00+00:00) — scope DISCHARGED same session (the -075 adjudication landed DISSOLVED, see the 11-26 section below); the standing trigger (df < 100 GB → the disk-clean skill) remains the issue's only live clause.
+**Lease closed:** zed-1feab5f6@amo, 1796199000, was expires 2026-11-28T16:00:00+00:00 — the 11-26 pass executed SAFE-class autonomous (see its section below; scope discharged same session, issue stays the standing list).
 **Lease closed:** zed-1feab5f6@amo, 1796199000, was expires 2026-11-28T16:00:00+00:00 — the 11-26 pass executed SAFE-class autonomous (see its section below; scope discharged same session, issue stays the standing list).
 **Lease closed:** zed-133t1@amo, 1795456100, was expires 2026-11-24T17:28Z — folded at the 11-23 pass's landing (scope: pre-large-run hygiene before the queued 6h realesrgan render + mist-bars exclusive; the wt-mg quartet rows dissolved — see below).
 **Lease closed:** zed-c0c35a68@amo, 1794946800, was expires 2026-11-19T02:20:00Z (expired 2026-11-19T02:20Z, no landing - folded 2026-11-19 by the re-claim below; scope passed through unchanged)
@@ -46,6 +48,10 @@ Running-process guard held at every step (one conservative false-positive self-m
 
 **Verdict:** tripwire not armed (373 Gi at start, healthy); the assessment fired via the 4090 lane's lease-expiry routing instead. The list-first contract is satisfied: SAFE class executed measured + reported, LOAD-BEARING/IRREPLACEABLE stay listed above. No approval class touched.
 (claim scope: finish the list-first assessment - fresh census incl. the scratch/ symlink-trap discipline + per-item verdicts on the standing table; SAFE-class deletions per the disk-clean contract autonomous and measured, everything else stays listed for approval)
+
+## 2026-11-26 pass (zed-3fbc05dd@amo, epoch 1795726800) — the -075 ANCHORED rows DISSOLVED-UPSTREAM; the 703G quartet already reclaimed by the 856fefea sweep; box healthy (190Gi, no tripwire)
+
+The queue-sweep lane's fresh engagement on the standing list: the two `wt-mg-075`/`wt2-mg-075` ANCHORED rows (the 11-24 survey's teardown prerequisite) adjudicated at source in seal-remake: the hold branches (`hold/wt-mg-075`, `hold/wt2-mg-075`) exist NOWHERE (local `branch -a` + `git ls-remote --heads origin` both empty); the held merge commits `32b7fdc3`/`f7ff677dc` are BOTH "merge: fix/sprint075-demo-town-gate" and `git cherry origin/develop` proves their patches content-equivalent to commits ON develop (`-` = landed); sprint!075 landed as `7505b4d1` ("the demo town gated out of the product") + follow-ups, and `856fefea` (HISTORY) records the leftover-branch sweep explicitly: "sprint!050 + sprint!035 + sprint!075 landed; six dead branches + stale merge-gate branch deleted, worktrees torn down". The worktree list carries NO wt-mg-*/wt2-mg-* entries and the directories are gone — the 11-24 survey's ~703G candidate is FULLY RECLAIMED upstream. The -045/-065 rows dissolved with the same sweep (no dirs remain). Verdict: the standing list's big rows are ALL resolved; the issue's live clause is only the trigger (df < 100 GB → the disk-clean skill — NOT tripped: 190Gi avail this pass). seal-remake/target 45G = the load-bearing shipping posture (never-delete class, per the 11-24 table). No deletions this pass (nothing left to delete under the contract).
 
 ## Trigger
 
