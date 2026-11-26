@@ -1,7 +1,9 @@
 # Plan 294 — Batch 290: the resin serving-engine conversion (rust_perf)
 
-**Status:** STAGED — authoring gated behind the live mining-lane claims (plan-289 bbtree lane holds the slot; B284 burn authoring pending); verdict landed as Research 328.
+**Status:** CLAIMED — the standing mining lane executing (the slot blockers lapsed: plan-289 CLOSED-LANDED as Batch 305, B284's lane consumed elsewhere; the B424-adjudication + the 645th routing name this the queue head).
 **Lease closed:** zed-m3-294t0, epoch 1793003333, was expires 2026-10-28T08:28:53+00:00 (staleness fold — the plan stays STAGED behind the live mining-lane claims; verdict stands as Research 328; re-claim at the slot)
+**Claimed:** zed-5426a3b4@amo, 1795727113, expires 2026-11-28T21:05:13+00:00
+(scope: the full T1-T11 cycle per this plan — Batch 290 nominal re-derives at landing HEAD; T0 re-clone at a FRESH pin (the 10-26 pin c14ee9d0 is 31 days stale — upstream moved or died, either way re-pin + re-verify every quote incl. the Research-328 §T0 addendum A-P candidates; yield revised 6-9); T1 dedup at landing HEAD 3+ vocabularies; T2 slices disjoint entry files; T3/T4 the #7 GOAT on rust_perf_bench --release at the isolated-target precedent (amo loaded 34/30 — authoring zero-contention, gates when the box allows); T8 freeze/score-bench OWED (rust_perf delta); T9 release-set rebuild OWED before push; the resin families verified UNCONSUMED at the B424 adjudication 2026-11-26.)
 
 Source: ekzhang/resin @ `c14ee9d0e84a79cf0168fa117745787de968f63f` (Apache-2.0, pinned 2026-10-26). Verdict: **YES B corpus / lane-intel HIGH / product-coverage LOW-MODERATE** — see `.research/328_resin_serving_engine_distill.md` (the ranked table + dedup evidence IS the working inventory).
 
