@@ -1,9 +1,19 @@
 # Issue 241: disk-clean assessment — amo scratch + target survey (2026-11-17)
 
 **Status:** Open — housekeeping assessment (list-first, deletions per the disk-clean contract).
+**Lease closed:** zed-1feab5f6@amo, 1796199000, was expires 2026-11-28T16:00:00+00:00 — the 11-26 pass executed SAFE-class autonomous (see its section below; scope discharged same session, issue stays the standing list).
 **Lease closed:** zed-133t1@amo, 1795456100, was expires 2026-11-24T17:28Z — folded at the 11-23 pass's landing (scope: pre-large-run hygiene before the queued 6h realesrgan render + mist-bars exclusive; the wt-mg quartet rows dissolved — see below).
 **Lease closed:** zed-c0c35a68@amo, 1794946800, was expires 2026-11-19T02:20:00Z (expired 2026-11-19T02:20Z, no landing - folded 2026-11-19 by the re-claim below; scope passed through unchanged)
 **Lease closed:** zed-6addfb44@amo, 1795060553, was expires 2026-11-21T04:40:00+00:00 (scope discharged same session - the assessment landed 6e618b1c; the issue remains the standing deep-clean list for the next low-disk event)
+
+## 2026-11-26 pass (zed-1feab5f6@amo, epoch 1796199000) — the standing `gate/` teardown row EXECUTED; ~120 GB SAFE-class deleted (185 → 211 GB avail under concurrent lane traffic)
+
+Trigger: pre-large-run hygiene — amo carries 4 i1244 shard cells + a queued sprint!235 r4 full-guard landing (19 h est) + the holder's i1186 4090 staging; no sub-100 GB event (185 GB avail), the deletions ride the standing-row obligation, not the event trigger.
+
+- **Deleted (SAFE-class: regenerable, 2+ days dead, zero lsof holders, no active/queued owner):** `seal-remake/target/gate` 111 G (zero inner files newer than 11-25; the 11-23 row "teardown when the gate cadence allows a rebuild window" — no gate in flight, the queued sprint!235 r4 lane rebuilds from scratch as part of its own 19 h run; cost disclosed, not hidden) + `/private/tmp/s085probe-gate` 5.2 G (dead 11-24 17:36; sprint!085 landed, p084 window closed) + `/private/tmp/sge084-target` 4.1 G (dead 11-23; plan 084 CLOSED + lease folded per seal-sprints TASKS.md — the teardown law's landed-ticket leftover).
+- **Skipped (never-delete law held, per-dir freshness verified):** `/private/tmp/i1241` 4.5 G (stale amo-side build dir but the census lane is MID-FLIGHT on bmo — the name belongs to active sibling work, conservative skip); `/private/tmp/plan470` 5.0 G (ACTIVE riir-train plan's per-plan dir, Phase 1 not started — the plan-dir convention keeps it warm for its owner); `/private/tmp/s134-target` 4.5 G (sprint!134 queued-state uncertain — was queued 11-24, absent from today's queue, ownership unresolved); `/private/tmp/s235-*` 42 G + everything else fresh (the queued landing lane's own prep, touched today).
+- **df reconciliation (the honest form):** gross deleted du ≈ 120 G; avail moved 185 → 211 GB (+26 G net) because concurrent lane traffic wrote ~big during the same window (i1244 measurement cells, s235-merge-target growth, the holder's `/private/tmp/riir-infer` staging — which ANOTHER lane shrank 57 → 14 G mid-pass). All three deleted paths verified absent post-rm, zero open handles, seal-remake/target 156 → 45 G measured. No missed deletion; the delta is traffic, not residue.
+- **Standing-table update:** the `gate/` KEEP row DISSOLVED (executed); future merge-gate lanes rebuild it from scratch — the teardown-first cadence is now the standing expectation whenever no gate is in flight and the tree is >48 h stale.
 
 ## 2026-11-23 pass (zed-133t1@amo, epoch 1795456100) — quartet rows DISSOLVED by another lane; the gate-profile tree measured; 127 GB SAFE-class executed (201 → 321 GB avail)
 
