@@ -139,11 +139,13 @@ Cycle summaries end with the standard `## Summary` - its five sections are the m
 | 13 | **doc-sync pass** | Invoke the doc-sync skill against repos with landed-but-undocumented work. |
 | 14 | **Post-mining sweep** | Mine improvement candidates from the rulewright's OWN usage artifacts (Protocol C below) — misses, created-warnings, verify reverts, memory.json tier stats, score-bench delta. Contrast with items 5/11/12 which are PRE-mining (external sources). |
 | 15 | **Build-hygiene gate** | Invoke the `build-hygiene` skill (canonical home `katgpt-rs/.agents/skills/build-hygiene/`, the PUBLIC shareable copy): the five-profile discipline (dev line-tables-only + opt-3 deps, gate opt-0 shared cache, dist fat-LTO strip), target-dir size, binary size, the dev-loop driver posture (plain cargo vs framework dynamic-linking vs blaze), and the fix-before-perf law (`cargo refine --fix` where installed, else `cargo clippy --fix`). Quick pass rides Protocol H step 5; THIS item is the FULL pass — quarterly, or after any profile/feature-set/crate-count change. Run BEFORE item 8's benchmarks — a bloated target tree or a stale profile invalidates every timing row; re-run the workspace's dev-loop A/B harness (create one before adopting any driver) and re-time the quick gate layers vs the last recorded baseline. |
+| 16 | **Monthly research-source sweep** | The two standing blog sources the owner distills from — Hazy Research (`https://hazyresearch.stanford.edu/blog`) + Goodfire (`https://www.goodfire.com/research`). MONTHLY-GATED (cadence item, like 15's quarterly): run only when the newest `RESEARCH-SOURCE SWEEP` row in `.distill/001_mining_queue_snapshot.md` is ≥ 1 month old (or none exists). Procedure: fetch both indexes → diff against that row's LAST-SEEN lists → triage each NEW post (title + date + lead read) → stage stack-relevant ones as DISTILL LEADS there (pool only, no verdict, T0 re-verify at mining; arxiv-backed papers route to the `research` skill) → prepend a fresh sweep row (last-checked + last-seen + leads) in the same commit as any staged leads. |
 
 Items 6 + 7 run BEFORE item 8 (benchmarks) by design — boundary/DRY
 findings are cheaper to fix before you benchmark around them. Item 15's
 full pass also runs BEFORE item 8 whenever it fires — build hygiene first,
-benchmarks second.
+benchmarks second. Item 16 is a read-only discovery pass — no ordering
+constraint; it fires at most monthly.
 
 **Scan order + racing partition (why: 2026-09-04, three idle sessions
 all raced to mining while zed had 6 open issues — "across repos" was
