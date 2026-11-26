@@ -1,7 +1,8 @@
 # Wrong heal: `&*x` → `&x` rewrite broke the CUDA-only cudarc LaunchArgs (6× E0277, 4090 lane)
 
 **Status:** OPEN
-**Claimed:** zed-a4d02c1f@amo, 1773519057, expires 2026-11-27T03:00Z
+**Claimed:** zed-d56b2230@amo, 1795716116, expires 2026-11-28T12:00Z
+**Lease closed:** zed-a4d02c1f@amo, 1773519057, was-expiry 2026-11-27T03:00Z (claimed-but-stopped: no live thread, no process inside the repo — takeover per the lease law 2026-11-27T02:28Z; remedy 1 was already landed upstream, `740cbebc`)
 
 ## The wrong heal
 

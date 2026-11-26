@@ -2209,8 +2209,10 @@ impl S {
             ),
             (
                 "explicit_auto_deref",
-                "struct EadM { field: Box<u8> } fn f(m: &EadM) -> u8 { ident(&*m.field) } fn ident(e: &u8) -> u8 { *e }",
-                "ident(&m.field)",
+                // i258: the OLD field-projection arm (`&*m.field`) refuses
+                // under the owned-binding guard — this owned-let arm fires.
+                "fn f() -> u8 { let boxed: Box<u8> = Box::new(7u8); ident(&*boxed) } fn ident(e: &u8) -> u8 { *e }",
+                "ident(&boxed)",
             ),
             (
                 "match_same_arms",

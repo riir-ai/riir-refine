@@ -1283,10 +1283,13 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             lint_group: "complexity".to_string(),
             // The deref-COUNT law (both MachineApplicable upstream,
             // probe-verified): one deref under the & keeps the &; two drop
-            // the whole &**. The specimens: `bare_ident(&*m.receiver)` →
-            // `&m.receiver` and `visit_expr(&**else_e)` → `else_e`.
-            buggy_code: "struct EadM { field: Box<u8> } fn ead(m: &EadM) -> u8 { ident(&*m.field) } fn ident(e: &u8) -> u8 { *e }".to_string(),
-            fixed_code: "struct EadM { field: Box<u8> } fn ead(m: &EadM) -> u8 { ident(&m.field) } fn ident(e: &u8) -> u8 { *e }".to_string(),
+            // the whole &**. The fixture: `&*boxed` on an OWNED Box let —
+            // the rewrite is type-identity (`ident(&boxed)` auto-derefs
+            // through the Box at the call). The pre-i258 field-projection
+            // fixture refused since the guard (unprovable binding form —
+            // the cudarc E0277 class) and was replaced by this owned arm.
+            buggy_code: "fn ead() -> u8 { let boxed = Box::new(7u8); ident(&*boxed) } fn ident(e: &u8) -> u8 { *e }".to_string(),
+            fixed_code: "fn ead() -> u8 { let boxed = Box::new(7u8); ident(&boxed) } fn ident(e: &u8) -> u8 { *e }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "match_same_arms".to_string(),
