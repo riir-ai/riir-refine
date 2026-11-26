@@ -1,6 +1,6 @@
 # Research 453 — ThunderKittens 2.0 distill verdict (Hazy Research blog + HazyResearch/ThunderKittens)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED → **LANDED 2026-11-26** — Batch 425 executed same session by the verdict lane (kernel_opt 1140→1144 + rust_perf 421→422; entries_gpu_172 ×4 + entries_106 ×1 + faces F1-F3 count-neutral; all gates green; the landing commit is the record)
 **Date:** 2026-11-26 (amo, the i1186-continuation idle lane; the research-source sweep's staged lead (6), sweep row zed-70340989@m3 15:51Z same day)
 **Source (post):** https://hazyresearch.stanford.edu/blog/2026-02-19-tk-2 — "ThunderKittens 2.0: Even Faster Kernels for Your GPUs" (Stuart Sul, Chris Ré, 2026-02-19; fetched full-text this session — the URL the pin, live-fetch posture)
 **Source (repo):** https://github.com/HazyResearch/ThunderKittens @ `67845f5fa48d05343dbbc1ba1403f11061f08d2d` (tip 2026-09-12 "Merge pull request #210", MIT — shallow clone `.raw/thunderkittens`, READ-ONLY, **teardown owed at plan close**; post-2.0 tip, README carries the Jan-2026 2.0 release note; every quote below verified at this pin)

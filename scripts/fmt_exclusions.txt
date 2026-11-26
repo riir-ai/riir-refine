@@ -44,6 +44,9 @@ src/domains/sec/fixtures/b342_fixtures.rs notripwire # measured entry-clean (git
 # (b402_sec_fixtures row lives below — added independently by two lanes the same morning, deduplicated 2026-11-23)
 src/domains/sec/fixtures/*.rs tripwire # executed provenance at sec's path shape; entry-dirty class (b345/b350)
 src/domains/sec/fixtures/b420_sec_fixtures.rs notripwire # measured entry-clean at 9cede889 (git-verified rustfmt-clean at the landing commit AND byte-identical to it — the b420 lane formatted pre-entry; same class as the b342/b351/b352/b366/b367/b402 exemptions; added 2026-11-25 by the b421 lane whose fmt gate reds on the unrowed clean-inverted record at the shared head)
+src/domains/sec/fixtures/b422_sec_fixtures.rs notripwire # measured entry-clean at 91bdbf78 (git-verified rustfmt-clean at the landing commit AND byte-identical to it — the b422 lane formatted pre-entry; same class as the b420/b412/b415 exemptions; added 2026-11-26 by the b425 lane whose fmt gate reds on the unrowed clean-inverted record at the shared head)
+src/domains/sec/fixtures/b423_sec_fixtures.rs notripwire # measured entry-clean at 54ce0ed6 (git-verified rustfmt-clean at the landing commit AND byte-identical to it — the b423 lane formatted pre-entry; same class as the b422/b420 exemptions; added 2026-11-26 by the b425 lane whose fmt gate reds on the unrowed clean-inverted record at the shared head)
+src/domains/sec/fixtures/b424_sec_fixtures.rs notripwire # measured entry-clean at 3454da4b (git-verified rustfmt-clean at the landing commit AND byte-identical to it — the b424 lane formatted pre-entry; same class as the b423/b422 exemptions; added 2026-11-26 by the b425 lane whose fmt gate reds on the unrowed clean-inverted record at the shared head)
 
 # — bench records: the apparatus a record pins stays as recorded. Measured
 #   entry-DIRTY (rc=1 both) — armed: clean = the recorded apparatus moved.

@@ -93,7 +93,7 @@ pub fn expected_corpus_files() -> Vec<String> {
     // arming the census (the B379/B402 class — both lists blind together,
     // the comparison stayed green) and 169 + 170 joined here, the
     // B404-repairs-B402 precedent.
-    for n in 1..=171 {
+    for n in 1..=172 {
         if n < 10 {
             names.push(format!("entries_gpu_{n:02}"));
         } else {
@@ -397,6 +397,7 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
         entries_gpu_169,
         entries_gpu_170,
         entries_gpu_171,
+        entries_gpu_172,
         entries_gpu_37,
         entries_gpu_36,
         entries_gpu_01,
@@ -1322,7 +1323,7 @@ mod tests {
     #[test]
     fn expected_corpus_files_cover_all_batches() {
         let names = expected_corpus_files();
-        assert_eq!(names.len(), 172); // popcorn + gpu_01..171 (Batch 421 continues — entries_gpu_171 joined at landing, the B411/B419 continuation discipline; prior: popcorn + gpu_01..170 (B419 REPAIRED the B417 miss — entries_gpu_169 landed without arming the census, the B379/B402/B404 class, and 169 + 170 joined here; prior: popcorn + gpu_01..168 — the stale pin sat through B417's landing; the chain: 168 joined at landing (B412); prior: popcorn + gpu_01..167 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues; B380 REPAIRED the B379 miss — entries_gpu_159 landed without arming the census (both lists blind together, the comparison stayed green) and 160 joined here, the B354/B357 class, B362 precedent; B398 continues — 161 joined at landing; B400 continues — 162 joined at landing; Batch 404 REPAIRED the B402 miss — entries_gpu_163 landed without arming the census (the B379/B380 class again, both lists blind together) and 163 + 164 joined here; B409 continues — 165 joined at landing; B410 continues — 166 joined at landing; B411 continues — 167 joined at landing)
+        assert_eq!(names.len(), 173); // popcorn + gpu_01..172 (Batch 425 continues — entries_gpu_172 joined at landing, the B411/B419/B421 continuation discipline; prior: popcorn + gpu_01..171 (Batch 421 — entries_gpu_171 joined at landing); prior: popcorn + gpu_01..170 (B419 REPAIRED the B417 miss — entries_gpu_169 landed without arming the census, the B379/B402/B404 class, and 169 + 170 joined here; prior: popcorn + gpu_01..168 — the stale pin sat through B417's landing; the chain: 168 joined at landing (B412); prior: popcorn + gpu_01..167 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues; B380 REPAIRED the B379 miss — entries_gpu_159 landed without arming the census (both lists blind together, the comparison stayed green) and 160 joined here, the B354/B357 class, B362 precedent; B398 continues — 161 joined at landing; B400 continues — 162 joined at landing; Batch 404 REPAIRED the B402 miss — entries_gpu_163 landed without arming the census (the B379/B380 class again, both lists blind together) and 163 + 164 joined here; B409 continues — 165 joined at landing; B410 continues — 166 joined at landing; B411 continues — 167 joined at landing)
         assert_eq!(names[0], "entries_popcorn");
         assert!(names.contains(&"entries_gpu_09".to_string()));
         assert!(names.contains(&"entries_gpu_10".to_string()));

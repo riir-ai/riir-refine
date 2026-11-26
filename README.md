@@ -92,8 +92,8 @@ is a per-span annotation, never a gate.
 | Domain | Feature | Default | Rules | What it fixes |
 |---|---|---|---|---|
 | **clippy_lints** | `clippy_lints` | on | 120 corpus lints | `clippy::*` — mechanical rewrites proven value-preserving (97 fixable + 20 verify-tier + 3 self-evolve) |
-| **rust_perf** | `rust_perf` | on | 421 rules | CPU hot paths — allocation, concurrency, io, layout, iterators, dispatch, caching, measurement honesty |
-| **kernel_opt** | `kernel_pregate` | on | 1140 rules | GPU kernels + host orchestration (Metal / CUDA / wgpu); joins a file only when the kernel-signal gate fires |
+| **rust_perf** | `rust_perf` | on | 422 rules | CPU hot paths — allocation, concurrency, io, layout, iterators, dispatch, caching, measurement honesty |
+| **kernel_opt** | `kernel_pregate` | on | 1144 rules | GPU kernels + host orchestration (Metal / CUDA / wgpu); joins a file only when the kernel-signal gate fires |
 | **sec** | `sec` | off | 109 rules | security classes — web trust, crypto hygiene, input validation, FFI/unsafe (7 fixable, 102 suggest-only) |
 | **docker** | `docker` | on | 31 rules | Dockerfile bounded fixes against the hadolint oracle |
 | **dist** | `dist` | on | 8 suggest-only rules | shipped-artifact build-config advice over `Cargo.toml` manifests |

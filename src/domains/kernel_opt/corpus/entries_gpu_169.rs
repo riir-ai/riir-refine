@@ -93,7 +93,7 @@ not where the queue lives). Source: NVIDIA/cuda-rust @ f35d6ccc2e03a54e73e3796f4
 cluster-steal + lane-0-ownership + column-major + zero-contention clauses), :2251-2278 \
 (the body: lane-0 fence/arm/issue/spin/decode/re-fence + the shuffle_sync broadcast), \
 :51 (the clc_* intrinsic imports). Quotes byte-verified at the clone at the pin this \
-session. Batch 417 / Plan 413 / Research 448."
+session. Batch 417 / Plan 413 / Research 448. BATCH-425 FACE (the TK 2.0 PERSISTENT-GRID DELIVERY face, HazyResearch/ThunderKittens @ 67845f5fa48d MIT, Plan 419 / Research 453 — the second CLC surface, compose never merge): the owner owns the CANCEL-STEAL arm (a full grid where finished CTAs cancel pending work out of the hardware queue); ThunderKittens ships the PERSISTENT-DELIVERY arm of the same hardware queue — a persistent grid where the hardware HANDS each CTA its next task through clc.schedule/clc.query with a depth-1 query pipeline (CLC_PIPE_DEPTH, schedule_arrived/finished mbarriers, bf16_b200_gemm.cu:88,117-181), one issuer per cluster (cta_rank == 0's warp 2), the success-bit terminating every role's loop, and the queried tile overlapped with the current task's compute (the query pipeline is the schedule-side analog of the load ring). The pending set lives in hardware in BOTH arms — the family law is unchanged; the face records the delivery surface so a reviewer of a persistent CLC kernel finds the corpus under the steal rule."
                 .to_string(),
             ref_shape: r"// NAIVE: a global atomic counter hands out tiles; every
 // finished worker contends on it, and the handoff value is read
