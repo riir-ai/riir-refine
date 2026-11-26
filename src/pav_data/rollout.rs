@@ -377,7 +377,14 @@ impl SpanTree {
                 if self.parse_failures.len() < Self::PARSE_FAILURE_CAP {
                     let mut head = edit.lines().next().unwrap_or("").to_string();
                     if head.len() > 160 {
-                        head.truncate(160);
+                        // Byte 160 may land mid-codepoint on multi-byte edits — the
+                        // recorder must never panic on the inputs it exists to capture
+                        // (the 4090 diag arm crashed here: rollout.rs:380, T=0.7 answers).
+                        let mut cut = 160;
+                        while cut > 0 && !head.is_char_boundary(cut) {
+                            cut -= 1;
+                        }
+                        head.truncate(cut);
                     }
                     self.parse_failures.push(ParseFailure {
                         span_id: span_id.to_string(),
@@ -464,6 +471,39 @@ mod tests {
             !pf.diagnostic.is_empty(),
             "the syn diagnostic must ride the record"
         );
+    }
+
+    #[test]
+    fn multi_byte_head_truncation_never_panics_and_snaps_to_a_char_boundary() {
+        // The recorder's edit_head cut lands mid-codepoint when byte 160 sits
+        // inside a multi-byte char (the 4090 diag arm crashed at rollout.rs:380
+        // on real T=0.7 answers). 81 U+00E9 chars = 162 bytes; byte 160 is the
+        // FIRST byte of the 81st char — the exact panic shape.
+        let edit = format!("fn broken(){{ {} }}", "\u{00e9}".repeat(81));
+        assert_eq!(edit.len(), 177);
+        assert!(edit.len() > 160);
+        assert!(
+            !edit.is_char_boundary(160),
+            "fixture must straddle byte 160"
+        );
+        let mut tree = SpanTree::new("fn a() {}\n");
+        let mut generator = FnGenerator::new("t", move |_ctx| Some(format!("{edit} {{{{")));
+        let out = tree.rollout(0, &mut generator, &MarkerJudge, &pruner(), 3, 7, "s");
+        assert_eq!(out, Outcome::Parse);
+        assert_eq!(tree.parse_failures.len(), 1);
+        let head = &tree.parse_failures[0].edit_head;
+        assert!(head.len() <= 160, "head must respect the byte cap");
+        assert!(
+            head.is_char_boundary(head.len()),
+            "head must end on a char boundary"
+        );
+        // The snapped cut keeps the maximum possible prefix: 160 bytes → 159
+        // (one é byte dropped).
+        assert_eq!(head.len(), 159);
+        assert!(head.chars().all(|c| c == 'é'
+            || !c.is_ascii()
+            || c.is_ascii_alphanumeric()
+            || " (){}_".contains(c)));
     }
 
     #[test]
