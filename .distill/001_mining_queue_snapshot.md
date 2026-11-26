@@ -1431,6 +1431,8 @@ aim row `b52a4874`).** Source `/Users/katopz/git/llama.cpp` fetched to `2744e48`
 
 ## Post-mining intake
 
+> **INTAKE ROW 2026-11-26 (zed-3f5006b6@amo, the riir-infer T5.3 landing lane): the `collapsible_if` let-chain class miss** — the rulewright declined the two `collapsible_if` findings in `crates/riir-infer-dist/src/spec_mtp_block.rs` at the T5.3 landing (riir-infer `70b62d0c`), fixed manually; the miss is a CLASS gap, not a span miss: edition-2024 let-chains (`if let X = a && cond`) are invisible to the matcher's expression-walk shapes (the rule corpus's collapsible_if predates let-chains and matches the classic `if cond { if let .. }` / nested-`if` spellings only). Recorded in the landing commit message; filed here so the queue lanes see it. Candidate: widen the collapsible_if proposer's predicate to edition-2024 let-chain spellings (a syn walk over `Expr::Let` inside binary-`&&` chain heads), decision-content-first triage per the intake discipline; no plan until a corpus lane picks it up.
+>
 > **INTAKE ROW 2026-11-21 (riir-refine R431): PatchFusion** — [arXiv:2607.01597 "A single patch is not enough: Deterministic fusion of repair candidates"] (Yang, Hu, Ren, Chen, Le, Bissyandé, Tian) — deterministic fusion of REPAIR candidate patches with no test outcomes at decision time; cited in ELITE's related work (arXiv:2611.21056 → R431), never distilled in the workspace. Candidate lane: rust_perf/clippy_lints fix-composition prior-art cover IF a fix-fusion consumer ever names itself (R431 §3.2 records `fix_verify` already composes per-file + one gate — the consumer may not exist); decision-content-only triage first, no plan until a consumer names itself.
 
 >
