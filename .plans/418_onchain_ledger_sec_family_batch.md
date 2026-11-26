@@ -1,6 +1,8 @@
 # Plan 418 — Batch 424: on-chain ledger state-machine sec family (lean-svm + percolator transcription)
 
-**Status:** QUEUED — unclaimed; routed to the next sec-slot lane via `.distill/001_mining_queue_snapshot.md` (verdict row 2026-11-26). Claim with a `**Claimed:**` lease line BEFORE implementing (own line, nothing after the expiry token; the push is the arbiter).
+**Status:** CLAIMED — tranche executed by the standing mining lane (Batch 424; claim pushed BEFORE any corpus edit; the push is the arbiter; yield 5±1 per the verdict, R6 first drop).
+**Claimed:** zed-5426a3b4@amo, 1795705768, expires 2026-11-28T15:09:28+00:00
+(scope: the full plan — R1–R6 with the pre-registered falsifiers; T0 re-clones + byte-verify + dedup-vs-B423's-five by READ; fixtures 4-arm standalone pre-entry; gates + count web + landing. amo LOADED at claim (i1244 shards, ~38/30) — authoring zero-contention, fixture EXECUTION + gates at the isolated-target precedent, the B422/B423 same-day discipline.)
 
 Verdict record: `.research/452_lean_svm_percolator_sec_family.md` — YES B+ corpus (sec, NEW family seed, zero owners) / lane-intel HIGH / product-coverage YES.
 
