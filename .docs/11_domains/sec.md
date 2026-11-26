@@ -654,6 +654,59 @@ BY DISCLOSURE; PII is out of scope (the span itself is the asset — no
 pattern set closes that); a redacted payload is terminal and is never
 re-gated.
 
+## Batch 423 (2026-11-26) — the security-tools sweep's tranche B (the contestables)
+
+corpus 99 → 104, FOUR suggest-only InputValidation rules + THREE recorded drops (Plan 417 tranche B /
+Research 451 — sources re-cloned at T0: trufflehog @ `23255461` AGPL-3.0 transcription-only, semgrep-rules
+@ `a5ad1714` LGPL-2.1 + Semgrep Rules License transcription-only, strix @ `9ed84f99` Apache-2.0,
+SkillSpector @ `02894ec5` Apache-2.0, nuclei @ `dd2df86c` MIT): `wholesale-env-harvest-to-egress` (the
+SkillSpector E2 enumeration law — the whole environment walked into one outbound payload; the
+child-env LOW carve verbatim "A copy traced only to a child process's `env=` is reported LOW" is
+decision content; adjudicated vs credential-material-in-command-argv B342 walk-all-vs-fetch-one +
+unvalidated-egress-url B342 compose in-rule) + `predictable-temp-dir-security-operation` (the semgrep
+temp-dir.yml law quoted in-rule; the fix is the PAIR — unique name + create_new, either half alone
+loses; kin secret-file-create-without-0600 permissions-axis compose; the workspace's own
+shared_temp_path_gate cited as the third-source corroboration, never landed) +
+`ambiguous-outcome-staging-retention` (the strix handle_response_failure law verbatim; cleanup only on
+DEFINITIVE outcomes, ambiguity RETAINS + names the artifact, the retry reconciles first — blind retry
+duplicates it; adjudicated vs agent-child B393 REMOTE-STATUS-STANDIN (the exec-sink cousin) +
+probe-unknown-tri-state B422 compose + B330 in-rule) + `auth-header-not-marked-sensitive` (the semgrep
+reqwest-set-sensitive shape; set_sensitive BEFORE insert — the late-marking tamper arm pins the
+stored-clone law; adjudicated vs credential-argv B342 + secret-key-without-zeroize B327 +
+redaction-audit B330 in-rule) + `package-source-redirection` (the SkillSpector SC10 trust model verbatim
+"Canonical public defaults... reported uniformly" + "Dynamic destinations are reported as `unresolved`
+rather than ignored"; THE LOAD-BEARING ANTI-REGIME house-carved: the committed [patch.crates-io] +
+local vendor/ tree PAIR is this workspace's by-design posture — the carve is the PAIR, a patch without
+the tree is the finding; adjudicated vs untrusted-download B345 + external-helper-config B373 +
+callable-naming B374 in-rule). DROPS: B1 probe-tri-state LANDED in Batch 422 (the tranche-A promotion);
+B2 capability-declaration-drift → review-checklist (the analyzer is a skill-manifest cross-referencer —
+manifest+code co-residence a parse-only pass cannot bind; the plan's drop risk fired); B7
+sandbox-bypass-read-path → staged thin (the loader's doc-comment-enforced unsandboxed reader exists at
+ONE call site — template-display; the sealed-type fix-space is real but the surface is single-caller);
+B9 batched-query-order-pairing → DROPPED at the T0b read (the #4285 surface is a SQL pagination law —
+order_by + limit+1 the extra-row sentinel — not a Rust-shaped decision contract; the domain-routing
+decision NEGATIVE). Fixtures `fixtures/b423_sec_fixtures.rs` 5 rules × 4 arms standalone-compiled AND
+executed pre-entry (debug AND -O).
+
+## Batch 423 (2026-11-26, tranche B) — the sweep's contestables
+
+corpus 99 → 104, FOUR suggest-only InputValidation rules + three recorded drops (Plan 417 tranche B /
+Research 451): `wholesale-env-harvest-to-egress` (the E2 enumeration law — the whole env walked into
+one outbound payload; the child-env LOW carve verbatim is decision content; B342 walk-all-vs-fetch-one
++ B342 compose in-rule) + `predictable-temp-dir-security-operation` (the semgrep temp-dir.yml law
+in-rule; the PAIR — unique name + create_new — either half alone loses; secret-file-create-without-0600
+permissions-axis compose; the workspace's shared_temp_path_gate the third-source corroboration cited
+never landed) + `ambiguous-outcome-staging-retention` (cleanup only on DEFINITIVE outcomes, ambiguity
+RETAINS + names the artifact, the retry reconciles first — blind retry duplicates it; B393
+REMOTE-STATUS-STANDIN + B422 tri-state compose + B330 in-rule) + `auth-header-not-marked-sensitive`
+(set_sensitive BEFORE insert — the late-marking tamper arm pins the stored-clone law; B342 + B327 +
+B330 in-rule) + `package-source-redirection` (the SC10 trust model verbatim; the ANTI-REGIME
+house-carved: the committed-patch + local-vendor-tree PAIR is the carve, a patch without the tree is
+the finding; B345/B373/B374 in-rule). DROPS: B2 → review-checklist (manifest+code co-residence a
+parse-only pass cannot bind); B9 → dropped at the T0b read (the #4285 surface is a SQL pagination law,
+not a Rust-shaped decision contract); B7 → staged thin (single-caller doc-comment-enforced reader).
+Fixtures `fixtures/b423_sec_fixtures.rs` 5×4 arms standalone-executed pre-entry (debug AND -O).
+
 ## Batch 422 (2026-11-26) — the security-tools sweep transcription
 
 corpus 94 → 99, FIVE suggest-only InputValidation rules (Plan 417 / Research 451 — the 12-source

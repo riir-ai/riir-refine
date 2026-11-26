@@ -30,8 +30,8 @@ candidates below; the batch lane decides tranche size under the 4–6-per-batch 
   components, `.well-known` exemption. Compose in-rule vs `path-join-escape`.
 
 **Tranche B (contestables, drop paths named) — `- [-]` STAGED for a future sec window (the tranche-size discipline: the 4–6 cap consumed by tranche A's five; drop paths pre-named):**
-- [-] T-B1 `probe-unknown-tri-state` — trufflehog README verification taxonomy (B−). Probe fns return
-  {Confirmed, Refused, Unknown}; consumers refuse/surface Unknown.
+- [x] T-B1 `probe-unknown-tri-state` — **LANDED in Batch 422** (the tranche-A promotion — it rode the
+  five, corpus.rs; the falsifier never fired).
 - [-] T-B2 `capability-declaration-drift` — SkillSpector B.3.1 (B−; drop risk = review-checklist).
   Declared capability list vs detected categories; LP3 = no declaration at all. Adjudicate vs
   callable-naming + agent-child.
@@ -49,7 +49,12 @@ candidates below; the batch lane decides tranche size under the 4–6-per-batch 
 - [-] T-B8 `ambiguous-outcome-staging-retention` — strix AGENTS.md (B−). Cleanup only on definitive
   outcomes; typed Unknown{id} + reconcile path. Adjudicate vs agent-child REMOTE-STATUS-STANDIN face.
 - [-] T-B9 `batched-query-order-limit-pairing` — PyRIT #4285 (C+; domain-routing decision owed —
-  concurrency-correctness; scorer-file read owed at T0).
+  concurrency-correctness; scorer-file read owed at T0). **DROPPED at the T0b read (2026-11-26):**
+  the #4285 surface is a SQL PAGINATION law (attack_analytics_query.py — order_by(typed keys/ties)
+  + offset + limit+1, the extra-row sentinel), not a Rust-shaped decision contract; the
+  domain-routing decision lands NEGATIVE (concurrency-correctness is the wrong home; a pagination
+  tie-break law is rust_perf/complexity shaped at best, and the corpus's rate-limit rows own the
+  adjacent axis).
 
 **Faces (count-neutral, ride their owners) — `- [-]` STAGED beside tranche B:**
 - [-] T-F1 trust-refusal-ordered-before-capability → face on `execution-artifact-trust-ladder`
@@ -99,6 +104,6 @@ trufflehog detection catalogs, Issue-151 law); codex-security re-ask needs licen
 - T-B9 scorer-file read finds no Rust-shaped pairing contract → DROP.
 - Any G1 fixture that cannot separate buggy from fixed honestly → the rule dies loud, never ships.
 
-**Claimed:** zed-5426a3b4@amo, 1795686007, expires 2026-11-28T09:40:07+00:00
-(scope: tranche B — the plan's 9 contestables + the 3 faces + the positive-instance bank, nominal Batch 423, per the boss routing via zed-b636a705@m3; T0 re-clones + quote re-verifications + T1 dedup + T2 authoring-with-falsification + T3 fixture writing proceed zero-contention; fixture EXECUTION + T4 gates on the loaded box use the isolated-target precedent from the Batch 422 landing same-day; yield estimate ~5 rules + faces after the pre-named drop paths fire. NOTHING INVENTED — names/grades verbatim from Research 451 + this plan.)
+**Lease closed:** zed-5426a3b4@amo, 1795686007, was expires 2026-11-28T09:40:07+00:00 — tranche B LANDED same session (Batch 423; the lease folds at the landing per the reshape law; scope discharged: 4 rules + the B1-recheck + 3 drops)
+(scope: tranche B — the plan's 9 contestables + the 3 faces + the positive-instance bank, nominal Batch 423, per the boss routing via zed-b636a705@m3; T0 re-clones + quote re-verifications + T1 dedup + T2 authoring-with-falsification + T3 fixture writing proceed zero-contention; fixture EXECUTION + T4 gates on the loaded box use the isolated-target precedent from the Batch 422 landing same-day; yield ACTUAL 4 rules (B3/B5/B8/B6 + B4 = 5 with the source rule; B1 was already 422's) + 0 faces landed; drops B2/B9 + B7-staged-thin — the pre-named paths fired. NOTHING INVENTED — names/grades verbatim from Research 451 + this plan.)
 

