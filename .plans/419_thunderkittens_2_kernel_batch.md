@@ -1,6 +1,7 @@
 # Plan 419 — Batch 425 (nominal): the ThunderKittens 2.0 kernel batch (Research 453)
 
-**Status:** STAGED — verdict-distilled 2026-11-26 (Research 453, the research-source sweep lead (6), zed-i1186-cont@amo); batch execution UNCLAIMED
+**Status:** CLAIMED — the verdict lane continues into execution with the full T0 context loaded (the clone + corpus reads + dedup evidence are this session's); a pushed superseding claim wins on fetch. Staged 2026-11-26 (Research 453, the research-source sweep lead (6)); nominal Batch 425.
+**Claimed:** zed-i1186-cont@amo, 1795774500, expires 2026-11-28T16:30:00+00:00
 **Claim protocol:** claim THIS plan with a `**Claimed:**` lease + a CLAIM row in `.distill/001_mining_queue_snapshot.md` BEFORE any corpus edit; push is the arbiter; expiry 48 h. Batch number re-derives at landing HEAD (422/423/424 landed 2026-11-26; 425 unless the folder moved). Yield rules per Research 453: kernel_opt ×4 (R1-R4) + rust_perf ×1 (R5) + faces F1-F3, ALL suggestion-only `NotBenchable-by-platform`/`-by-domain`.
 
 ## Sources
