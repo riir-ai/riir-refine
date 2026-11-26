@@ -1,8 +1,7 @@
 # Plan 419 — Batch 425 (nominal): the ThunderKittens 2.0 kernel batch (Research 453)
 
-**Status:** CLAIMED — the verdict lane continued into execution; **T0–T6 LANDED 2026-11-26** (see the tasks); T7 teardown in the landing commit. Staged 2026-11-26 (Research 453, the research-source sweep lead (6)); nominal Batch 425.
-**Claimed:** zed-i1186-cont@amo, 1795774500, expires 2026-11-28T16:30:00+00:00
-**Lease closed:** zed-i1186-cont@amo, 1795774500, was expires 2026-11-28T16:30:00+00:00 — scope COMPLETE same session (the batch landed; the claim line folds into this row per the closing law)
+**Status:** LANDED 2026-11-26 — the verdict lane continued into execution; T0–T7 COMPLETE (the batch landed + pushed; the landing commit is the record). Staged 2026-11-26 (Research 453, the research-source sweep lead (6)); nominal Batch 425.
+**Lease closed:** zed-i1186-cont@amo, 1795774500, was expires 2026-11-28T16:30:00+00:00 — scope COMPLETE same session (the batch landed; claim record: zed-i1186-cont@amo, epoch 1795774500, was expires 2026-11-28T16:30:00+00:00)
 **Claim protocol:** claim THIS plan with a `**Claimed:**` lease + a CLAIM row in `.distill/001_mining_queue_snapshot.md` BEFORE any corpus edit; push is the arbiter; expiry 48 h. Batch number re-derives at landing HEAD (422/423/424 landed 2026-11-26; 425 unless the folder moved). Yield rules per Research 453: kernel_opt ×4 (R1-R4) + rust_perf ×1 (R5) + faces F1-F3, ALL suggestion-only `NotBenchable-by-platform`/`-by-domain`.
 
 ## Sources
