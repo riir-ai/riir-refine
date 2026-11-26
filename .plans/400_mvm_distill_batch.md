@@ -1,7 +1,7 @@
 # Batch 400 — the mvm (Magni VM) distill → kernel_opt corpus
 
 **Status:** LANDED — `feat: batch 400` `7276a68945e1` + push (T0–T8 done; lease closed); the maintained binary REBUILT post-landing (build: == HEAD, re-linked at ~/.cargo/bin/cargo-refine; the /opt/homebrew 0.5.0 Cellar shadow disclosed — brew-tap lane, not touched)
-**Claimed:** zed-m3-mvm-b400, 1795381511, expires 2026-11-25T21:05Z
+**Lease closed:** zed-m3-mvm-b400, 1795381511, was expires 2026-11-25T21:05Z — lapsed past expiry AFTER the landing (the Status row above is the record: Batch 400 `7276a68945e1`, T0–T8 done); the fold is the STALE-CLAIM repair (sweep 2026-11-26T01:5xZ, zed-c0381ab8@m3)
 
 Executing the staged mvm distill verdict (snapshot row 2026-11-21, session
 zed-m3-mvm-distill; controlling record: `../riir-infer/.research/36_*.md`, PIN
