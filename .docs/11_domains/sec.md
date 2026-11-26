@@ -654,6 +654,41 @@ BY DISCLOSURE; PII is out of scope (the span itself is the asset — no
 pattern set closes that); a redacted payload is terminal and is never
 re-gated.
 
+## Batch 422 (2026-11-26) — the security-tools sweep transcription
+
+corpus 94 → 99, FIVE suggest-only InputValidation rules (Plan 417 / Research 451 — the 12-source
+security-tools sweep; sources at pinned T0 clones, licenses verified: NVIDIA/SkillSpector @ `02894ec5`
+Apache-2.0, trufflesecurity/trufflehog @ `23255461` AGPL-3.0 transcription-only, usestrix/strix @
+`9ed84f99` Apache-2.0 LICENSE-file verified at T0 (the verdict's badge-only caveat closed),
+projectdiscovery/nuclei @ `12d12a40` MIT): `unicode-deception-trojan-source-identifiers` (the
+SkillSpector B.3.2 lead — RTL overrides U+202E/D + U+2066–2069, zero-width U+200B/C/D + soft hyphen
++ CGJ + word joiner, homoglyph confusables, mixed scripts, in identifiers AND shipped text metadata
+— the remediation verbatim 'Restrict identifiers to ASCII-only characters. Remove RTL overrides and
+invisible formatting from all fields', the ALL-FIELDS clause the tamper arm pins; adjudicated vs
+ascii-token-unicode-word-boundary-scan-miss B330 in-rule) + `nested-archive-unbounded-depth`
+(trufflehog archive.go — the depth counter rides EVERY recursion level, the typed
+`ErrMaxDepthReached`, the COUNTED `incMaxArchiveDepthCount`; the source's own double-increment
+warning verbatim 'a temporary workaround for |openArchive| incrementing depth twice per archive';
+adjudicated vs unbounded-read-into-vec B328 (volume vs depth — compose) +
+request-amplification-guard B374 in-rule) + `consent-digest-bound-approval` (strix AGENTS.md +
+source_scan.py:206-222 verified in-source — review binds `source.archive_sha256`, 'A changed
+snapshot is rejected', the blanket `--yes` stamps ONLY the invocation's own snapshot; adjudicated
+vs untrusted-download-verify-then-atomic-install B345 — the UPLOAD twin of the verify-bind genus,
+both directions in-rule) + `static-handler-serves-dotfiles` (the nuclei-class handler law —
+PER-COMPONENT dot-prefix refusal with the `.well-known` exemption; the fixture gate caught the
+final-component-only arm serving `.git/config` pre-entry; adjudicated vs path-join-escape B328 —
+`..` deliberately NOT classified here, the two fixtures disagree by construction — in-rule) +
+`probe-unknown-tri-state` (the trufflehog verification taxonomy — Confirmed/Refused/Unknown; the
+bool collapse lands an API outage in the negative arm and clears a security decision silently; the
+consumer law fails closed AND LOUD; adjudicated vs capacity-exceeded-silent-fallback-not-refusal
+B330 (the fallback axis vs the result-type collapse) + llm-gate-closed-schema-decision-in-code
+B420 (the typed gate vocabulary — compose) in-rule). T-A3 (ci-action-ref-unpinned) dropped at its
+pre-registered scope ruling: sec is `.rs`-only, the CI-YAML surface routes to a scan-lane check.
+Tranche B (9 contestables) + the faces NOT LANDED this batch — drop paths named in the plan, the
+thin rows stay staged for a future sec window. Fixtures `fixtures/b422_sec_fixtures.rs` 5 rules ×
+4 arms standalone-compiled AND executed pre-entry at debug AND -O (the gate caught ONE arm defect:
+the F4 final-component-only check serving `.git/config`).
+
 ## Batch 415 (2026-11-25) — the graphicle transcription's sec half
 
 corpus 87 → 89, TWO suggest-only InputValidation rules (Plan 396 / Research 430, Graphicle-AI/graphicle @ `b0bb41407d1ffe863221181112656c28c483046c` Apache-2.0, the pin re-verified tip-unmoved 2026-11-25): `egress-resolve-pinned-address-validate` (the outbound DNS-rebind window — a name-policy + connect-by-NAME is two lookups and the second is ungoverned; resolve-once-at-the-policy-seam, EVERY resolved address checked against the blocked-range tables, the PINNED SocketAddr connected, never a second resolve; the metadata hostname refuses pre-resolve; `resolve_and_validate` verbatim; adjudicated vs unvalidated-egress-url B342 (URL-CHOICE vs RESOLUTION — compose) + browser-reachable-service-host-origin-rebinding-gate B329 (inbound vs outbound) + entries_55 connect-timeout walk (resilience consumes the pinned set) in-rule) + `sqlite-store-path-nofollow-parent-resolve` (a symlink-refusing open policy defeated by PATH SEMANTICS — final-component-only nofollow follows a linked parent silently, whole-path-strict breaks the legitimate macOS /var→/private/var layout; the repair covers both: canonicalize the PARENT only, carry the FILE NAME; db.rs:2311-2315 verbatim; adjudicated vs untrusted-path-join-escape B328 — the member-name escape vs the OPEN-FLAG integrity axis — in-rule); fixtures b415_sec 7/7 standalone-executed pre-entry (debug AND -O; the gate caught the shared-temp race — three f2 tests on one pid-suffixed path — and the naive-dial double-resolve model).

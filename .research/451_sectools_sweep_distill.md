@@ -1,6 +1,6 @@
 # 451 — Security-Tools Sweep Distill (12 sources, user-directed queue creation)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED — Batch 422 (2026-11-26, Plan 417; tranche A minus T-A3 landed as 5 sec rules 94→99 — unicode-deception / nested-archive-depth / consent-digest-bound / static-dotfiles / probe-tri-state; T-A3 dropped at its pre-registered scope ruling (sec is .rs-only, the CI-YAML surface routes to a scan-lane check); tranche B (9) + faces STAGED for a future sec window with drop paths pre-named in the plan; fixtures b422_sec 5×4 arms standalone pre-entry; pins_manifest 94→99 prose AGREE same-commit)
 
 Wire-level inspection sweep (3 parallel subagent lanes + coordinator verification; NO clones this
 session — every source carries the standing re-clone + re-pin caveat at mine time; tips move daily on

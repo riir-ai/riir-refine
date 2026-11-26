@@ -3780,6 +3780,215 @@ synthesis)."
             family: SecFamily::InputValidation,
         },
 
+        // ══ Batch 422 (Plan 417 / Research 451, the security-tools sweep)  ══
+        // ══ FIVE suggest-only InputValidation entries; original Rust      ══
+        // ══ fixtures in fixtures/b422_sec_fixtures.rs, standalone-compiled ══
+        // ══ AND executed (debug AND -O) BEFORE entry. AGPL sources are    ══
+        // ══ transcription-only: the DECISION synthesized, never the code. ══
+
+        // ── unicode-deception-trojan-source-identifiers (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "unicode-deception-trojan-source-identifiers".to_string(),
+            sec_concept: "a trust-decision identifier (tool registry key, skill id, exported \
+symbol, prompt-token field) carrying non-ASCII deception content — RTL/directional \
+overrides (U+202E/U+202D/U+2066–2069), invisible formatting (zero-width U+200B/C/D, soft \
+hyphen U+00AD, CGJ U+034F, word joiner U+2060), homoglyph confusables (Cyrillic а U+0430 \
+vs Latin a), or mixed scripts — renders as a different, innocent name while the BYTES \
+naming the trusted surface belong to the attacker. The source's remediation law, verbatim \
+at the pin (NVIDIA/SkillSpector @ 02894ec5, docs/B.3.2-mcp-tool-poisoning.md:154-155, \
+Apache-2.0): 'Restrict identifiers to ASCII-only characters. Remove RTL overrides and \
+invisible formatting from all fields.' — TWO clauses: the ASCII restriction for identifiers \
+AND the ALL-FIELDS scan ('These are checked in all fields, not just identifiers', :139-140 \
+— the same override in a shipped description/doc/prompt field is the identical deception \
+surface; an identifier-only scanner misses it — the tamper arm). The homoglyph arm fires \
+EVEN WHERE no confusables map has an entry: mixed-script detection exists to catch the \
+map's blind spot (novel homoglyphs), confidence 0.85 (:127). ⛔ KINSHIPS: distinct-from \
+`ascii-token-unicode-word-boundary-scan-miss` (B330 — the scanner's own \\b boundary \
+SEMANTICS silently missing tokens; THIS is hidden DECEPTION CONTENT in a shipped name the \
+human reader cannot see — the detector side vs the scanned-content side); distinct-from \
+`luhn-validate-numeric-pii-candidates-before-redact` (detection precision at the redaction \
+sink). REGIME: any surface where a name/string crosses a trust decision AND a human reads \
+it — skill/tool registries, dependency manifests, code review of identifiers, prompt \
+templates keyed by name. ANTI-REGIME: languages/surfaces that ALREADY refuse non-ASCII \
+identifiers at the compiler (then the gate is redundant — but shipped text metadata and \
+manifest fields remain in scope); display-only strings never crossing a trust decision. \
+Rust shape: `name.chars().all(|c| c.is_ascii())` on trust-decision identifiers + the \
+all-fields scan on shipped metadata — byte-level, never rendering-level. Suggest-only: \
+WHICH fields are trust-decision surfaces is the harness's design. Detector: none at \
+landing (the trust-decision co-residence a parse-only pass cannot bind — every string is \
+a candidate). Fixture: `fixtures/b422_sec_fixtures.rs` F1 (the RTL-override arm — the \
+name renders reversed but the byte scan refuses; the zero-width arm; the all-fields \
+tamper arm — the identifier clean, the description carrying the override; the homoglyph \
+arm — Cyrillic а caught by the non-ASCII gate where the eye fails). Batch 422 / Plan \
+417 / Research 451 (NVIDIA/SkillSpector @ 02894ec5, Apache-2.0 — the pattern table \
+:120-127, the remediation :154-155; the fixture is an original synthesis, \
+standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the trust gate compares the NAME the caller typed — and a \n/// U+202E inside it renders as something else entirely while the BYTES \n/// key the registry.\npub struct Skill { pub name: String, pub docs: String }\n\npub fn register_skill(registry: &mut Vec<String>, skill: &Skill) {\n    // the name is trusted as typed and displayed as rendered\n    registry.push(skill.name.clone());\n}\n".to_string(),
+            fixed_code: "/// FIXED: the identifier gate is BYTE-level ASCII-restricted and the \n/// scan covers the shipped text fields too (the all-fields law).\npub struct Skill { pub name: String, pub docs: String }\n\npub fn register_skill(registry: &mut Vec<String>, skill: &Skill) -> Result<(), String> {\n    let ascii_ok = |s: &str| s.chars().all(|c| c.is_ascii());\n    if !ascii_ok(&skill.name) {\n        return Err(format!(\"identifier {:?} carries non-ASCII deception content\", skill.name));\n    }\n    if !ascii_ok(&skill.docs) {\n        return Err(String::from(\"shipped metadata carries directional/invisible formatting\"));\n    }\n    registry.push(skill.name.clone());\n    Ok(())\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── nested-archive-unbounded-depth (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "nested-archive-unbounded-depth".to_string(),
+            sec_concept: "a recursive extractor over untrusted archive containers carries a DEPTH \
+COUNTER through the recursion and refuses past a bounded cap with a TYPED error and a \
+COUNTED metric — without it, a nesting bomb (a zip inside a gzip inside a zip, each stage \
+inflating) recurses to stack exhaustion or unbounded work. THE THREE DECISION CLAUSES at \
+the pin (trufflesecurity/trufflehog @ 23255461, pkg/handlers/archive.go, AGPL-3.0 — \
+transcription-only): the counter rides EVERY recursion level (`openArchive(ctx, depth+1, …)` \
+:100-107); the refusal is TYPED — `var ErrMaxDepthReached = errors.New(\"max archive depth \
+reached\")` (:99) — not a silent skip; the refusal is COUNTED — `h.metrics.
+incMaxArchiveDepthCount()` (:119, metrics.go:173-175). The cap itself is env-tunable through \
+one choke point (`SetArchiveMaxDepth`, :34-36) with the source's own warning verbatim \
+(:24-25): 'NOTE: This is a temporary workaround for |openArchive| incrementing depth twice \
+per archive' — the counter must advance EXACTLY ONCE per level; a double-advance halves the \
+real budget silently (the issue-2942 lesson, the tamper arm). ⛔ KINSHIPS: distinct-from \
+`unbounded-read-into-vec` (B328 — the per-stage VOLUME cap on one read sink; THIS owns the \
+RECURSION-DEPTH axis across stages — compose both on an extractor); distinct-from \
+`request-amplification-guard-before-expensive-path` (B374 — the caller-driven per-unit \
+pre-path refusal; THIS is self-amplification through payload STRUCTURE, the depth is in \
+the bytes not the request); `untrusted-archive-extract-paths` (B328) owns the NAME-ESCAPE \
+axis of the same sink — compose (its symlink-wave note is this class's positive instance). \
+Class provenance: ClamAV's MaxRecursion/MaxFiles (Research 451 source 2). REGIME: \
+decompress→extract loops over untrusted payloads (upload scanners, supply-chain \
+inspectors, backup restore); ANTI-REGIME: flat single-stage extractors (no recursion — \
+depth 1 is fine); trusted internal archives. Rust shape: `fn extract(payload, depth: usize)` \
++ `if depth >= MAX_DEPTH { metrics.inc(); return Err(ExtractError::MaxDepthReached) }` + \
+the recursion passing `depth + 1` exactly once. Suggest-only: the cap value and the metric \
+naming are the extractor's design. Detector: none at landing (the recursion shape + \
+untrusted-entry co-residence needs cross-fn flow a parse-only pass cannot bind). Fixture: \
+`fixtures/b422_sec_fixtures.rs` F2 (the nesting-bomb arm — 50-deep nest refused at cap 10 \
+with the counted metric; the flat anti-regime arm; the clean-nesting arm; the \
+double-increment tamper arm — the +2 advance skips depth 1's budget slot). Batch 422 / \
+Plan 417 / Research 451 (trufflehog @ 23255461, AGPL-3.0, transcription-only — the \
+fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the extractor recurses into nested containers with NO depth \n/// counter — a nesting bomb recurses to exhaustion.\nenum Payload { File, Container(Vec<Payload>) }\n\nfn extract(payload: &Payload, out: &mut Vec<String>) {\n    match payload {\n        Payload::File => out.push(String::from(\"file\")),\n        Payload::Container(items) => {\n            for item in items {\n                extract(item, out); // depth unbounded\n            }\n        }\n    }\n}\n".to_string(),
+            fixed_code: "/// FIXED: the depth counter rides every level; past the cap a TYPED \n/// refusal fires and the metric counts it (never silent).\nenum Payload { File, Container(Vec<Payload>) }\nenum ExtractError { MaxDepthReached }\n\nconst MAX_DEPTH: usize = 10;\n\nfn extract(\n    payload: &Payload,\n    depth: usize,\n    out: &mut Vec<String>,\n    max_depth_refusals: &mut u64,\n) -> Result<(), ExtractError> {\n    if depth >= MAX_DEPTH {\n        *max_depth_refusals += 1;\n        return Err(ExtractError::MaxDepthReached);\n    }\n    match payload {\n        Payload::File => {\n            out.push(String::from(\"file\"));\n            Ok(())\n        }\n        Payload::Container(items) => {\n            for item in items {\n                extract(item, depth + 1, out, max_depth_refusals)?;\n            }\n            Ok(())\n        }\n    }\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── consent-digest-bound-approval (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "consent-digest-bound-approval".to_string(),
+            sec_concept: "an agent-initiated material upload (source bundle, dataset, snapshot) gated \
+on human review binds the consent to the REVIEWED CONTENT's digest: review produces a digest, \
+the approval call takes the digest, and a snapshot that drifted since review REFUSES — a \
+blanket consent flag stamps ONLY the invocation's own snapshot, never a portable grant. THE \
+LAW at the pin (usestrix/strix @ 9ed84f99, AGENTS.md:44-52, Apache-2.0; implementation \
+verified in-source at source_scan.py:206-222): review `--dry-run --show-files` captures \
+`source.archive_sha256`, the rerun carries the SAME selection flags plus \
+`--approve-sha256 HASH`, and verbatim (:52) 'A changed snapshot is rejected' — \
+_validate_source_digest_approval refuses a fullmatch-hex digest whose archive_sha256 \
+drifted, and 'use --yes only for a deliberate one-shot approval of the snapshot built by \
+that invocation' (:175). The digest is format-checked BEFORE any compare (64 hex, :209-211 — \
+the malformed arm refuses first). ⛔ KINSHIPS: distinct-from \
+`untrusted-download-verify-then-atomic-install` (B345 — the DOWNLOAD twin: verify-then-install \
+for INBOUND bytes; THIS is the UPLOAD twin: consent-bound-to-reviewed-digest for OUTBOUND \
+material an agent ships — adjudicate both directions in-rule, the directions are the two \
+sides of the verify-bind genus); distinct-from `callable-naming-wire-fields-refused-not-dropped` \
+(B374 — the false-consent surface is naming; THIS binds consent to content); kin \
+`credential-rebind-partial-update-explicit-position` (B420 — the explicit-position law when \
+a state changes; the digest IS the explicit position on the reviewed bytes). REGIME: \
+agent/CI handoffs where automation ships material for human review between steps — upload \
+gates, deploy snapshots, PR payload bundles. ANTI-REGIME: interactive single-step approvals \
+(review and act are one human action — nothing drifts between them); machine-internal \
+calls with no review step. Rust shape: `approve(snapshot, digest: Option<&str>, blanket: bool)` \
+— digest format-checked, then compared, drift = typed refusal; the blanket flag resolves \
+only THIS invocation's snapshot. Suggest-only: which artifacts need review-binding is the \
+harness's design. Detector: none at landing (the review-then-approve two-step co-residence \
+is cross-fn flow). Fixture: `fixtures/b422_sec_fixtures.rs` F3 (the drift arm — the same \
+digest against changed bytes refuses; the blanket-flag arm — invocation-scoped by \
+construction; the bound-handoff arm — same bytes plus digest accepted; the malformed arm \
+— non-64-hex refuses before compare). Batch 422 / Plan 417 / Research 451 (strix @ \
+9ed84f99, Apache-2.0 — AGENTS.md:44-52 + source_scan.py:206-222 verified in-source at \
+T0, closing the verdict's owed-quote caveat; the fixture is an original synthesis, \
+standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the approval is a blanket flag — whatever bytes this run \n/// happens to carry, the human approved the IDEA of uploading.\npub struct Bundle { pub bytes: Vec<u8> }\n\npub fn ship(bundle: &Bundle, blanket_approved: bool) -> Result<(), String> {\n    if blanket_approved {\n        // no digest, no binding: these bytes were never shown to anyone\n        return upload(&bundle.bytes);\n    }\n    Err(String::from(\"needs approval\"))\n}\n\nfn upload(_: &[u8]) -> Result<(), String> { Ok(()) }\n".to_string(),
+            fixed_code: "/// FIXED: the consent binds to the reviewed digest — drift refuses, \n/// and the blanket flag covers ONLY this invocation's snapshot.\npub struct Bundle { pub sha256: [u8; 32], pub bytes: Vec<u8> }\n\npub fn ship(bundle: &Bundle, approve_digest: Option<&str>, blanket_yes: bool) -> Result<(), String> {\n    let hex = |b: &[u8]| b.iter().map(|x| format!(\"{x:02x\")).collect::<String>();\n    if let Some(d) = approve_digest {\n        if d.len() != 64 || !d.chars().all(|c| c.is_ascii_hexdigit()) {\n            return Err(String::from(\"approve digest must be 64 hex characters\"));\n        }\n        if hex(&bundle.sha256) != d.to_lowercase() {\n            return Err(String::from(\"snapshot drifted since review; review a fresh dry-run\"));\n        }\n        return upload(&bundle.bytes);\n    }\n    if blanket_yes {\n        // one-shot: THESE bytes only — nothing portable to a later run\n        return upload(&bundle.bytes);\n    }\n    Err(String::from(\"review with --dry-run, then rerun with the digest\"))\n}\n\nfn upload(_: &[u8]) -> Result<(), String> { Ok(()) }\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── static-handler-serves-dotfiles (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "static-handler-serves-dotfiles".to_string(),
+            sec_concept: "a static file handler resolves REQUEST PATHS onto the filesystem, and \
+matching only the FINAL component lets a hidden component anywhere in the path serve \
+(dot-prefixed files: `.git/config`, `.env`, `.htpasswd`) — the check is PER-COMPONENT, \
+refusing every dot-prefixed component with the `.well-known` exemption as the one \
+legitimate dot-directory. Class attested by the source's own template surface \
+(projectdiscovery/nuclei @ 12d12a40, MIT — 'Secret files or data exposure | Sensitive \
+File Disclosure' in the README template table; the detection-side YAML itself is the \
+scanner lane, the fix-space is the handler law). ⛔ KINSHIPS: distinct-from \
+`path-join-escape` (B328 — the caller-path TRAVERSAL surface, `..` components escaping \
+the root; THIS owns the HIDDEN-COMPONENT surface — `..` is deliberately NOT classified \
+here, the two fixtures disagree by construction so each stays sharp); distinct-from \
+`sqlite-store-path-nofollow-parent-resolve` (B415 — the OPEN-FLAG integrity axis on one \
+store path; THIS is the request-routing surface over many paths); distinct-from \
+`untrusted-archive-extract-paths` (the member-name escape at extraction). REGIME: any \
+static-serving fn resolving untrusted request paths (dev servers, artifact browsers, \
+file panels, `http.FileServer` rewrites). ANTI-REGIME: APIs addressing files by id/token \
+(never a path); fully dynamic handlers with no filesystem mapping. Rust shape: split the \
+path into components and refuse ANY component starting with `.` except the literal \
+`.well-known` — component-wise, never a suffix/contains test on the joined string (the \
+gate caught exactly that arm defect pre-entry: a final-component-only check served \
+`.git/config` because `config` is clean). Suggest-only: the exemption set is the \
+handler's design. Detector: none at landing (the request-path-to-filesystem co-residence \
+is the router's shape). Fixture: `fixtures/b422_sec_fixtures.rs` F4 (the dotfile arm — \
+`/.git/config` and `/app/.env` refused; the `.well-known` arm; the clean arm; the \
+traversal-distinguish arm — `..` classified NotFound, never HiddenComponent). Batch 422 \
+/ Plan 417 / Research 451 (nuclei @ 12d12a40, MIT; the fixture is an original \
+synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the hidden-file check tests only the FINAL component — \n/// .git/config slides through because config is clean.\npub fn serve(requested: &str) -> Result<String, String> {\n    let last = requested.rsplit('/').next().unwrap_or(requested);\n    if last.starts_with('.') {\n        return Err(format!(\"hidden file refused: {last}\"));\n    }\n    Ok(format!(\"served {requested}\"))\n}\n".to_string(),
+            fixed_code: "/// FIXED: per-component law — ANY dot-prefixed component refuses \n/// (.well-known is the one legitimate dot-directory); the component scan \n/// runs before any filesystem resolution.\npub fn serve(requested: &str) -> Result<String, String> {\n    for comp in requested.split('/').filter(|c| !c.is_empty()) {\n        if comp.starts_with('.') && comp != \".well-known\" {\n            return Err(format!(\"hidden path component refused: {comp}\"));\n        }\n    }\n    Ok(format!(\"served {requested}\"))\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── probe-unknown-tri-state (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "probe-unknown-tri-state".to_string(),
+            sec_concept: "an external verification probe (live API check, upstream validator, remote \
+reachability) has THREE outcomes — Confirmed, Refused, Unknown — and folding the probe's \
+return to bool ERASES Unknown: an API outage, a timeout, or a malformed response lands in \
+the same arm as a real negative, so a probe OUTAGE silently clears a security decision. \
+The taxonomy law at the pin (trufflesecurity/trufflehog @ 23255461, README verification \
+taxonomy, AGPL-3.0 — transcription-only): every detector's live verifier is a fallible \
+probe whose outcome set is verified / unverified / unknown — the third state is a FIRST-CLASS \
+outcome the consumer must SURFACE (count, report, retry-with-backoff), never fold. The \
+consumer law: act only on Confirmed; Refused refuses; Unknown fails closed AND LOUD — \
+recorded, named, retried elsewhere — the decision is REFUSED, never guessed. ⛔ KINSHIPS: \
+distinct-from `capacity-exceeded-silent-fallback-not-refusal` (B330 — the silent-FALLBACK \
+axis: an overload substituting a default; THIS is the result-TYPE collapse — a tri-state \
+world flattened to two arms so the third outcome cannot be named); distinct-from \
+`jwt-insecure-validation-flags` (the verification-SKIP axis; THIS keeps verification but \
+bounds what its failure modes can mean); kin `llm-gate-closed-schema-decision-in-code` \
+(B420 — the typed yes|no|unknown gate vocabulary is the SAME tri-state at the judge seam, \
+compose); kin `metric-after-normalizer-measures-the-normalizer` (B399 — the probe's own \
+failure polluting the signal). REGIME: any consumer of an external probe whose negative \
+clears a security decision — secret validators, cert checkers, allowlist pings, health \
+gates. ANTI-REGIME: probes whose two outcomes genuinely exhaust the world (local pure \
+functions); consumers where Unknown and Refused legally share one handling (rare — if \
+truly equivalent, write THAT down at the site). Rust shape: `enum Probe { Confirmed, \
+Refused, Unknown }` + the consumer match that acts only on Confirmed and surfaces Unknown. \
+Suggest-only: the outcome vocabulary is the probe's design. Detector: none at landing \
+(vocabulary-gated — a bool-returning fn whose body consults a fallible external call; \
+the `bool::from(probe)` erasure is one `matches!` away from correct, deferred). Fixture: \
+`fixtures/b422_sec_fixtures.rs` F5 (the collapse arm — an outage reads as \"not valid\" \
+identically to a refusal; the tri-state arm — Unknown distinct; the confirmed arm; the \
+refuse arm — a real negative never touches Unknown paths; the consumer arm — Unknown \
+fails closed AND is surfaced). Batch 422 / Plan 417 / Research 451 (trufflehog @ \
+23255461, AGPL-3.0, transcription-only — the fixture is an original synthesis, \
+standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the verifier's tri-state folded to bool — an API outage \n/// lands in the same arm as a real negative and silently clears the gate.\npub fn key_is_valid(key: &str) -> bool {\n    match probe_live_api(key) {\n        ProbeReply::Valid => true,\n        ProbeReply::Invalid => false,\n        ProbeReply::ApiError => false, // the outage IS the verdict — folded\n    }\n}\n\nenum ProbeReply { Valid, Invalid, ApiError }\n\nfn probe_live_api(_: &str) -> ProbeReply {\n    ProbeReply::ApiError // today the probe is down\n}\n\npub fn admit(key: &str) -> bool {\n    key_is_valid(key) // the outage cleared admission silently\n}\n".to_string(),
+            fixed_code: "/// FIXED: Unknown is its own value; the consumer fails closed AND \n/// LOUD — surfaced, counted, never folded into Refused.\npub fn key_verdict(key: &str, surfaced: &mut Vec<String>) -> Verdict {\n    match probe_live_api(key) {\n        ProbeReply::Valid => Verdict::Confirmed,\n        ProbeReply::Invalid => Verdict::Refused,\n        ProbeReply::ApiError => {\n            surfaced.push(format!(\"probe outage on {key}; admission refused as UNKNOWN\"));\n            Verdict::Unknown\n        }\n    }\n}\n\n#[derive(Debug, PartialEq)]\npub enum Verdict { Confirmed, Refused, Unknown }\n\nenum ProbeReply { Valid, Invalid, ApiError }\n\nfn probe_live_api(_: &str) -> ProbeReply {\n    ProbeReply::ApiError // today the probe is down\n}\n\npub fn admit(key: &str, surfaced: &mut Vec<String>) -> bool {\n    key_verdict(key, surfaced) == Verdict::Confirmed // ONLY Confirmed admits\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
     ]
 }
 
@@ -4172,6 +4381,127 @@ mod tests {
             assert!(
                 r9.sec_concept.contains(needle),
                 "R9 needle {needle:?} missing"
+            );
+        }
+    }
+
+    #[test]
+    fn batch422_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            (
+                "unicode-deception-trojan-source-identifiers",
+                SecFamily::InputValidation,
+            ),
+            ("nested-archive-unbounded-depth", SecFamily::InputValidation),
+            ("consent-digest-bound-approval", SecFamily::InputValidation),
+            ("static-handler-serves-dotfiles", SecFamily::InputValidation),
+            ("probe-unknown-tri-state", SecFamily::InputValidation),
+        ];
+        assert_eq!(
+            all.len(),
+            99,
+            "the sec corpus count: 94 + 5 batch-422 rules"
+        );
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-422 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-422 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 422 / Plan 417 / Research 451"),
+                "batch-422 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("standalone-compiled AND executed"),
+                "batch-422 {id} must carry the fixture-preflight provenance"
+            );
+            assert!(
+                r.sec_concept.contains("Suggest-only"),
+                "batch-422 {id} must be suggest-only"
+            );
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&r.rule_id.as_str()),
+                "batch-422 must stay suggest-only (never FIXABLE_SEC)"
+            );
+            // both halves parse
+            assert!(
+                syn::parse_file(&r.buggy_code).is_ok() && syn::parse_file(&r.fixed_code).is_ok(),
+                "batch-422 {id} buggy/fixed must both parse"
+            );
+        }
+        // the trojan-source rule's all-fields law + the boundary-miss adjudication
+        let tp2 = all
+            .iter()
+            .find(|r| r.rule_id == "unicode-deception-trojan-source-identifiers")
+            .unwrap();
+        for needle in [
+            "Restrict identifiers to ASCII-only characters",
+            "all fields, not just identifiers",
+            "ascii-token-unicode-word-boundary-scan-miss",
+        ] {
+            assert!(
+                tp2.sec_concept.contains(needle),
+                "TP2 needle {needle:?} missing"
+            );
+        }
+        // the archive rule's three clauses + the volume-vs-depth compose
+        let t1 = all
+            .iter()
+            .find(|r| r.rule_id == "nested-archive-unbounded-depth")
+            .unwrap();
+        for needle in [
+            "ErrMaxDepthReached",
+            "incMaxArchiveDepthCount",
+            "incrementing depth twice per archive",
+            "unbounded-read-into-vec",
+        ] {
+            assert!(
+                t1.sec_concept.contains(needle),
+                "T1 needle {needle:?} missing"
+            );
+        }
+        // the consent rule's drift law + the upload/download twin adjudication
+        let r1 = all
+            .iter()
+            .find(|r| r.rule_id == "consent-digest-bound-approval")
+            .unwrap();
+        for needle in [
+            "A changed snapshot is rejected",
+            "untrusted-download-verify-then-atomic-install",
+            "one-shot approval of the snapshot built by that invocation",
+        ] {
+            assert!(
+                r1.sec_concept.contains(needle),
+                "R1 needle {needle:?} missing"
+            );
+        }
+        // the dotfiles rule's per-component law + the traversal distinguish
+        let n1 = all
+            .iter()
+            .find(|r| r.rule_id == "static-handler-serves-dotfiles")
+            .unwrap();
+        for needle in ["path-join-escape", ".well-known", "PER-COMPONENT"] {
+            assert!(
+                n1.sec_concept.contains(needle),
+                "N1 needle {needle:?} missing"
+            );
+        }
+        // the tri-state rule's consumer law + the collapse adjudication
+        let t4 = all
+            .iter()
+            .find(|r| r.rule_id == "probe-unknown-tri-state")
+            .unwrap();
+        for needle in [
+            "capacity-exceeded-silent-fallback-not-refusal",
+            "llm-gate-closed-schema-decision-in-code",
+            "fails closed AND LOUD",
+        ] {
+            assert!(
+                t4.sec_concept.contains(needle),
+                "T4 needle {needle:?} missing"
             );
         }
     }

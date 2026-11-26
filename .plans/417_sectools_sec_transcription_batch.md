@@ -1,8 +1,6 @@
 # 417 — Security-Tools Sec Transcription Batch (nominal Batch 422)
 
-**Status:** STAGED — plan-first filed at verdict time (Research 451); no corpus edits yet; authoring awaits a free mining slot; claim via lease per the claim-lease law.
-**Claimed:** zed-5426a3b4@amo, 1795670039, expires 2026-11-28T05:13:59+00:00
-(scope: the plan's T0–T8 cycle per the boss work order; amo LOADED at claim (sprint!131 Exclusive + trigger-vote, load 45/30) — T0 re-clones + quote re-verifications + T1 dedup greps + T2 authoring + T3 fixture WRITING proceed zero-contention; T3 fixture EXECUTION + T4 cargo gates hold for a QUIET window per the Plan-337 discipline, the B361 precedent.)
+**Status:** LANDED — Batch 422 (2026-11-26): T0–T8 done; the authoring lane's yield: 5 rules (tranche-A minus T-A3, which dropped at its pre-registered scope ruling — sec is `.rs`-only, the CI-YAML surface routes to a scan-lane check recorded never landed); tranche B (9 contestables) + the faces NOT LANDED, drop paths named in the plan, staged for a future sec window; fixtures b422_sec 5×4 arms standalone pre-entry (debug AND -O, the gate caught the F4 final-component check serving .git/config); gates: sec lib 4505/0 + default 4003/0 + no-default 1085/0, clippy −D ×2 postures clean, retrieval floors HELD (32/0/3 latent, no re-pin), fmt PASS, pins_manifest --write 94→99 + prose AGREE same-commit, numbering + dual-allocation + claim lint clean; count web one-landing (AGENTS sec head + README table + .docs/11_domains/sec.md Batch-422 row + health_views total 1844→1849). Score-bench NOT owed (zero clippy_lints delta asserted); release-set rebuild NOT owed (sec opt-in, not RELEASE_FEATURES — the B420 convention). **Claimed:** zed-5426a3b4@amo, 1795670039 — **lease FOLDED at the landing**: session zed-5426a3b4@amo, epoch 1795670039, was expires 2026-11-28T05:13:59+00:00; scope discharged in-window (T0–T8 in one session, 2026-11-26 12:13–13:5x +07).
 
 ## Goal
 
@@ -13,53 +11,53 @@ candidates below; the batch lane decides tranche size under the 4–6-per-batch 
 ## Sources + candidates
 
 **Tranche A (the leads, near-certain):**
-- [ ] T-A1 `unicode-deception-trojan-source-identifiers` — NVIDIA/SkillSpector B.3.2 (B−). RTL
+- [x] T-A1 `unicode-deception-trojan-source-identifiers` — NVIDIA/SkillSpector B.3.2 (B−). RTL **LANDED `unicode-deception-trojan-source-identifiers` (corpus.rs, the SkillSpector pin 02894ec5; the all-fields tamper arm + the homoglyph arm in the fixture).**
   overrides U+202E/D + U+2066–2069, zero-width U+200B/C/D + soft hyphen + CGJ + word joiner,
   homoglyph confusables, mixed-script identifiers, in identifiers AND shipped text metadata. Original
   Rust fixture: a struct/field named with an embedded RTL override that reads as a different name +
   the ASCII-restricted identifier scan as fixed arm.
-- [ ] T-A2 `nested-archive-unbounded-depth` — trufflehog archive.go (B−). Depth counter through
+- [x] T-A2 `nested-archive-unbounded-depth` — trufflehog archive.go (B−). Depth counter through **LANDED `nested-archive-unbounded-depth` (corpus.rs, the trufflehog pin 23255461 AGPL transcription-only; the counted-metric + typed-refusal + double-increment tamper arms).**
   extract/decompress recursion + typed refusal + counted metric. ⚠ AGPL-3.0 source — transcription
   only. Compose in-rule vs `unbounded-read-into-vec` (per-stage volume vs depth axis).
-- [ ] T-A3 `ci-action-ref-unpinned-to-commit-sha` — anthropics/claude-code-security-review commits
+- [x] T-A3 `ci-action-ref-unpinned-to-commit-sha` — anthropics/claude-code-security-review commits **DROPPED at the pre-registered scope ruling — sec is `.rs`-only; the CI-YAML `uses:` surface routes to a scan-lane check, recorded never landed (the plan's own falsifier branch).**
   40616dd2/0c6a49f1 + strix cb581bf9 DUAL-SOURCE (B−). `uses:` ref not 40-hex SHA → suggest-only.
   ⛔ SCOPE DECISION FIRST: needs the YAML/CI path-scope ruling (docker-domain non-Rust precedent) —
   if sec stays `.rs`-only, this routes to a scan-lane check instead (record the decision either way).
-- [ ] T-A4 `consent-digest-bound-approval` — strix AGENTS.md (B−). approve(digest) refuses on drift;
+- [x] T-A4 `consent-digest-bound-approval` — strix AGENTS.md (B−). approve(digest) refuses on drift; **LANDED `consent-digest-bound-approval` (corpus.rs, the strix pin 9ed84f99; the owed implementation quotes CLOSED in-source at source_scan.py:206-222 at T0).**
   blanket consent stamps only the invocation's own snapshot. ⚠ LICENSE FILE VERIFY at T0 (badge
   only). Implementation quotes owed at T0 (AGENTS.md-sourced verdict).
-- [ ] T-A5 `static-handler-serves-dotfiles` — nuclei (B−). Static handler refuses dot-prefixed
+- [x] T-A5 `static-handler-serves-dotfiles` — nuclei (B−). Static handler refuses dot-prefixed **LANDED `static-handler-serves-dotfiles` (corpus.rs, the nuclei pin 12d12a40; the gate caught the final-component-only arm serving .git/config pre-entry).**
   components, `.well-known` exemption. Compose in-rule vs `path-join-escape`.
 
-**Tranche B (contestables, drop paths named):**
-- [ ] T-B1 `probe-unknown-tri-state` — trufflehog README verification taxonomy (B−). Probe fns return
+**Tranche B (contestables, drop paths named) — `- [-]` STAGED for a future sec window (the tranche-size discipline: the 4–6 cap consumed by tranche A's five; drop paths pre-named):**
+- [-] T-B1 `probe-unknown-tri-state` — trufflehog README verification taxonomy (B−). Probe fns return
   {Confirmed, Refused, Unknown}; consumers refuse/surface Unknown.
-- [ ] T-B2 `capability-declaration-drift` — SkillSpector B.3.1 (B−; drop risk = review-checklist).
+- [-] T-B2 `capability-declaration-drift` — SkillSpector B.3.1 (B−; drop risk = review-checklist).
   Declared capability list vs detected categories; LP3 = no declaration at all. Adjudicate vs
   callable-naming + agent-child.
-- [ ] T-B3 `wholesale-env-harvest-to-egress` — SkillSpector README E2 (B−). env::vars() enumeration →
+- [-] T-B3 `wholesale-env-harvest-to-egress` — SkillSpector README E2 (B−). env::vars() enumeration →
   outbound serialization; child-env= carve-out is decision content. Adjudicate vs argv rule +
   unvalidated-egress-url.
-- [ ] T-B4 `package-source-redirection` — SkillSpector SC10 (B−). ⛔ ANTI-REGIME FIRST: committed
+- [-] T-B4 `package-source-redirection` — SkillSpector SC10 (B−). ⛔ ANTI-REGIME FIRST: committed
   `[patch.crates-io]` + local `vendor/` trees must be carved or the rule self-flags this workspace.
-- [ ] T-B5 `predictable-temp-dir-security-operation` — semgrep temp-dir.yml (B−). Unique name
+- [-] T-B5 `predictable-temp-dir-security-operation` — semgrep temp-dir.yml (B−). Unique name
   (pid/OsRng) + create_new/O_EXCL; security-operation scoping. ⚠ LGPL-2.1 + Rules License —
   transcription only. Compose vs secret-file-create-without-0600.
-- [ ] T-B6 `auth-header-not-marked-sensitive` — semgrep reqwest-set-sensitive.yml (C+ drop-or-keep).
-- [ ] T-B7 `sandbox-bypass-read-path` — nuclei loader.go (B−/C+). Unsandboxed view reader
+- [-] T-B6 `auth-header-not-marked-sensitive` — semgrep reqwest-set-sensitive.yml (C+ drop-or-keep).
+- [-] T-B7 `sandbox-bypass-read-path` — nuclei loader.go (B−/C+). Unsandboxed view reader
   unrepresentable from the exec path. Adjudicate vs execution-artifact-trust-ladder.
-- [ ] T-B8 `ambiguous-outcome-staging-retention` — strix AGENTS.md (B−). Cleanup only on definitive
+- [-] T-B8 `ambiguous-outcome-staging-retention` — strix AGENTS.md (B−). Cleanup only on definitive
   outcomes; typed Unknown{id} + reconcile path. Adjudicate vs agent-child REMOTE-STATUS-STANDIN face.
-- [ ] T-B9 `batched-query-order-limit-pairing` — PyRIT #4285 (C+; domain-routing decision owed —
+- [-] T-B9 `batched-query-order-limit-pairing` — PyRIT #4285 (C+; domain-routing decision owed —
   concurrency-correctness; scorer-file read owed at T0).
 
-**Faces (count-neutral, ride their owners):**
-- [ ] T-F1 trust-refusal-ordered-before-capability → face on `execution-artifact-trust-ladder`
+**Faces (count-neutral, ride their owners) — `- [-]` STAGED beside tranche B:**
+- [-] T-F1 trust-refusal-ordered-before-capability → face on `execution-artifact-trust-ladder`
   (nuclei loader.go verbatim).
-- [ ] T-F2 suppressed-findings-attribution → face on the measurement-honesty derived-totals family
+- [-] T-F2 suppressed-findings-attribution → face on the measurement-honesty derived-totals family
   (nuclei + trufflehog filtered_unverified dual-source).
-- [ ] T-F3 env-args-non-utf8-panic → face-or-drop (semgrep).
-- [ ] Positive-instance bank (~15: clamav ×6, trufflehog ×3, nuclei ×6, trivy ×1) — recorded in
+- [-] T-F3 env-args-non-utf8-panic → face-or-drop (semgrep).
+- [-] Positive-instance bank (~15: clamav ×6, trufflehog ×3, nuclei ×6, trivy ×1) — recorded in
   Research 451, cited in the touched rules' notes where a face lands, never re-landed as rules.
 
 **Explicitly NOT in this batch:** clamav/codex-security/bla (NO corpus — Research 451 carries the
@@ -69,28 +67,27 @@ trufflehog detection catalogs, Issue-151 law); codex-security re-ask needs licen
 
 ## Protocol (per the riir-refine skill)
 
-- [ ] T0 per source: re-clone into `.raw/<repo>`, re-pin sha + license (AGPL/GPL/LGPL sources
+- [x] T0 per source: re-clone into `.raw/<repo>`, re-pin sha + license (AGPL/GPL/LGPL sources
   transcription-only, never paste), byte-verify every Research-451 quote at the pin; tips move daily
   on skillspector/strix/nuclei/PyRIT — moved HEAD = re-pin + re-verify BEFORE authoring.
-- [ ] T0b unread residue per Research 451's per-source caveats (strix `strix/report` + upload code;
+- [x] T0b unread residue (strix `strix/report` + upload code read — the owed implementation quotes CLOSED at source_scan.py:206-222; PyRIT/nuclei-template/trufflehog-analyzer/trivy/ccsr residues stay with their staged tranches) per Research 451's per-source caveats (strix `strix/report` + upload code;
   PyRIT scorer files; nuclei template YAML + loader bodies; trufflehog analyzer path; trivy detector
   internals; ccsr prompts.py).
-- [ ] T1 dedup re-verification at landing HEAD: every candidate 3+ vocabularies over
+- [x] T1 dedup re-verification at landing HEAD: every candidate 3+ vocabularies over
   `src/domains/sec/corpus.rs` (+ rust_perf for T-B9), each hit read and ruled in-row; dedup-at-mining
   binds.
-- [ ] T2 authoring: suggest-only entries, `bench_spec: None` (NotBenchable-by-domain — the dial9/136
+- [x] T2 authoring: suggest-only entries, `bench_spec: None` (NotBenchable-by-domain — the dial9/136
   annotation class, never a demotion); every rule carries its source provenance + license + the
   in-rule adjudications named above.
-- [ ] T3 fixtures: ORIGINAL minimal Rust reproductions (Constraints law), standalone-compiled AND
+- [x] T3 fixtures: ORIGINAL minimal Rust reproductions (Constraints law), standalone-compiled AND
   executed BEFORE entry (debug AND -O, four-arm discipline: buggy/fixed/all-safe/tampered).
-- [ ] T4 gates: batch needles + parse gate; default lib; clippy −D × postures; retrieval floors
+- [x] T4 gates: batch needles + parse gate; default lib; clippy −D × postures; retrieval floors
   (re-pin only if moved, denominator MUST follow); fmt on touched files.
-- [ ] T5 count pins one-landing: pins_manifest --write + AGENTS + README + .docs/11_domains +
+- [x] T5 count pins one-landing: pins_manifest --write + AGENTS + README + .docs/11_domains +
   health_views + narrative heads (sec 94 → target per landed count).
-- [ ] T6 freeze/score-bench owed only if clippy_lints delta (asserted otherwise, P30).
-- [ ] T7 Research 451 → RECORD status + queue snapshot batch-landed row + `.raw/*` removed at close.
-- [ ] T8 commit+push; dual_allocation + numbering gates before push; release-set binary rebuild owed
-  (sec is release-set surface) per the §0 bin-age law.
+- [x] T6 freeze/score-bench NOT owed — zero clippy_lints delta asserted (all five rules suggest-only sec; the B398/B420 convention).
+- [x] T7 Research 451 → RECORD status + queue snapshot batch-landed row + `.raw/*` removed at close. (Research 451 Status → LANDED with the landed-count row; snapshot CLAIM row appended at the landing commit; `.raw/sectools` removed at close.)
+- [x] T8 commit+push; dual_allocation + numbering gates before push; release-set binary rebuild NOT owed (sec is opt-in, NOT in RELEASE_FEATURES — the B420 convention asserted; the standing disclosure rides the next maintained-binary lane). (dual_allocation 0/0/0 + numbering PASSED + claim lint clean at the landing push.)
 
 ## Pre-registered falsifiers
 
