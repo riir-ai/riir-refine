@@ -46,7 +46,19 @@ past sessions left behind. Each step is read-only until a finding is
 adjudicated. Findings are reported in the cycle's summary — deletions only
 after the safety checks named per step.
 
-1. **Sync git — both boxes, all repos.** M3: per repo under
+1. **Sync git — both boxes, all repos.** ⛔ **Every cross-rig `ssh` in this
+   protocol carries the full flag set `-o ConnectTimeout=5 -o
+   ServerAliveInterval=15 -o ServerAliveCountMax=3`, AND the remote command
+   itself stays bounded — `ConnectTimeout` is connection-only, and killing
+   the ssh client does NOT kill the remote command (no `-t` → sshd sends no
+   hangup; a process that never writes never sees a broken pipe — seal-sprints
+   240: a piped verify spun one amo core 11h). On the macs bound a
+   single-process remote command with `timeout <dur> <cmd>`; on the 4090
+   `timeout` is a SLEEP command and there is no perl — heavy or piped work
+   goes through `agent-mail rig run 4090 --timeout <dur> --est <dur>`, and a
+   bare ssh there carries NO deadline (the schtasks+poll recipe below is
+   bounded by its polling loop, keep every poll inside one). Never ad-hoc
+   python for a verify the Rust tooling already does.** M3: per repo under
    `/Users/katopz/git/*` (top-level dirs with a `.git` dir): `git fetch origin`
    + `git status -sb`; ff-only merge (`git merge --ff-only origin/<branch>`)
    CLEAN behind repos only. Dirty repos: fetch + report, never pull through a
