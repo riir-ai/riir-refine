@@ -1265,7 +1265,7 @@ pub const VERIFY_LINTS: &[&str] = &[
 #[must_use]
 pub fn propose_fix(lint_name: &str, buggy_code: &str) -> Option<String> {
     let file: syn::File = syn::parse_file(buggy_code).ok()?;
-    let edits = collect_rule_edits(lint_name, buggy_code, &file);
+    let edits = collect_rule_edits(lint_name, buggy_code, &file, false);
     if edits.is_empty() {
         return None;
     }
@@ -1274,9 +1274,35 @@ pub fn propose_fix(lint_name: &str, buggy_code: &str) -> Option<String> {
 
 /// Collect one lint's edits against the original source, tagged with the
 /// lint name (`--fix` reporting). Empty = no match.
+///
+/// Edition-blind: edition-2024-only emitters (the `collapsible_if`
+/// let-chain fold) stay conservative here — fixtures, benches, score-bench
+/// and every other edition-blind caller keep byte-identical behavior. The
+/// real fix lanes call [`collect_edits_with_let_chains`] with the file's
+/// manifest edition.
 #[must_use]
 pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<RuleEdit> {
-    collect_rule_edits(lint_name, source, file)
+    collect_rule_edits(lint_name, source, file, false)
+        .into_iter()
+        .map(|edit| RuleEdit {
+            rule_id: lint_name.to_string(),
+            edit,
+        })
+        .collect()
+}
+
+/// The edition-aware variant: `allow_let_chains` (the file's owning manifest
+/// declares edition >= 2024 — resolve via `fmt::edition_allows_let_chains`)
+/// unlocks the edition-2024-only emitters, currently the `collapsible_if`
+/// let-chain fold. Every other caller keeps [`collect_edits`] (conservative).
+#[must_use]
+pub fn collect_edits_with_let_chains(
+    lint_name: &str,
+    source: &str,
+    file: &syn::File,
+    allow_let_chains: bool,
+) -> Vec<RuleEdit> {
+    collect_rule_edits(lint_name, source, file, allow_let_chains)
         .into_iter()
         .map(|edit| RuleEdit {
             rule_id: lint_name.to_string(),
@@ -1289,7 +1315,12 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
-fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<SourceEdit> {
+fn collect_rule_edits(
+    lint_name: &str,
+    source: &str,
+    file: &syn::File,
+    allow_let_chains: bool,
+) -> Vec<SourceEdit> {
     match lint_name {
         // ── seed ten (T6.4 emitter migration) ──
         "needless_return" => needless_return::collect_edits(source, file),
@@ -1306,7 +1337,7 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "semicolon_if_nothing_returned" => {
             semicolon_if_nothing_returned::collect_edits(source, file)
         }
-        "collapsible_if" => collapsible_if::collect_edits(source, file),
+        "collapsible_if" => collapsible_if::collect_edits(source, file, allow_let_chains),
         "collapsible_else_if" => collapsible_else_if::collect_edits(source, file),
         "single_match" => single_match::collect_edits(source, file),
         "single_match_else" => single_match_else::collect_edits(source, file),

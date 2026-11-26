@@ -17550,6 +17550,9 @@ fn main() {
                     // `&lint_set` (pattern-deref): the set is borrowed, not
                     // moved — the P21 oracle merge below needs it after this
                     // loop (the lane's corpus-set precondition).
+                    // Edition-2024 unlocks (the collapsible_if let-chain
+                    // fold): resolved once per file from the owning manifest.
+                    let allow_let_chains = riir_refine::fmt::edition_allows_let_chains(file);
                     for &lint in &lint_set {
                         // Issue 102 T2: a demoted clippy rule's proposer
                         // stands down (the auto re-admit at run end watches
@@ -17558,9 +17561,9 @@ fn main() {
                         if active_set.excludes("clippy", lint) {
                             continue;
                         }
-                        let collected =
-                            riir_refine::domains::clippy_lints::proposers::collect_edits(
-                                lint, &current, &parsed,
+                        let collected = riir_refine::domains::clippy_lints::proposers
+                            ::collect_edits_with_let_chains(
+                                lint, &current, &parsed, allow_let_chains,
                             );
                         // Issue 135 T2: allow-by-default and not enabled by
                         // the target crate — counted (pass 0), never applied.
@@ -20982,14 +20985,21 @@ fn reheat_fix_pass(
             }
         }
         if run_clippy {
+            // Edition-2024 unlocks (the collapsible_if let-chain fold):
+            // resolved once per file from the owning manifest.
+            let allow_let_chains = riir_refine::fmt::edition_allows_let_chains(path);
             for lint in FIXABLE_LINTS {
                 // Issue 102 T2: demoted rules' dispatch slots are empty.
                 if active_set.excludes("clippy", lint) {
                     continue;
                 }
-                let collected = riir_refine::domains::clippy_lints::proposers::collect_edits(
-                    lint, &current, &parsed,
-                );
+                let collected =
+                    riir_refine::domains::clippy_lints::proposers::collect_edits_with_let_chains(
+                        lint,
+                        &current,
+                        &parsed,
+                        allow_let_chains,
+                    );
                 if level_gated.contains(lint) {
                     if pass == 0 && !collected.is_empty() {
                         *level_skipped.entry((*lint).to_string()).or_default() += collected.len();

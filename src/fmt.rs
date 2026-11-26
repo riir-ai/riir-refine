@@ -150,6 +150,16 @@ pub fn apply(file: &Path, edition: &str) -> Result<(), String> {
 /// `"2024"` (the workspace standard + cargo's default for new crates).
 #[must_use]
 pub fn edition_for(file: &Path) -> String {
+    edition_key_for(file).unwrap_or_else(|| "2024".to_string())
+}
+
+/// The owning package's DECLARED edition key, when a manifest carrying an
+/// `edition = "..."` line is found. `None` = no manifest / no key — for
+/// rustc that means the implicit 2015 edition, so edition-sensitive
+/// emitters must NOT fall back to [`edition_for`]'s `"2024"` default here
+/// (the default serves the fmt lane, where the assumption is harmless).
+#[must_use]
+pub fn edition_key_for(file: &Path) -> Option<String> {
     package_root(file)
         .and_then(|root| std::fs::read_to_string(root.join("Cargo.toml")).ok())
         .and_then(|manifest| {
@@ -162,7 +172,18 @@ pub fn edition_for(file: &Path) -> String {
                 })
             })
         })
-        .unwrap_or_else(|| "2024".to_string())
+}
+
+/// May an emitter produce edition-2024 let-chain syntax (`if let a = x &&
+/// cond`) for this file? True only when the owning manifest EXPLICITLY
+/// declares edition >= 2024 — the conservative read of "our output must
+/// compile on every edition" (a manifest with no key is rustc-2015, and an
+/// orphan file proves nothing, so both refuse).
+#[must_use]
+pub fn edition_allows_let_chains(file: &Path) -> bool {
+    edition_key_for(file)
+        .and_then(|e| e.parse::<u32>().ok())
+        .is_some_and(|e| e >= 2024)
 }
 
 fn package_root(file: &Path) -> Option<PathBuf> {
