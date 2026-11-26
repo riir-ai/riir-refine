@@ -1,6 +1,6 @@
 # lean-svm + percolator — the on-chain ledger state-machine sec family
 
-**Status:** DISTILLED — queued as nominal Batch 424 (plan 418); batch execution routed to the next sec-slot lane, this session files the verdict only.
+**Status:** LANDED — Batch 424 (2026-11-26, Plan 418): R1–R5 landed as 5 sec rules (104→109); R6 dropped at its pre-registered first-drop; the routing premise correction + the lane-intel rows carry unchanged.
 
 **Verdict: YES B+ corpus (sec — NEW family seed, zero owners) / LANE INTEL HIGH (chaind kernel question answered, chain-sec checklist rows named) / PRODUCT-COVERAGE YES (seeds the on-chain-program family; fires at home on riir-chain + riir-dapps).**
 

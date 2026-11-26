@@ -4195,6 +4195,213 @@ synthesis, standalone-compiled AND executed)."
             family: SecFamily::InputValidation,
         },
 
+        // ══ Batch 424 (Plan 418 / Research 452, the on-chain ledger        ══
+        // ══ state-machine sec family — lean-svm + percolator): FIVE       ══
+        // ══ suggest-only InputValidation rules; R6 stayed dropped at its   ══
+        // ══ pre-registered first-drop. Fixtures in                        ══
+        // ══ fixtures/b424_sec_fixtures.rs, standalone-compiled AND        ══
+        // ══ executed (debug AND -O) BEFORE entry. Both sources are        ══
+        // ══ educational-only per their own READMEs: decision-content      ══
+        // ══ citation only, never runtime adoption.                        ══
+
+        // ── division-rounds-against-the-account (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "division-rounds-against-the-account".to_string(),
+            sec_concept: "every division that allocates value between the protocol and a user \
+picks its rounding DIRECTION as policy — amounts owed BY the protocol (payouts, mints, swap \
+proceeds) FLOOR so the residual dust stays with the account; amounts owed TO the protocol \
+(fees, debt, margin requirements, losses) CEIL so the protocol is never short by an epsilon — \
+the source's law, verbatim at the pin (percolator spec.md L77, Apache-2.0): 'All divisions \
+round against the account unless explicitly stated' + its explicit-sink requirement (L49: \
+'Rounding residue MUST NOT create account health, source-credit backing, insurance credit, \
+payout entitlement, or senior capital unless later moved through an explicit balanced \
+transition'), with the two-helper implementation discipline (lean-svm §10, SKILL.md:217-218, \
+Apache-2.0): 'Use LeanSVM.Math.mulDiv64 (floor, exact 128-bit) for user payouts/mints/swaps \
+and LeanSVM.Math.mulDiv64Ceil (ceil, exact 128-bit) for margin requirements, fees, and \
+debit/loss debits'. THE HARM IS ITERATIVE: a single epsilon is noise; a payout loop that \
+ceils extracts the reserve one epsilon per pass (the tamper arm — 1000 passes drain 1000 \
+epsilons). ⛔ KINSHIPS, BOTH directions: `unchecked-wire-arithmetic` (owns the bare-op WRAP \
+axis — unchecked arithmetic silently wrapping; THIS owns the CHECKED-but-wrong-DIRECTION \
+policy — the arithmetic is exact and still loses value); `packed-field-silent-overflow-wrong-key` \
+(owns the BIT-LOSS aliasing axis; THIS owns the ROUNDING-SIDE policy — both are silent value \
+loss, neither subsumes); `wide-reduction-precision-split` (Numerics — the accumulation-precision \
+axis, distinct from the allocation-direction axis); the percolator exact-domain law (256-bit \
+transient products, L77 same sentence) rides in-rule. REGIME: any value-splitting division — \
+AMM swaps, share minting, interest accrual, fee taking, liquidation bonuses, reward \
+distribution. ANTI-REGIME: divisions whose result is never compared or summed (display \
+rounding); exact divisions (no residue — both directions agree, the fixture's exact arm). \
+Rust shape: `fn round(amount, n, d, owes_protocol)` — floor or ceil by the policy flag, \
+never raw `/` at a value split. Suggest-only: WHICH side each call site owes is the \
+protocol's design. Detector: none at landing (the direction policy needs the call-site's \
+value-flow semantics a parse-only pass cannot bind). Fixture: `fixtures/b424_sec_fixtures.rs` \
+F1 (the user-favorable WRONG arm — ceil-on-payout mints dust; the floor arm; the ceil-on-fee \
+arm; the exact arm; the dust-loop tamper arm — 1000 passes extract 1000 epsilons). Batch 424 \
+/ Plan 418 / Research 452 (percolator @ afdadeca + lean-svm @ dd409de0, both Apache-2.0, \
+educational-only; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the swap payout computed with raw integer division — the \n/// rounding direction is whatever truncation does, never a policy.\npub fn swap_output(sell_amount: u128, num: u64, den: u64) -> u128 {\n    // raw /: truncates toward zero — the USER loses the dust every swap\n    sell_amount * u128::from(num) / u128::from(den)\n}\n\npub fn fee_charged(amount: u128, num: u64, den: u64) -> u128 {\n    // same raw /: the FEE also truncates down — the protocol is short\n    amount * u128::from(num) / u128::from(den)\n}\n".to_string(),
+            fixed_code: "/// FIXED: the direction is POLICY — payouts floor (the dust stays \n/// with the account), fees/debt ceil (the protocol is never short); \n/// exact divisions agree either way.\npub fn swap_output(sell_amount: u128, num: u64, den: u64) -> u128 {\n    // user payout: FLOOR — the residual stays protocol-side\n    sell_amount * u128::from(num) / u128::from(den)\n}\n\npub fn fee_charged(amount: u128, num: u64, den: u64) -> u128 {\n    // owed TO the protocol: CEIL — never short by an epsilon\n    let raw = amount * u128::from(num) / u128::from(den);\n    let exact = (amount * u128::from(num)) % u128::from(den) == 0;\n    if exact { raw } else { raw + 1 }\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── account-revival-tombstone-close-discipline (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "account-revival-tombstone-close-discipline".to_string(),
+            sec_concept: "a closed state-machine account must be made PERMANENTLY UNREUSABLE at close — \
+a permanent NONZERO tombstone magic distinct from every live magic AND from the fresh-init \
+sentinel (zero), the body ZEROED on both init and close (dirty memory never survives), and the \
+length check EXACT (never `>=`, a bigger buffer's tail holds stale bytes). The source's law, \
+verbatim at the pin (lean-svm §1, SKILL.md:37-43, Apache-2.0): 'Write a permanent nonzero \
+tombstone magic on close (e.g., MAGIC_CLOSED : UInt32 := 0x44454144), distinct from `0` and \
+every live magic, so neither live handlers nor fresh-init (`magic == 0`) branches can ever \
+accept a closed account' + 'Enforce exact dataLen == exactSize (never >=) on every account \
+check and init path' + 'Call zeroWords ... on both fresh initialization and close \
+(defense-in-depth)' — with the init law (:64): 'Always call zeroWords before writing initial \
+fields, or explicitly store 0 to every single field (including padding and array slots).' THE \
+REVIVAL CLASS: a close that only drops the handle (or closes into magic==0) leaves the bytes \
+in place; a same-transaction re-init reads magic==0 and trusts a body that still holds the \
+old balance — the atack drills through every pure-logic invariant at the memory boundary. ⛔ \
+KINSHIPS: distinct-from `execution-artifact-trust-ladder-before-deserialize` (B345 — the \
+trust-ladder BEFORE deserializing untrusted bytes; THIS owns the CLOSE-INIT lifecycle of \
+reused memory — the tombstone is the state machine's own law, the ladder is the reader's); \
+kin `untrusted-download-verify-then-atomic-install` (B345 — the bytes-integrity genus, distinct \
+surface); the home positive instance: riir-neuron-db's LocalKv tombstone + the chaind \
+lat-account law (cited never landed). REGIME: any state machine over REUSED memory slots — \
+on-chain accounts, slab/arena entries, pooled buffers with typed headers, session records in \
+shared maps. ANTI-REGIME: heap-allocated values freed wholesale (the allocator owns the \
+memory); append-only logs (nothing reused). Rust shape: `const MAGIC_CLOSED: u32 = <nonzero>` \
++ `close()` writing it + zeroing every field incl. padding + `init()` zeroing before writing \
++ exact-len checks. Suggest-only: the magic vocabulary and the size table are the state \
+machine's design. Detector: none at landing (the close/init lifecycle co-residence a parse-only \
+pass cannot bind). Fixture: `fixtures/b424_sec_fixtures.rs` F2 (the revival arm — the naive \
+close leaves balance 999 + the 0xFF tail, which survives into the next init's memory; the \
+tombstone arm — MAGIC_CLOSED distinct from every live magic, body zeroed; the zero-init arm; \
+the `>=` tamper arm carried in-rule). Batch 424 / Plan 418 / Research 452 (lean-svm @ \
+dd409de0, Apache-2.0, educational-only; the fixture is an original synthesis, \
+standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: close just marks magic = 0 (the fresh-init sentinel) and \n/// drops the handle — the body keeps every stale byte.\npub struct Slot { pub magic: u32, pub balance: u64, pub pad: [u8; 8] }\n\npub fn close_slot(slot: &mut Slot) {\n    slot.magic = 0; // same value as fresh-init: the revival door\n    // the balance and pad stay EXACTLY as they were\n}\n\npub fn init_slot(slot: &mut Slot, owner: [u8; 8], balance: u64) {\n    slot.magic = 0x1DEA_0001;\n    slot.balance = balance;\n    slot.pad = owner; // the stale pad would survive if this line were missing\n}\n".to_string(),
+            fixed_code: "/// FIXED: close writes a PERMANENT nonzero tombstone distinct from \n/// every live magic AND from the fresh sentinel; init zeroes every field \n/// before writing.\npub struct Slot { pub magic: u32, pub balance: u64, pub pad: [u8; 8] }\n\npub const MAGIC_LIVE: u32 = 0x1DEA_0001;\npub const MAGIC_CLOSED: u32 = 0x4445_4144; // nonzero, distinct from 0 AND live\n\npub fn close_slot(slot: &mut Slot) {\n    slot.magic = MAGIC_CLOSED;\n    slot.balance = 0;\n    slot.pad = [0u8; 8]; // the dirty tail never survives\n}\n\npub fn init_slot(slot: &mut Slot, owner: [u8; 8], balance: u64) {\n    slot.magic = 0;\n    slot.balance = 0;\n    slot.pad = [0u8; 8]; // zero BEFORE writing — dirty memory never leaks\n    slot.magic = MAGIC_LIVE;\n    slot.balance = balance;\n    slot.pad = owner;\n}\n\npub fn slot_is_live(slot: &Slot) -> bool {\n    slot.magic == MAGIC_LIVE // the tombstone fails every live check\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── share-pool-first-depositor-boundary-states (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "share-pool-first-depositor-boundary-states".to_string(),
+            sec_concept: "a share-pool (vault shares vs underlying assets, the ERC-4626 shape) has FOUR \
+boundary states and each is a falsifier arm — the source's enumeration, verbatim at the pin \
+(lean-svm §7, SKILL.md:165-168, Apache-2.0): (1) 'Drained-pool share revival (assets == 0 && \
+totalShares > 0): If bad debt drains assets to 0 while old LPs keep totalShares > 0, a new LP \
+minting 1:1 immediately donates oldShares / (oldShares + new) of their deposit to the wiped-out \
+LPs'; (2) 'Donation inflation (totalShares == 1 + large direct donation): Inflates 1 share to \
+huge value so honest deposits truncate (minted == 0) or lose value to rounding'; (3) 'Receipt-\
+to-total desync (receipt.shares > totalShares): Always guard curSh <= totSh on redemption and \
+prove totalShares = Σ receipt.shares'; (4) 'Trapped rent on closure: Allowing permissionless \
+pool tombstoning while receipts still hold nonzero worthless shares permanently blocks LPs \
+from closing their receipt accounts.' THE FIX DIRECTION: the first-deposit/wiped state must \
+RESET the share base (never silently mint into the stale base) and every deposit carries a \
+zero-mint guard (an honest deposit never truncates to 0 minted — the min-1 guard is the \
+floor). ⛔ KINSHIPS: distinct-from `division-rounds-against-the-account` (Batch 424 — the \
+DIRECTION policy on one division; THIS owns the BASE-STATE boundary conditions around the \
+whole share math — compose: the share computation inside uses that rule's floor/ceil law); \
+kin `unicode-deception`-class no; kin `unchecked-wire-arithmetic` (the overflow axis; THIS is \
+the boundary-STATE axis at the same vault shape). REGIME: pooled vaults — vault shares, \
+staking receipts, LP positions, collateral pools. ANTI-REGIME: single-owner balances (no share \
+math); pools whose shares are NFTs (1:1, no proportional mint). Rust shape: `deposit(amount)` \
+with the (totSh==0 ∨ assets==0) branch resetting the base + `shares.max(1)` zero-mint guard + \
+the Σreceipts == totSh invariant carried. Suggest-only: the reset policy is the pool's \
+design. Detector: none at landing (the pool-state machine a parse-only pass cannot bind). \
+Fixture: `fixtures/b424_sec_fixtures.rs` F3 (the drained-pool arm — no donation to the wiped \
+base; the inflation arm — the honest deposit never truncates to zero; the honest 1:1 arm; the \
+Σshares-tracking arm). Batch 424 / Plan 418 / Research 452 (lean-svm @ dd409de0, Apache-2.0, \
+educational-only; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the share mint trusts the ratio in every state — the \n/// drained pool and the inflated pool both eat the honest depositor.\npub struct Pool { pub assets: u128, pub total_shares: u128 }\n\npub fn deposit(pool: &mut Pool, amount: u128) -> u128 {\n    // total_shares == 0 → shares = amount * 0 / assets = 0: the deposit \n// VANISHES (minted == 0, assets still credited — a pure donation)\n    // assets == 0 ∧ total_shares > 0 → 1:1 mint into the STALE base: \n// the new depositor donates to wiped-out old LPs\n    let shares = amount * pool.total_shares / pool.assets.max(1);\n    pool.total_shares += shares;\n    pool.assets += amount;\n    shares\n}\n".to_string(),
+            fixed_code: "/// FIXED: the boundary states are GUARDED — a fresh-or-wiped pool \n/// resets the share base (no silent donation), every deposit carries a \n/// zero-mint guard (an honest deposit never truncates to 0).\npub struct Pool { pub assets: u128, pub total_shares: u128 }\n\npub fn deposit(pool: &mut Pool, amount: u128) -> u128 {\n    if pool.total_shares == 0 || pool.assets == 0 {\n        // fresh-or-wiped: the share base RESETS to this deposit — the \n// stale base never receives the newcomer's value\n        pool.total_shares += amount;\n        pool.assets += amount;\n        return amount;\n    }\n    let shares = (amount * pool.total_shares / pool.assets).max(1);\n    pool.total_shares += shares;\n    pool.assets += amount;\n    shares\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── account-pair-aliasing-distinct-key (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "account-pair-aliasing-distinct-key".to_string(),
+            sec_concept: "a transfer/settlement taking a SOURCE and DESTINATION pair must check the keys \
+DISTINCT before any read or write — the two aliasing modes both break conservation: the \
+EXTERNAL no-op (source==dest on a token program makes the transfer a silent no-op — the vault \
+balance never moves while the program still credits the recipient's internal balance, \
+materializing tokens from nothing) and the INTERNAL overwrite (from==to on a read-both-\
+write-both settlement overwrites the debit with the credit — bal - amt then bal + amt on the \
+same cell, the amount teleports). The source's law, verbatim at the pin (lean-svm §5, \
+SKILL.md:125-126, Apache-2.0): 'SPL Token self-transfer (source == dest): Passing vault as \
+destTok on withdrawal makes SPL Token execute a no-op (vault SPL balance unchanged) while the \
+program still decrements its internal vaultBalance (internal < SPL, permanently orphaning \
+tokens and breaking exact stock conservation)' + 'Direct lamport self-transfer (from == to): \
+Reading both fromBal and toBal before writing (setLamports from (bal - amt); setLamports to \
+(bal + amt)) overwrites the debit with bal + amt (or corrupts internal balances).' ⛔ \
+KINSHIPS: distinct-from `packed-field-silent-overflow-wrong-key` (B418-adjacent — the corpus's \
+one other `aliasing` hit is the bit-PACKING key axis; THIS owns the PAIR-IDENTITY axis — \
+adjudicate in-rule both directions); kin `externally-authored-edits-by-id-not-counted-index` \
+(B331 — identity-vs-range validity at the addressing sink; THIS is the identity check on a \
+PAIR); the conservation genus: THIS and the tombstone rule (Batch 424) both protect exact \
+stock conservation, at the transfer seam vs the lifecycle seam. REGIME: any two-party \
+settlement — token transfers, balance moves, role hand-offs, key rotations (old==new is the \
+same shape). ANTI-REGIME: single-account operations (burn/mint — no pair); operations where \
+self-transfer is a LEGAL no-op the caller intends (then the check is the explicit intent, \
+not the default). Rust shape: `if from_key == to_key { refuse }` FIRST, before any read. \
+Suggest-only: the key vocabulary is the protocol's design. Detector: none at landing (the \
+pair-identity semantics a parse-only pass cannot bind). Fixture: `fixtures/b424_sec_fixtures.rs` \
+F4 (the no-op arm — the vault never moved while the recipient was credited; the overwrite arm \
+— the debit vanished; the distinct-key arm refusing both aliasings; the all-safe arm). Batch \
+424 / Plan 418 / Research 452 (lean-svm @ dd409de0, Apache-2.0, educational-only; the fixture \
+is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the settlement reads both balances and writes both — no \n/// distinct-key check anywhere.\npub fn settle(from: &mut Account, to: &mut Account, amount: u64) {\n    let from_bal = from.balance;\n    let to_bal = to.balance;\n    from.balance = from_bal - amount;\n    to.balance = to_bal + amount;\n}\n\npub struct Account { pub key: u32, pub balance: u64 }\n".to_string(),
+            fixed_code: "/// FIXED: the distinct-key check runs FIRST — before any read — \n/// refusing both aliasings at the door.\npub fn settle(from: &mut Account, to: &mut Account, amount: u64) -> Result<(), &'static str> {\n    if from.key == to.key {\n        return Err(\"aliased pair refused: source == destination\");\n    }\n    if from.balance < amount {\n        return Err(\"insufficient balance\");\n    }\n    from.balance -= amount;\n    to.balance += amount;\n    Ok(())\n}\n\npub struct Account { pub key: u32, pub balance: u64 }\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
+        // ── cpi-callee-id-unpinned (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "cpi-callee-id-unpinned".to_string(),
+            sec_concept: "a callee/program identifier arriving from the UNTRUSTED request executes \
+unpinned — an attacker deploys a trivial look-alike that returns success without doing the \
+work, the call succeeds, and the caller credits its internal state for work that never \
+happened. The source's law, verbatim at the pin (lean-svm §4, SKILL.md:102-109, Apache-2.0): \
+'A program invokes tokenTransferChecked tokProg ... or systemTransfer sysProg ... without \
+verifying tokProg or sysProg's 32-byte pubkey. An attacker deploys/passes a trivial \
+executable noop.so (returns 0 immediately) as tokProg or sysProg: the CPI succeeds, no \
+tokens/SOL move, and the program credits the attacker's internal balance for free.' + the \
+fix: 'For custom downstream CPI targets, pin against the 32-byte pubkey stored in an \
+immutable config account.' ⛔ THE HOME ANTI-REGIME (the plan's own arm): THIS workspace's \
+riir-chain program plane dispatches on a COMPILED match table — the callee is a structural \
+variant of the dispatch enum, never a runtime-supplied number, so the class structurally \
+cannot exist at home (the fixture pins the contrast arm); the rule is for the class of \
+state machines whose callee ids arrive on the wire. ⛔ KINSHIPS: adjudicated BOTH \
+directions vs `external-helper-config-pinned-invocation` (B389 atlas — the SAME genus 'a \
+callee whose identity must come from trusted config', at the SPAWN seam vs the CPI sink — \
+compose on a job runner that both spawns helpers and calls sub-services); \
+`browser-reachable-service-host-origin-rebinding-gate` (B329 — the INBOUND identity gate; \
+THIS is the OUTBOUND callee pin); `credential-rebind-partial-update-explicit-position` (B420 \
+— the destination-change law; a callee rotation is the same explicit-position need). REGIME: \
+any dispatch on a request-supplied callee/target/subprogram id — plugin hosts, webhook \
+validators, downstream service calls. ANTI-REGIME: compiled-match dispatch (the structural \
+arm); pinned-at-construction callee tables. Rust shape: the callee id stored in an \
+immutable config record, checked at EVERY call; a request-supplied id refuses even when it \
+equals the pinned value (provenance is the law, not the value). Suggest-only: the config \
+record's shape is the protocol's design. Detector: none at landing (the request-vs-config \
+provenance a parse-only pass cannot bind). Fixture: `fixtures/b424_sec_fixtures.rs` F5 (the \
+spoofed arm — the noop fake succeeds; the pinned arm; the request-supplied-right-id arm — \
+refused on provenance; the custom-target tamper arm — every callee pins; the home \
+anti-regime arm — compiled-match dispatch). Batch 424 / Plan 418 / Research 452 (lean-svm @ \
+dd409de0, Apache-2.0, educational-only; the fixture is an original synthesis, \
+standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the callee program id rides the request and executes \n/// unpinned — whoever the attacker names gets the call.\npub fn execute_transfer(\n    callee_prog_id: u32,\n    vault: &mut Vault,\n    amount: u64,\n) -> Result<(), String> {\n    // the call succeeds as long as SOMETHING answers success — a fake \n// program that does nothing returns 0 and the vault never moves\n    let ok = call_external(callee_prog_id, amount);\n    if ok {\n        vault.credits += amount; // the internal credit for work that never happened\n        Ok(())\n    } else {\n        Err(String::from(\"transfer failed\"))\n    }\n}\n\npub struct Vault { pub credits: u64 }\n\nfn call_external(_: u32, _: u64) -> bool {\n    true // the attacker's fake program: instant success, no movement\n}\n".to_string(),
+            fixed_code: "/// FIXED: the callee id comes from the immutable config record and \
+/// is checked at EVERY call — a request-supplied id refuses even when \
+/// it equals the pinned value (provenance is the law).\npub fn execute_transfer(\n    callee: CalleeRef,\n    vault: &mut Vault,\n    amount: u64,\n) -> Result<(), String> {\n    match callee {\n        CalleeRef::ConfigPinned(id) if id == TOKEN_PROGRAM => {\n            let ok = call_external(id, amount);\n            if ok {\n                vault.credits += amount;\n                Ok(())\n            } else {\n                Err(String::from(\"transfer failed\"))\n            }\n        }\n        _ => Err(String::from(\"callee unpinned: id must come from the immutable config\")),\n    }\n}\n\npub const TOKEN_PROGRAM: u32 = 0x1001;\npub struct Vault { pub credits: u64 }\npub enum CalleeRef { FromRequest(u32), ConfigPinned(u32) }\n\nfn call_external(_: u32, _: u64) -> bool {\n    true // only the PINNED id ever reaches this\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+
     ]
 }
 
@@ -4606,8 +4813,8 @@ mod tests {
         ];
         assert_eq!(
             all.len(),
-            104,
-            "the sec corpus count: 99 + 5 batch-423 rules"
+            109,
+            "the sec corpus count: 104 + 5 batch-424 rules"
         );
         for (id, family) in ids {
             let r = all
@@ -6324,6 +6531,136 @@ fn batch423_rules_present_families_and_provenance() {
         assert!(
             b4.sec_concept.contains(needle),
             "B4 needle {needle:?} missing"
+        );
+    }
+}
+
+/// Batch 424 — the on-chain ledger state-machine sec family (Plan 418 /
+/// Research 452, lean-svm + percolator): present, parsed, decision content
+/// pinned.
+#[test]
+fn batch424_rules_present_families_and_provenance() {
+    let all = entries();
+    let ids = [
+        (
+            "division-rounds-against-the-account",
+            SecFamily::InputValidation,
+        ),
+        (
+            "account-revival-tombstone-close-discipline",
+            SecFamily::InputValidation,
+        ),
+        (
+            "share-pool-first-depositor-boundary-states",
+            SecFamily::InputValidation,
+        ),
+        (
+            "account-pair-aliasing-distinct-key",
+            SecFamily::InputValidation,
+        ),
+        ("cpi-callee-id-unpinned", SecFamily::InputValidation),
+    ];
+    for (id, family) in ids {
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-424 rule '{id}' missing from corpus"));
+        assert_eq!(r.family, family, "batch-424 {id} family");
+        assert!(
+            r.sec_concept
+                .contains("Batch 424 / Plan 418 / Research 452"),
+            "batch-424 {id} must cite its landing lineage"
+        );
+        assert!(
+            r.sec_concept.contains("standalone-compiled AND executed"),
+            "batch-424 {id} must carry the fixture-preflight provenance"
+        );
+        assert!(
+            r.sec_concept.contains("Suggest-only"),
+            "batch-424 {id} must be suggest-only"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC.contains(&r.rule_id.as_str()),
+            "batch-424 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        // both halves parse
+        assert!(
+            syn::parse_file(&r.buggy_code).is_ok() && syn::parse_file(&r.fixed_code).is_ok(),
+            "batch-424 {id} buggy/fixed must both parse"
+        );
+    }
+    // R1's direction law + both-directions adjudication
+    let r1 = all
+        .iter()
+        .find(|r| r.rule_id == "division-rounds-against-the-account")
+        .unwrap();
+    for needle in [
+        "All divisions round against the account unless explicitly stated",
+        "unchecked-wire-arithmetic",
+        "packed-field-silent-overflow-wrong-key",
+    ] {
+        assert!(
+            r1.sec_concept.contains(needle),
+            "R1 needle {needle:?} missing"
+        );
+    }
+    // R2's tombstone law + the revival class
+    let r2 = all
+        .iter()
+        .find(|r| r.rule_id == "account-revival-tombstone-close-discipline")
+        .unwrap();
+    for needle in [
+        "distinct from `0` and every live magic",
+        "execution-artifact-trust-ladder-before-deserialize",
+    ] {
+        assert!(
+            r2.sec_concept.contains(needle),
+            "R2 needle {needle:?} missing"
+        );
+    }
+    // R3's four boundary states
+    let r3 = all
+        .iter()
+        .find(|r| r.rule_id == "share-pool-first-depositor-boundary-states")
+        .unwrap();
+    for needle in [
+        "Drained-pool share revival",
+        "Donation inflation",
+        "Receipt-to-total desync",
+        "Trapped rent",
+    ] {
+        assert!(
+            r3.sec_concept.contains(needle),
+            "R3 needle {needle:?} missing"
+        );
+    }
+    // R4's two aliasing modes + the packed-field adjudication
+    let r4 = all
+        .iter()
+        .find(|r| r.rule_id == "account-pair-aliasing-distinct-key")
+        .unwrap();
+    for needle in [
+        "permanently orphaning tokens and breaking exact stock conservation",
+        "packed-field-silent-overflow-wrong-key",
+    ] {
+        assert!(
+            r4.sec_concept.contains(needle),
+            "R4 needle {needle:?} missing"
+        );
+    }
+    // R5's noop.so law + the home anti-regime + the B389 adjudication
+    let r5 = all
+        .iter()
+        .find(|r| r.rule_id == "cpi-callee-id-unpinned")
+        .unwrap();
+    for needle in [
+        "noop.so",
+        "compiled-match dispatch",
+        "external-helper-config-pinned-invocation",
+    ] {
+        assert!(
+            r5.sec_concept.contains(needle),
+            "R5 needle {needle:?} missing"
         );
     }
 }

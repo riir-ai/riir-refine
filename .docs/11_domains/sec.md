@@ -688,6 +688,61 @@ order_by + limit+1 the extra-row sentinel — not a Rust-shaped decision contrac
 decision NEGATIVE). Fixtures `fixtures/b423_sec_fixtures.rs` 5 rules × 4 arms standalone-compiled AND
 executed pre-entry (debug AND -O).
 
+## Batch 424 (2026-11-26, tranche B+) — the on-chain ledger state-machine sec family
+
+corpus 104 → 109, FIVE suggest-only InputValidation rules + R6 dropped at its pre-registered
+first-drop (Plan 418 / Research 452 — lean-svm @ `dd409de0` + percolator @ `afdadeca`, both Apache-2.0
+educational-only: decision-content citation only, never runtime adoption): `division-rounds-against-the-account`
+(the LEAD — percolator spec.md L77 verbatim "All divisions round against the account unless explicitly
+stated" + the explicit-residue-sink law L49 + lean-svm's two-helper floor/ceil discipline (mulDiv64 for
+payouts, mulDiv64Ceil for fees/debt); the dust-loop tamper arm — iterating a ceil-payout extracts the
+reserve one epsilon per pass; adjudicated vs unchecked-wire-arithmetic (wrap vs checked-direction) +
+packed-field-silent-overflow-wrong-key (bit-loss vs rounding-side) BOTH directions in-rule) +
+`account-revival-tombstone-close-discipline` (lean-svm §1 verbatim — permanent nonzero tombstone magic
+distinct from every live magic AND the fresh sentinel, zeroWords on init AND close incl. padding, exact
+len never >=; the revival arm — a naive close leaves the stale balance and 0xFF tail into the next init's
+memory; adjudicated vs execution-artifact-trust-ladder B345 lifecycle-vs-reader in-rule) +
+`share-pool-first-depositor-boundary-states` (lean-svm §7 verbatim — the FOUR boundary states as
+falsifier arms: drained-pool revival (assets==0 ∧ totSh>0 donates to wiped LPs), donation inflation
+(totSh==1 + large donation truncates honest deposits to 0 minted), receipt-to-total desync, trapped
+rent; the reset-base + zero-mint-guard fix; compose with division-rounds inside the share math) +
+`account-pair-aliasing-distinct-key` (lean-svm §5 verbatim — the SPL no-op self-transfer (vault→vault:
+nothing moves while the program credits, tokens materialize from nothing) + the read-both-write-both
+overwrite (the debit vanishes); the distinct-key check FIRST before any read; adjudicated vs
+packed-field-silent-overflow-wrong-key (bit-packing vs pair-identity) in-rule) + `cpi-callee-id-unpinned`
+(lean-svm §4 verbatim — the noop.so attack: a request-supplied callee succeeds without doing the work and
+the program credits on nothing; the pin-against-immutable-config fix; the request-supplied-right-id arm
+refuses on PROVENANCE; THE HOME ANTI-REGIME arm — riir-chain's compiled-match dispatch is the structural
+counter-instance; adjudicated vs external-helper-config-pinned-invocation B389 spawn-vs-CPI sink BOTH
+directions + B329 inbound + B420 explicit-position in-rule). R6 stale-leg-refresh DROPPED at its
+pre-registered first-drop (regime unreachable in a bounded fixture); abort-semantics recorded as the home
+POSITIVE INSTANCE (MintCeiling "refusals write nothing"); drops PDA-pre-fund + is_signer recorded
+(vocab-specific, no bounded Rust-general shape). Fixtures `fixtures/b424_sec_fixtures.rs` 5×4 arms
+standalone-compiled AND executed pre-entry (debug AND -O; two arm defects caught: the vault-type mismatch
+in F5 and the conservation-assert framing in F4 — both fixed pre-entry).
+
+## Batch 424 (2026-11-26, B+) — the on-chain ledger state-machine sec family
+
+corpus 104 → 109, FIVE suggest-only InputValidation rules + R6 dropped at its pre-registered first-drop
+(Plan 418 / Research 452 — lean-svm @ `dd409de0` + percolator @ `afdadeca`, both Apache-2.0
+educational-only): `division-rounds-against-the-account` (the LEAD — spec.md L77 verbatim "All divisions
+round against the account unless explicitly stated" + the explicit-residue-sink law L49 + the two-helper
+floor/ceil discipline; the dust-loop tamper arm; unchecked-wire-arithmetic + packed-field
+BOTH-directions in-rule) + `account-revival-tombstone-close-discipline` (lean-svm §1 verbatim — permanent
+nonzero tombstone distinct from 0 AND every live magic, zero on init AND close incl. padding, exact len
+never >=; the revival arm; execution-artifact-trust-ladder lifecycle-vs-reader in-rule) +
+`share-pool-first-depositor-boundary-states` (lean-svm §7 verbatim — the FOUR boundary states as
+falsifier arms: drained revival / donation inflation / receipt desync / trapped rent; reset-base +
+zero-mint-guard; compose with division-rounds) + `account-pair-aliasing-distinct-key` (lean-svm §5
+verbatim — the SPL no-op self-transfer + the read-both-write-both overwrite; distinct-key FIRST;
+packed-field bit-packing-vs-pair-identity in-rule) + `cpi-callee-id-unpinned` (lean-svm §4 verbatim —
+the noop.so attack; pin-against-immutable-config; the request-supplied-right-id arm refuses on
+PROVENANCE; THE HOME ANTI-REGIME arm — riir-chain's compiled-match dispatch is the structural
+counter-instance; external-helper-config B389 spawn-vs-CPI BOTH directions + B329 + B420 in-rule). R6
+stale-leg-refresh DROPPED (regime unreachable in a bounded fixture); abort-semantics the home POSITIVE
+INSTANCE (MintCeiling "refusals write nothing"). Fixtures `fixtures/b424_sec_fixtures.rs` 5×4 arms
+standalone-executed pre-entry (debug AND -O; two arm defects caught and fixed pre-entry).
+
 ## Batch 423 (2026-11-26, tranche B) — the sweep's contestables
 
 corpus 99 → 104, FOUR suggest-only InputValidation rules + three recorded drops (Plan 417 tranche B /
