@@ -6,7 +6,7 @@
   "dist_rules": 8,
   "docker_rules": 31,
   "kernel_opt": {
-    "rules": 1144,
+    "rules": 1153,
     "witness": {
       "activity_dim": 8,
       "experts": 15,
@@ -16,8 +16,8 @@
   "rust_perf": {
     "benchable": 146,
     "categories": 15,
-    "notbenchable": 276,
-    "rules": 422
+    "notbenchable": 283,
+    "rules": 429
   },
   "sec": {
     "rules": 109
