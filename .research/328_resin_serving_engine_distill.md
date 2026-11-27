@@ -1,6 +1,6 @@
 # Resin (ekzhang/resin) — serving-engine distill verdict
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED (Batch 426 — the corpus + gates landed; the seven rules ride entries_109, all suggestion-only NotBenchable-by-domain; the #7 GOAT lead awaits its Pareto cell)
 
 - **Source:** https://github.com/ekzhang/resin @ `c14ee9d0e84a79cf0168fa117745787de968f63f` (cloned `.raw/resin/` 2026-10-26, shallow, `rev-parse` pinned; last commit 2026-10-26 01:04 -0400 "Support logprobs in overlap decoding" — actively maintained; Apache-2.0 at the root LICENSE + NOTICE + every crate manifest).
 - **Inspection:** 2026-10-26, M3, user-directed @distill. Round-1 web fetch + full `.raw` clone; Round-2 read `Cargo.toml` ×4, `scheduler.rs` (752 L, in full), `resources/kv.rs` (628 L), `resources/prefix.rs` (301 L, in full), `resources/paged.rs` (2,741 L — head 1–160 + fn map + reserve/grow/share/attach/retire bodies 820–1,260), `engine.rs` (2,513 L — head 1–480, step/continuation 908–1,200, retraction/poison 1,700–1,900), `planning.rs` chunk core 60–150, `parser.rs` head, `numa.rs`, http/py surfaces by grep. Round-3 dedup greps over both corpora (evidence below).

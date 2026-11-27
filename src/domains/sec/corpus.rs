@@ -4665,6 +4665,7 @@ mod tests {
     /// family, provenance discipline; the re-pin note + the adjudication
     /// needles. All five suggest-only, never `FIXABLE_SEC`.
     #[test]
+    #[allow(clippy::too_many_lines)] // exhaustive family+provenance gate (pre-B426 landing residue fix at the B426 landing)
     fn batch420_rules_present_families_and_provenance() {
         let all = entries();
         let ids = [
@@ -4799,6 +4800,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)] // exhaustive family+provenance gate (pre-B426 landing residue fix at the B426 landing)
     fn batch422_rules_present_families_and_provenance() {
         let all = entries();
         let ids = [
@@ -6408,6 +6410,7 @@ fn batch402_deny_list_rule_present_and_pinned() {
 /// Batch 423 — the security-tools sweep's tranche-B contestables (Plan 417 /
 /// Research 451): present, parsed, decision content pinned.
 #[test]
+#[allow(clippy::too_many_lines)] // exhaustive family+provenance gate (pre-B426 landing residue fix at the B426 landing)
 fn batch423_rules_present_families_and_provenance() {
     let all = entries();
     let ids = [
@@ -6539,6 +6542,7 @@ fn batch423_rules_present_families_and_provenance() {
 /// Research 452, lean-svm + percolator): present, parsed, decision content
 /// pinned.
 #[test]
+#[allow(clippy::too_many_lines)] // exhaustive family+provenance gate (pre-B426 landing residue fix at the B426 landing)
 fn batch424_rules_present_families_and_provenance() {
     let all = entries();
     let ids = [
