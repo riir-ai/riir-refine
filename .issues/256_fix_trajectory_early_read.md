@@ -1,7 +1,9 @@
 # Issue 256 — fix-trajectory early-read: census the "will-verify-fail" predictor before any wiring
 
 **Status:** Open — consumer POC filed 2026-11-24 from `../katgpt-rs/.research/692_RET_Macrostate_Closure_Audit.md` (arXiv:2605.09294); rides the SHIPPED Plan-292 FutureBehaviorProbe substrate + 301 direction-bank pattern; UNBLOCKED 2026-11-25 (katgpt-rs 1244 T1+T2 LANDED — `c80cf19e7` + `8adb663a9`, Bench 994 G2 PASS). **Numbering note:** allocated as 255 concurrently with `.issues/255_fixer_classes45_used_binding_and_with_capacity.md` (the two-sessions-one-highwater class); renumbered 255→256 at the rebase — 255 keeps the first-pushed holder.
-**Claimed:** zed-8895fce6@m3, 1795544400, expires 2026-11-27T18:00:00+00:00
+**Lease closed:** zed-8895fce6@m3, 1795544400, was expires 2026-11-27T18:00:00+00:00 — lapsed unlanded past T0 (the instrument + census record landed 11-25; T0c stayed open; m3 dark all day, no renewal)
+**Claimed:** zed-600a1d37@4090, 1796289700, expires 2026-11-27T23:00:00+00:00
+**Claim scope:** T0c(b) deliberate capture — the repair-lane driver arm (`rustc_errors_floor --only driver --dump-fixseq`) over the workspace's own known-compile-error corpus in the dedicated ring root, both mint configs (chunked + strided), then the census re-run (T0 LORO + T1 macrostate) over the grown corpus + the record (.benchmarks/168). No wiring; T2/T3 stay gated per the issue.
 
 ## What
 
