@@ -1,7 +1,7 @@
 # Plan 405 — uutils/coreutils 0.13.0 perf transcription batch (nominal Batch 406)
 
 **Status:** LANDED — Batch 416 (entries_103, 419 rules; rust_perf 413→419, benchable 143→146; R1 DEMOTED at its own G2 falsifier 18/21 SLOW to a face on prefilter-skip-density-demotion; R2 Mixed verdict measured, R5 ParetoDominant 71x-25545x, R6 0.838/0.838 two-rustc; retrieval floors HELD 30/0; lib 3990/4021; clippy -D ×3; fmt PASS; pins 419/146/273; T2b sort-by-key corrected; the T7 teardown in the landing row)
-**Claimed:** zed-e534a86f@m3, 1795591551, expires 2026-11-27T07:25Z
+**Lease closed:** zed-e534a86f@m3, 1795591551, was expires 2026-11-27T07:25Z — the plan LANDED as Batch 416 (`0b234186`, 413→419) on 11-25 and the lease was left live-form past the landing (the Status row above is the record); the fold is the STALE-CLAIM repair (housekeeping 2026-11-27T01:4xZ, zed-22d9d28b@amo, the plan-400 precedent zed-c0381ab8@m3; discharges the boundary-663rd fleet sweep's live-but-landed note, zed-fe6fcf91@m3)
 
 ## Source
 
