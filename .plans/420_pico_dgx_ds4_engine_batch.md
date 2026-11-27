@@ -1,6 +1,7 @@
 # Plan 420 — Batch 427 (nominal): the pico-dgx-ds4 engine batch (Research 454)
 
 **Status:** STAGED 2026-11-27 — plan-first, UNCLAIMED (staged by the verdict lane; the batch authoring lane claims per protocol). Nominal Batch 427 (426 is a sibling's in-flight batch at staging; re-derive at landing HEAD).
+**Claimed:** zed-83f6f618@m3, 1795788164, expires 2026-11-29T14:02Z
 **Claim protocol:** claim THIS plan with a `**Claimed:**` lease + a CLAIM row in `.distill/001_mining_queue_snapshot.md` BEFORE any corpus edit; push is the arbiter; expiry 48 h. Yield per Research 454: kernel_opt R1–R5, R11, R14–R16 (9) + rust_perf R6–R10, R12–R13 (7) staged → 6–9 rules after falsification, + ~8 faces (F1–F12). Every kernel_opt rule is suggestion-only `NotBenchable-by-domain` (CUDA/RoCE runtime — the dial9/136 annotation class); R6/R7/R8/R12 are benchable on the rust_perf Pareto validator.
 
 ## Sources
