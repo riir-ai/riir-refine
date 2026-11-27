@@ -1,6 +1,6 @@
 # Research 454 — pico-dgx-ds4 distill verdict (Ciru Inference Lab page + Picom-code/pico-dgx-ds4)
 
-**Status:** DISTILLED — pending owner decision (staged: Plan 420, nominal Batch 427; no claim lease taken — the batch authoring lane claims per protocol)
+**Status:** LANDED — Batch 427 (commit ce605f5d9, pushed 2026-11-27T14:xxZ): 9 kernel_opt + 7 rust_perf rules + 8 count-neutral faces landed by zed-83f6f618@m3; R7 falsifier did NOT fire (paired 153/200 vs median 117/200); fixtures 43+11 standalone pre-entry; yield 16 rules + 8 faces vs the restated 6-9 + ~8 — above estimate, disclosed
 **Date:** 2026-11-27 (m3 docs-only verdict lane; zero cargo, zero GPU — m3 NOT quiet, load 20.5/16, a `riir-chaind` contender; the four inspection lanes + every coordinator spot-check were file reads)
 **Source (page):** https://llm.ciru.ai/research/deepseek-v41-flash-pico/ — "DeepSeek V4.1 Flash · 2× M5 Ultra Mac Studio vs. 4× DGX Spark with Pico" (Ciru Inference Lab · Crown Citadel Group, dated 2026-11-26; fetched live this session + its `benchmark-data.json`)
 **Source (repo):** https://github.com/Picom-code/pico-dgx-ds4 @ `922dddb1a35e521148022ee11264632da1f0ddc0` (tip == the page's pin, commit-dated 2026-11-20T09:06:13-06:00; **MIT**, Copyright (c) 2026 Andy Shu — a fork of `blaesus/dsgx10`, changes by Patrick Moorhead; shallow clones `.raw/pico-dgx-ds4` (14 MB) + `.raw/mia-tensorfold` (2.8 MB) + `.raw/ciru-page`, ALL removed at the verdict commit — re-clone at the pin at T0)
