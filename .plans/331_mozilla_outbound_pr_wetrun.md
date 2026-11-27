@@ -2,9 +2,9 @@
 
 **Renumbered:** 329 → 331 on 2026-11-03 (owner-directed collision fix; first-allocation loss to `329_engine_mozilla_methodology_port` — that file landed 3.5 h earlier, `ee0a6901` 11-02T13:08+07 vs this file's `531b83af` 11-02T16:41+07; bench 127 + issue 198 citations moved in the same commit). The claim line below is unchanged.
 
-**Status:** the push is the arbiter (re-claim after the wetrun lease expired; this lease covered T6a-exec: the owner-directed day-2 full-domain `cargo refine` sweep + the sccache #2968 backend-backoff G-PR1 bench — reshaped standalone 2026-11-25, the embedded-claim class; the lease reads EXPIRED, re-claim is a normal re-read)
+**Status:** COMPLETE — the wetrun executed end to end: #2977 sent 11-02 and MERGED 11-07 (`907230be`); #2968's evidence-bearing send cleared all four gates (G-PR1 7.60×, G-PR2 verdict AGREE 11-04 round 3, G-PR3 SVG) and **G-PR4 LANDED 2026-11-11 as [mozilla/sccache#3025](https://github.com/mozilla/sccache/pull/3025)** with owner in-session authority ("call final verdict and we good to go; gh is logged in"; kat-secret ceremony waived by the owner, ambient gh auth as katopz; the four standing decisions recorded owner-given), review-response round landed 11-12 (mitander's two comments, round-2 commits `831e50f`+`7f297fb`). The live outcome thread (reviews, CI surfaces, merge/close) is `.benchmarks/128_mozilla_rustperf_day2/README.md`, not this plan.
 
-**Claimed:** zed-m3-mozilla-day2, 1793800175, expires 2026-11-06T13:49Z
+**Lease closed:** zed-m3-mozilla-day2, 1793800175, was expires 2026-11-06T13:49Z — folded 2026-11-27 (zed-3ec64b7c@amo); the lease covered T6a-exec, which is DONE (G-PR2 AGREE + the G-PR4 send #3025 discharged it), so the line is a stale claim, not open work.
 
 Executing [Proposal 022](../.proposals/022_outbound_fix_pr_campaign.md) (outbound fix-PR campaign) as a **manual wetrun** against the Mozilla quartet the owner named ([Proposal 025](../.proposals/025_mozilla_human_scale_ai_incubator.md) evidence: real upstream PRs are the grant's "product-community fit" proof, the self-graded WEAK criterion). The `harvest` CLI feature (Proposal 022 T1.x) does NOT exist yet — this wetrun applies the pipeline's GATES BY HAND and defers the feature to its own later plan. Owner-directed 2026-11-02: "wetrun first" (the real sends, not more planning); forks land in the `riir-ai` GitHub org; gh auth = the owner completes the device-flow login, sends are owner-approved per the 022 account rule.
 
@@ -61,7 +61,7 @@ The sibling distill (Research 362) verified that sccache's `posix_spawn` fallbac
 
 | # | repo | branch | one-liner | status |
 |---|---|---|---|---|
-| 1 | mozilla/sccache | `refine/cachedir-tag` @ `b97bcc0` | CACHEDIR.TAG per the cache-directory tagging spec (fixes their #2975); 80 insertions, 1 file; MSRV 1.91.0 gates green (598 tests, 0 clippy findings at their CI flags, fmt clean) | READY — awaiting owner approve + gh auth |
+| 1 | mozilla/sccache | `refine/cachedir-tag` @ `b97bcc0` | CACHEDIR.TAG per the cache-directory tagging spec (fixes their #2975); 80 insertions, 1 file; MSRV 1.91.0 gates green (598 tests, 0 clippy findings at their CI flags, fmt clean) | **SENT 2026-11-02 — [#2977](https://github.com/mozilla/sccache/pull/2977) MERGED 11-07 (`907230be`)** |
 | 2 | mozilla/uniffi-rs | — | NO day-1 PR: tree clippy-clean at 1.94.0; the engaged fix space (#3011 via PR #3020) is another contributor's CHANGES_REQUESTED PR — piling a competing PR needs an owner call | HELD |
 
 ## Send mechanics (post-login, one shot)
