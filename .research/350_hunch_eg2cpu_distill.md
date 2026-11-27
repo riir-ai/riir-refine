@@ -1,6 +1,6 @@
 # Research 350 — undrgrnd-labs/hunch `eg2cpu` distill: the EmbeddingGemma-2 CPU engine (SME/NEON/AMX) + the request scheduler
 
-**Status:** DISTILLED — pending owner decision (mining verdict; batch staged as Plan 311, nominal batch number queue-assigned at landing, behind the live queue).
+**Status:** DISTILLED — batch LANDED as Batch 429 2026-11-28 (Plan 311, entries_110, 3 rules; the landing commit is the record; candidate 5 dropped per its pre-registered default, candidate 4 stays riir-infer lane intel unfiled — the owner go still owed).
 
 > Source: `undrgrnd-labs/hunch` @ `22cf73010b0d399894068b1b9d21c5e4101514b6` (shallow clone 2026-10-29 into `.raw/hunch`, read + removed at the verdict commit). **MIT OR Apache-2.0** (LICENSE files verified present). User-directed dual session (@research + @distill); the decision-tier half is riir-rethink Research 015 + Issue 042. Provenance: Google EmbeddingGemma 2 (Apache-2.0 checkpoint, not included) + the repo's own kernels (no upstream port chain beyond the model card; the SME/NEON/AMX kernels are original work, measured in `docs/performance.md`).
 
