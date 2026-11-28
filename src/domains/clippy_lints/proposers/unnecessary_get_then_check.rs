@@ -30,7 +30,8 @@
 //!   `&str` are deliberately NOT index-like — `str::get` is also a
 //!   char-boundary check, so the comparison form is not equivalent there.
 //! - **Unknown** (no parse-time evidence: untyped bindings, cross-file
-//!   types, method-call and deep-field receivers, closure params): the
+//!   types, method-call receivers, field chains with an unresolvable
+//!   hop, closure params): the
 //!   site DECLINES — manual repair. The `--verify` compile gate remains
 //!   the backstop only for the two provable classes; the decstat casualty
 //!   shipped because the gate compiled a posture the gated file did not
@@ -41,8 +42,11 @@
 //! One map of in-file `struct` fields, one table of type aliases, and a
 //! per-fn scope stack (fn params, typed `let` bindings, consts/statics at
 //! every nesting level, the enclosing impl's `Self` struct). The receiver
-//! must be a single-ident path, one field access off such a path or `self`
-//! (unwrapping paren/deref/reference). Evidence is POSITIVE-ONLY: the
+//! must be a single-ident path, a field access off such a path or `self`
+//! (unwrapping paren/deref/reference), or a longer FIELD CHAIN
+//! (`ledger.store`, `self.outer.inner`) whose every hop resolves through
+//! the same in-file census — a hop that cannot resolve declines the whole
+//! chain. Evidence is POSITIVE-ONLY: the
 //! rewrite fires only where the type is PROVEN; exact-match names are
 //! checked before the suffix (`Vec`/`VecDeque` index-like; `…Map` map-like).
 //!
@@ -257,39 +261,72 @@ impl<'ast> Collector<'_, 'ast> {
                 let Member::Named(field) = &f.member else {
                     return RecvKind::Unknown;
                 };
-                // One level off a named binding or `self`; deeper chains
-                // (method-call bases, `a.b.c`) have no reachable evidence.
-                match &*f.base {
-                    Expr::Path(p) if p.qself.is_none() && p.path.segments.len() == 1 => {
-                        let name = p.path.segments[0].ident.to_string();
-                        if name == "self" {
-                            match self.lookup_self_struct() {
-                                Some(s) => self.field_kind(s, field),
-                                None => RecvKind::Unknown,
-                            }
-                        } else {
-                            match self.lookup_binding(&name) {
-                                Some(ty) => match path_tail_ident(ty) {
-                                    Some(struct_name) => {
-                                        let struct_name =
-                                            match self.aliases.get(struct_name.as_str()) {
-                                                Some(target) => {
-                                                    path_tail_ident(target).unwrap_or(struct_name)
-                                                }
-                                                None => struct_name,
-                                            };
-                                        self.field_kind(&struct_name, field)
-                                    }
-                                    None => RecvKind::Unknown,
-                                },
-                                None => RecvKind::Unknown,
-                            }
-                        }
-                    }
-                    _ => RecvKind::Unknown,
-                }
+                // A base chain off a named binding or `self` (e.g.
+                // `ledger.store`, the two-hop shape the riir-dapps kat
+                // module carries) resolves through the same in-file
+                // evidence, one hop at a time; method-call bases stay
+                // unreachable. Intermediate hops that cannot resolve
+                // decline the WHOLE chain.
+                self.classify_base_chain(&f.base, field)
             }
             _ => RecvKind::Unknown,
+        }
+    }
+
+    /// `base.<field>` where `base` is a binding, `self`, or another
+    /// field chain — each hop resolved through the in-file struct
+    /// census; anything unresolvable declines. `field` is the LAST hop
+    /// (its type classifies); `base` must resolve to a struct.
+    fn classify_base_chain(&self, base: &Expr, field: &syn::Ident) -> RecvKind {
+        let Some(struct_name) = self.base_chain_struct_kind(base) else {
+            return RecvKind::Unknown;
+        };
+        self.field_kind(&struct_name, field)
+    }
+
+    /// The in-file struct name the expression `base` evaluates to — the
+    /// walk token for the next hop's `field_kind`. A binding resolves
+    /// through its annotated type; a field chain walks hop by hop. Value
+    /// kinds (map/index/unknown) return None, which declines the whole
+    /// chain (evidence past a value-typed hop is unreachable).
+    fn base_chain_struct_kind(&self, base: &Expr) -> Option<String> {
+        match base {
+            Expr::Paren(p) => self.base_chain_struct_kind(&p.expr),
+            Expr::Reference(r) => self.base_chain_struct_kind(&r.expr),
+            Expr::Unary(u) if matches!(u.op, UnOp::Deref(_)) => {
+                self.base_chain_struct_kind(&u.expr)
+            }
+            Expr::Path(p) if p.qself.is_none() && p.path.segments.len() == 1 => {
+                let name = p.path.segments[0].ident.to_string();
+                if name == "self" {
+                    // `self` inside a struct impl IS the struct value.
+                    self.lookup_self_struct().cloned()
+                } else {
+                    let binding_ty = self.lookup_binding(&name)?;
+                    let tail = path_tail_ident(binding_ty)?;
+                    Some(match self.aliases.get(tail.as_str()) {
+                        Some(target) => path_tail_ident(target).unwrap_or(tail),
+                        None => tail,
+                    })
+                }
+            }
+            Expr::Field(f) => {
+                let Member::Named(field) = &f.member else {
+                    return None;
+                };
+                let struct_name = self.base_chain_struct_kind(&f.base)?;
+                let (_, ty) = self
+                    .structs
+                    .get(struct_name.as_str())?
+                    .iter()
+                    .find(|(n, _)| n == &field.to_string())?;
+                let tail = path_tail_ident(ty)?;
+                Some(match self.aliases.get(tail.as_str()) {
+                    Some(target) => path_tail_ident(target).unwrap_or(tail),
+                    None => tail,
+                })
+            }
+            _ => None,
         }
     }
 
@@ -544,6 +581,77 @@ mod tests {
         // The incident class: no in-file evidence — the contains_key splice
         // would be a guess; the site is left for manual repair (issue 235).
         let input = "fn f(m: &M, k: u8) -> bool { m.get(&k).is_none() }";
+        assert!(propose_fix("unnecessary_get_then_check", input).is_none());
+    }
+
+    #[test]
+    fn two_hop_field_chain_heals() {
+        // The Issue-047 W(drafter) chain class: `ledger.store.map.get(..)` —
+        // the binding's annotated struct names a second in-file struct whose
+        // field is the map; every hop resolves through the in-file census.
+        let input = "struct Outer { store: Inner }\n\
+                     struct Inner { map: std::collections::HashMap<u8, u8> }\n\
+                     fn f(ledger: &Outer, k: u8) -> bool { ledger.store.map.get(&k).is_some() }";
+        let out = propose_fix("unnecessary_get_then_check", input).expect("matched");
+        assert!(
+            out.contains("ledger.store.map.contains_key(&k)"),
+            "every hop resolved through the in-file census: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn field_chain_none_arm_negates() {
+        let input = "struct Outer { store: Inner }\n\
+                     struct Inner { map: std::collections::HashMap<u8, u8> }\n\
+                     fn f(ledger: &Outer, k: u8) -> bool { ledger.store.map.get(&k).is_none() }";
+        let out = propose_fix("unnecessary_get_then_check", input).expect("matched");
+        assert!(
+            out.contains("!ledger.store.map.contains_key(&k)"),
+            "two hops, negated: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn self_two_hop_field_chain_heals() {
+        let input = "struct T { store: S }\n\
+                     struct S { m: std::collections::HashMap<u8, u8> }\n\
+                     impl T { fn f(&self, k: u8) -> bool { self.store.m.get(&k).is_some() } }";
+        let out = propose_fix("unnecessary_get_then_check", input).expect("matched");
+        assert!(
+            out.contains("self.store.m.contains_key(&k)"),
+            "self-led chain, two hops: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn unresolvable_intermediate_hop_declines() {
+        // The middle field's type is NOT in-file — the chain's evidence is
+        // unreachable past it, so the whole chain declines.
+        let input = "struct Outer { store: Foreign }\n\
+                     fn f(ledger: &Outer, k: u8) -> bool { ledger.store.map.get(&k).is_some() }";
+        assert!(propose_fix("unnecessary_get_then_check", input).is_none());
+    }
+
+    #[test]
+    fn get_on_struct_typed_final_hop_declines() {
+        // `ledger.store.get(..)` calls `get` on a struct (Inner), not a
+        // map — the census reads store's type, fails to classify it, and
+        // declines (calling get() on a wrapper struct is the honest miss).
+        let input = "struct Outer { store: Inner }\n\
+                     struct Inner { map: std::collections::HashMap<u8, u8> }\n\
+                     fn f(ledger: &Outer, k: u8) -> bool { ledger.store.get(&k).is_some() }";
+        assert!(propose_fix("unnecessary_get_then_check", input).is_none());
+    }
+
+    #[test]
+    fn value_typed_intermediate_hop_declines() {
+        // The middle hop IS a map — evidence past a value kind is
+        // unreachable (a map's value type is generic, not a census row).
+        let input = "struct Outer { m: std::collections::HashMap<u8, u8> }\n\
+                     fn f(ledger: &Outer, k: u8) -> bool { ledger.m.other.get(&k).is_some() }";
         assert!(propose_fix("unnecessary_get_then_check", input).is_none());
     }
 
