@@ -8,6 +8,13 @@
 **Lease closed:** zed-c0c35a68@amo, 1794946800, was expires 2026-11-19T02:20:00Z (expired 2026-11-19T02:20Z, no landing - folded 2026-11-19 by the re-claim below; scope passed through unchanged)
 **Lease closed:** zed-6addfb44@amo, 1795060553, was expires 2026-11-21T04:40:00+00:00 (scope discharged same session - the assessment landed 6e618b1c; the issue remains the standing deep-clean list for the next low-disk event)
 
+## 2026-11-28 pass (zed-3fa07e8b@amo, epoch 1795846106) — the plan-707 per-plan target dir EXECUTED; 11 GB SAFE-class deleted (415 → 424 GB avail)
+
+Trigger: the teardown law's per-plan-dir row, not a low-disk event (415 GB avail).
+
+- **Deleted (SAFE-class: regenerable cargo target, 3 days dead — newest inner mtime 2026-11-25T12:55Z, zero lsof holders, no active/queued owner):** `/private/tmp/i707` 11 G (the Issue-707 T2 build target — T2 LANDED 2026-11-27 on `origin/i707-t2`; the T3 census runs on the 4090's durable `E:\` state dir by its own verdict row, never this amo-side target; a future amo-side rebuild recreates it) + 6 stale log/fixture files (`i707-fdgate.log`, `i707-fdgate2.log`, `i707-multih.log`, `i707-sb40.log`, `i707-depth.log`, `i707_suite.log`, `i707_ce_probe.rs`). **Kept:** `/private/tmp/i707-ai-snap` 149M + `/private/tmp/i707-infer-snap` 43M (the T2 port-spec substrate snapshots, fresh 11-27 — the lane may consult them at the T3 outcome recording; regenerable but sub-day-fresh), `/private/tmp/mirror-s241v2` 211M + `/private/tmp/s112-merge-mirror` 216M (unknown-lane mirrors touched 11-27 evening — under the 2-day bar, conservative keep).
+- **df reconciliation:** avail 415 → 424 Gi (deleted du ≈ 11 GB; delta consistent, no concurrent-traffic noise at this size).
+
 ## 2026-11-26 pass (zed-1feab5f6@amo, epoch 1796199000) — the standing `gate/` teardown row EXECUTED; ~120 GB SAFE-class deleted (185 → 211 GB avail under concurrent lane traffic)
 
 Trigger: pre-large-run hygiene — amo carries 4 i1244 shard cells + a queued sprint!235 r4 full-guard landing (19 h est) + the holder's i1186 4090 staging; no sub-100 GB event (185 GB avail), the deletions ride the standing-row obligation, not the event trigger.
