@@ -17636,6 +17636,7 @@ fn main() {
                             &display,
                             &current,
                             &oracle_set,
+                            allow_let_chains,
                         );
                         if lane.dropped > 0 {
                             eprintln!(

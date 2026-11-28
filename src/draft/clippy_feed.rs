@@ -384,6 +384,31 @@ pub struct OracleLane {
     pub paren_stripped: usize,
 }
 
+/// i262: does this replacement text carry a `let` in a CONDITION position
+/// (`if let … = … && …`, `while let … = … && …`) — the edition-2024
+/// let-chain shape? A `let` inside a normal expression position (a let
+/// _else_ body, a block) never matches; the detector is deliberately
+/// shallow: it triggers only on the `if let`/`while let` scrutinee-then-`
+/// &&` shape the measured incident carried.
+#[must_use]
+fn contains_let_chain_outside_let_else(repl: &str) -> bool {
+    for head in ["if let ", "while let "] {
+        let mut from = 0usize;
+        while let Some(at) = repl[from..].find(head) {
+            let abs = from + at + head.len();
+            // The scrutinee runs to the first `{` (a block opening) or the
+            // end; a `&&` inside it is a chain head.
+            let rest = &repl[abs..];
+            let scrutinee_end = rest.find('{').unwrap_or(rest.len());
+            if rest[..scrutinee_end].contains("&&") {
+                return true;
+            }
+            from = abs;
+        }
+    }
+    false
+}
+
 /// Compute the oracle-anchored edits for ONE scanned file (P21).
 ///
 /// For each feed diagnostic that matches this file ([`paths_ref_match`]),
@@ -417,6 +442,14 @@ pub struct OracleLane {
 ///   path keeps the range visible: `&mut buf[base..][..n]` or `.take(n)`;
 /// - merged range out of bounds / off a char boundary (a stale feed);
 /// - oracle-vs-oracle overlap (leftmost wins);
+/// - the i262 let-chain guard — a merged replacement introducing
+///   edition-2024 let-chain syntax at an edition-blind posture declines
+///   (the measured incident: an edition-2021 crate healed into
+///   `if let … && …`, which rustc refuses E0658-class at any edition
+///   ≤ 2021; syn parses the chain edition-blind so the parse gate cannot
+///   see it — this guard runs FIRST). clippy 1.99 itself only emits the
+///   collapse on a 2024 crate, so the arm is the hand-fed/future-clippy
+///   armor; the manual path keeps the nested if visible;
 /// - the P104 scope guard ([`FileScopeIndex`]) — clippy's suggestion may
 ///   spell a type as a CRATE-ROOT-relative path from its own resolution
 ///   session (`draft::corpus_index::ScoredRule`); at the destination file
@@ -436,6 +469,7 @@ pub fn oracle_edits(
     display_path: &str,
     src: &str,
     lane_lints: &[&str],
+    allow_let_chains: bool,
 ) -> OracleLane {
     let mut candidates: Vec<(usize, usize, String, String)> = Vec::new();
     let mut dropped = 0usize;
@@ -492,7 +526,7 @@ pub fn oracle_edits(
         }
     }
     // Oracle-vs-oracle overlap: leftmost wins.
-    let kept = leftmost_wins(candidates, &mut dropped);
+    let mut kept = leftmost_wins(candidates, &mut dropped);
     if kept.is_empty() {
         return OracleLane {
             edits: Vec::new(),
@@ -513,6 +547,33 @@ pub fn oracle_edits(
             replacement: repl.clone(),
         })
         .collect();
+    // i262 (the let-chain class): a merged replacement that introduces
+    // edition-2024 let-chain syntax at an edition-blind posture declines —
+    // the same law the collapsible_if proposer enforces (the measured
+    // incident: an edition-2021 crate healed into `if let … && …`, which
+    // rustc refuses E0658-class at any edition ≤ 2021). syn parses the
+    // chain form edition-blind, so the parse gate below CANNOT see it —
+    // this guard must run FIRST. `dropped` is the honest bucket: a
+    // deliberate refusal of a well-formed suggestion, never a staleness.
+    if !allow_let_chains {
+        kept.retain(|(_, _, repl, _)| {
+            if contains_let_chain_outside_let_else(repl) {
+                dropped += 1;
+                return false;
+            }
+            true
+        });
+        if kept.is_empty() {
+            return OracleLane {
+                edits: Vec::new(),
+                dropped,
+                range_declined: counters.range_declined,
+                doc_command_declined: counters.doc_command_declined,
+                path_scope_declined: counters.path_scope_declined,
+                paren_stripped: counters.paren_stripped,
+            };
+        }
+    }
     let patched = splice_sorted(src, &edits);
     if syn::parse_file(&patched).is_err() {
         return OracleLane {
@@ -1358,7 +1419,7 @@ mod tests {
                 parts: vec![(off, off + "shader_perf".len(), "`shader_perf`".to_string())],
             }),
         }];
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"], false);
         assert_eq!(lane.dropped, 0);
         assert_eq!(lane.edits.len(), 1);
         assert_eq!(lane.edits[0].rule_id, "doc_markdown");
@@ -1370,7 +1431,7 @@ mod tests {
         );
         // The lane-set gate is the point: the SAME feed is refused when
         // the lint is not in the lane (the corpus-gap signal).
-        let refused = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"]);
+        let refused = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"], false);
         assert_eq!(refused.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
     }
 
@@ -1392,7 +1453,7 @@ mod tests {
                 parts: vec![(off, off + "2 * 3 + 0".len(), "(2 * 3)".to_string())],
             }),
         }];
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["identity_op"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["identity_op"], false);
         assert_eq!(lane.dropped, 0);
         assert_eq!(lane.paren_stripped, 1);
         assert_eq!(lane.edits.len(), 1);
@@ -1427,6 +1488,7 @@ mod tests {
             "src/lib.rs",
             src,
             &["identity_op"],
+            false,
         );
         assert_eq!(lane.paren_stripped, 0);
         assert_eq!(lane.edits[0].edit.replacement, "(n)");
@@ -1438,6 +1500,7 @@ mod tests {
             "src/lib.rs",
             src,
             &["identity_op"],
+            false,
         );
         assert_eq!(lane.paren_stripped, 0);
         assert_eq!(lane.edits[0].edit.replacement, "(1) + (2)");
@@ -1448,6 +1511,7 @@ mod tests {
             "src/lib.rs",
             src,
             &["identity_op"],
+            false,
         );
         assert_eq!(lane.paren_stripped, 0);
         assert_eq!(lane.edits[0].edit.replacement, "2");
@@ -1462,6 +1526,7 @@ mod tests {
             "src/lib.rs",
             &src,
             &["unnecessary_map_or"],
+            false,
         );
         assert_eq!(lane.dropped, 0);
         assert_eq!(lane.edits.len(), 1);
@@ -1481,7 +1546,13 @@ mod tests {
     #[test]
     fn oracle_edits_refuse_lints_outside_the_lane() {
         let src = probe_src();
-        let lane = oracle_edits(&mapor_feed(&src), "src/lib.rs", &src, &["collapsible_if"]);
+        let lane = oracle_edits(
+            &mapor_feed(&src),
+            "src/lib.rs",
+            &src,
+            &["collapsible_if"],
+            false,
+        );
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.dropped, 0, "out-of-lane is not a drop, it is a skip");
     }
@@ -1494,6 +1565,7 @@ mod tests {
             "other/mod.rs",
             &src,
             &["unnecessary_map_or"],
+            false,
         );
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
     }
@@ -1514,6 +1586,69 @@ mod tests {
                 parts: vec![(off, off + old.len(), new.to_string())],
             }),
         }]
+    }
+
+    // i262: the let-chain class — an edition-blind posture declines the
+    // merged replacement that introduces `if let … && …`; an unlocked
+    // posture consumes it. The measured incident: `cargo refine fix` on an
+    // edition-2021 crate KEPT a let-chain write the compile gate proved
+    // (clippy 1.99 only emits the collapse on a 2024 crate, so the guard
+    // is the hand-fed/future-clippy armor).
+    #[test]
+    fn oracle_edits_decline_let_chain_on_edition_blind_posture() {
+        let src = "fn f(o: Option<u32>, n: u32) {\n    if let Some(v) = o {\n        if v > n {\n            work();\n        }\n    }\n}\n";
+        let off = src
+            .find("if let Some(v) = o {")
+            .expect("fixture has the site");
+        let covered = "if let Some(v) = o {";
+        let repl = "if let Some(v) = o && v > n {";
+        let feed = vec![ClippyDiagnostic {
+            span: None,
+            file: "src/lib.rs".to_string(),
+            line: 2,
+            lint: "collapsible_if".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(off, off + covered.len(), repl.to_string())],
+            }),
+        }];
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"], false);
+        assert!(
+            lane.edits.is_empty(),
+            "chain must decline: {:?}",
+            lane.edits
+        );
+        assert_eq!(lane.dropped, 1, "the decline lands in the dropped bucket");
+        // Control: the SAME suggestion at an UNLOCKED posture consumes.
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"], true);
+        assert_eq!(lane.edits.len(), 1, "unlocked posture consumes");
+        assert_eq!(lane.edits[0].edit.replacement, repl);
+        syn::parse_file(&splice_sorted(
+            src,
+            std::slice::from_ref(&lane.edits[0].edit),
+        ))
+        .expect("parses");
+    }
+
+    #[test]
+    fn oracle_edits_let_guard_never_touches_plain_suggestions() {
+        // The P21 trust anchor is intact: a non-let replacement consumes
+        // at every posture, and a let-chain-shaped STRING LITERAL inside
+        // the replacement is not the shape (the detector reads code, not
+        // data — and a plain `&&` without a `let` head never triggers).
+        let src = "fn f(a: bool, b: bool) {\n    if a {\n        if b {\n            work();\n        }\n    }\n}\n";
+        let off = src.find("if a {").expect("fixture has the site");
+        let feed = vec![ClippyDiagnostic {
+            span: None,
+            file: "src/lib.rs".to_string(),
+            line: 2,
+            lint: "collapsible_if".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(off, off + "if a {".len(), "if a && b {".to_string())],
+            }),
+        }];
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"], false);
+        assert_eq!(lane.edits.len(), 1, "plain &&-fold consumes edition-blind");
+        assert_eq!(lane.dropped, 0);
     }
 
     #[test]
@@ -1558,7 +1693,7 @@ mod tests {
             "map_or(false, |x| *x > 1)",
             "is_some_and(|x: &draft::corpus_index::ScoredRule| *x > 1)",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.path_scope_declined, 1, "the scope guard declines");
         assert_eq!(lane.dropped, 0, "a decline is not a drop");
@@ -1574,7 +1709,7 @@ mod tests {
             "map_or(false, |v| v > 1)",
             "is_some_and(|v: &SomeType::Assoc| v > 1)",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.path_scope_declined, 1);
     }
@@ -1588,7 +1723,7 @@ mod tests {
             "map_or(false, |v| v > 1)",
             "is_some_and(|v: &corpus_index::ScoredRule| v > 1)",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits.len(), 1, "imported root passes");
         assert_eq!(lane.path_scope_declined, 0);
 
@@ -1600,7 +1735,7 @@ mod tests {
             "map_or(false, |v| v > 1)",
             "is_some_and(|v: &ScoredRule::Assoc| v > 1)",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits.len(), 1, "glob-plausible type root passes");
         assert_eq!(lane.path_scope_declined, 0);
     }
@@ -1657,7 +1792,7 @@ mod tests {
             }
         };
         let feed = vec![diag("shader_perf"), diag("gen_corpus")];
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"], false);
         assert_eq!(lane.doc_command_declined, 1);
         assert_eq!(lane.dropped, 0, "a decline is not staleness");
         assert_eq!(lane.edits.len(), 1);
@@ -1685,7 +1820,7 @@ mod tests {
             }
         };
         let feed = vec![diag("shader_perf"), diag("gen_corpus")];
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"], false);
         assert_eq!(
             lane.doc_command_declined, 0,
             "the decline arm is compiled out at this posture"
@@ -1704,7 +1839,7 @@ mod tests {
         // for a forensic session. Declined, loudly counted, never applied.
         let src = "fn decay(buf: &mut [f32], h: usize, sph: usize) {\n    let gs = &mut buf[h * sph..];\n    for i in 0..sph {\n        gs[i] *= 0.5;\n    }\n}\n";
         let feed = range_loop_feed(src, "i in 0..sph", "g in gs.iter_mut()", "gs[i]", "*g");
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"], false);
         assert!(lane.edits.is_empty(), "981 shape must not be applied");
         assert_eq!(lane.range_declined, 1);
         assert_eq!(
@@ -1719,7 +1854,7 @@ mod tests {
         // `len()` — full-prefix iteration is identical by construction.
         let src = "fn sum(v: Vec<i32>) -> i32 {\n    let mut t = 0;\n    for i in 0..v.len() {\n        t += v[i];\n    }\n    t\n}\n";
         let feed = range_loop_feed(src, "i in 0..v.len()", "x in &v", "v[i]", "*x");
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"], false);
         assert_eq!(lane.range_declined, 0);
         assert_eq!(lane.edits.len(), 1, "len-proven rewrite must be consumed");
         let patched = splice_sorted(src, std::slice::from_ref(&lane.edits[0].edit));
@@ -1741,13 +1876,13 @@ mod tests {
             "gs[i]",
             "*g",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", parent, &["needless_range_loop"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", parent, &["needless_range_loop"], false);
         assert!(lane.edits.is_empty(), "parent-len bound must decline");
         assert_eq!(lane.range_declined, 1);
 
         let incl = "fn s(v: &[i32]) -> i32 {\n    let mut t = 0;\n    for i in 0..=v.len() {\n        t += v[i];\n    }\n    t\n}\n";
         let feed = range_loop_feed(incl, "i in 0..=v.len()", "x in v", "v[i]", "*x");
-        let lane = oracle_edits(&feed, "src/lib.rs", incl, &["needless_range_loop"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", incl, &["needless_range_loop"], false);
         assert!(lane.edits.is_empty(), "inclusive limit must decline");
         assert_eq!(lane.range_declined, 1);
     }
@@ -1767,7 +1902,7 @@ mod tests {
             "gs[i]",
             "*g",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"], false);
         assert!(
             lane.edits.is_empty(),
             "len() of the parent over a tail-slice slot must decline"
@@ -1788,7 +1923,7 @@ mod tests {
             "v[r][i]",
             "row[i]",
         );
-        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"], false);
         assert!(lane.edits.is_empty(), "inner unproven bound must decline");
         assert_eq!(lane.range_declined, 1);
     }
@@ -1804,7 +1939,7 @@ mod tests {
                 *e += 10_000;
             }
         }
-        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.dropped, 1);
     }
@@ -1817,7 +1952,7 @@ mod tests {
         if let Some(FeedSuggestion { parts }) = feed[0].suggestion.as_mut() {
             parts[0].2 = "1is_some_and".to_string();
         }
-        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.dropped, 1, "gate refusal counts the candidate");
     }
@@ -1837,7 +1972,7 @@ mod tests {
                 parts: vec![(off + 2, off + 20, "zzz".to_string())],
             }),
         });
-        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"], false);
         assert_eq!(lane.edits.len(), 1, "leftmost wins");
         assert_eq!(lane.edits[0].edit.start, off);
         assert_eq!(lane.dropped, 1);
@@ -1868,7 +2003,7 @@ mod tests {
                 )],
             }),
         }];
-        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["useless_format"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["useless_format"], false);
         assert!(lane.edits.is_empty(), "escape class must refuse");
         assert_eq!(lane.dropped, 1, "the refusal counts the candidate");
     }
@@ -1893,7 +2028,7 @@ mod tests {
                 )],
             }),
         }];
-        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["useless_format"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["useless_format"], false);
         assert_eq!(lane.dropped, 0);
         assert_eq!(lane.edits.len(), 1, "clean shape still consumes");
         let patched = splice_sorted(&src, std::slice::from_ref(&lane.edits[0].edit));
@@ -1919,7 +2054,7 @@ mod tests {
                 parts: vec![(off, off, "#[inline] ".to_string())],
             }),
         }];
-        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["needless_return"]);
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["needless_return"], false);
         assert_eq!(lane.edits.len(), 1);
         assert_eq!(lane.edits[0].edit.replacement, "#[inline] ");
         assert_eq!(lane.edits[0].edit.start, lane.edits[0].edit.end);
