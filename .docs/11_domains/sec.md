@@ -688,6 +688,31 @@ order_by + limit+1 the extra-row sentinel — not a Rust-shaped decision contrac
 decision NEGATIVE). Fixtures `fixtures/b423_sec_fixtures.rs` 5 rules × 4 arms standalone-compiled AND
 executed pre-entry (debug AND -O).
 
+## Plan 421 tranche (2026-11-28) — the mlx 83-commit window numerics quartet
+
+corpus 109 → 113, FOUR suggest-only Numerics rules (ml-explore/mlx @ `9cb7f69b` MIT — the T0
+window over the B410-412-era pin `c69303b0`, +84 commits; Plan 421 / Research 350's window;
+transcription-only): `round-to-odd-intermediate-narrowing` (the A− lead — the double-rounding
+tie law: plain RN at the intermediate hop can land ON the narrow format's tie and round the
+wrong way; RNO makes the tie impossible; the source's own 1.0625+2^-30 fixture verbatim at
+unary_ops.h:121-127; joins the B366 rounding family as its first DOUBLE-ROUNDING law;
+adjudicated vs entries_104 exact-accumulation [representability axis] + B375
+reference-round-replication [parity axis] both directions) + `accumulate-in-accumulator-type-
+narrow-once-at-store` (the ReduceAccum trait shape — accumulate in the op's accumulator type,
+narrow once at the store, never a per-iteration RMW on the typed output; reduce_ops.cuh:158-160
++ row_reduce.cu:316 + the CPU quantized.cpp scratch twin; composes the B366-R6
+wide-reduction face) + `two-sided-encoded-magnitude-matching` (the QQMatmul general case's
+global-scale cancellation — fold each side's ratio into its own encode scale, the ratios cancel
+in the product; quantized.cpp:1545-1550, the identity arms load-bearing) +
+`magic-anchor-bits-encode-via-unsigned-wrap` (the exp epart bit-read — the anchor half is a
+count-neutral FACE on the gpu_136/B251 family's 1.5·2^23 constant; the OWNED axis is the
+float-to-int UB avoidance via bit-read + unsigned modular bias with downstream select
+sanitization; math.h:65-72, the old signed conversion quoted). Detector: none-at-landing on
+all four (vocabulary-gated; deferred). Fixtures: original syntheses, standalone-compiled AND
+executed pre-entry (the tie walk + parity oracles). Sibling tranches in the same plan:
+kernel_opt 3 rules + 4 faces (entries_gpu_175) + rust_perf 1 benchable rule
+(per-group-reciprocal-scale-fold, the window's only Pareto candidate).
+
 ## Batch 424 (2026-11-26, tranche B+) — the on-chain ledger state-machine sec family
 
 corpus 104 → 109, FIVE suggest-only InputValidation rules + R6 dropped at its pre-registered
