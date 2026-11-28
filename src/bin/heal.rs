@@ -17451,6 +17451,10 @@ fn main() {
                     break;
                 };
                 let mut edits: Vec<RuleEdit> = Vec::new();
+                // Edition-2024 unlocks (the collapsible_if let-chain fold,
+                // proposer lane + P21 oracle door alike): resolved once per
+                // file from the owning manifest, before both consumers.
+                let allow_let_chains = riir_refine::fmt::edition_allows_let_chains(file);
                 if run_perf {
                     let mut perf_edits: Vec<RuleEdit> = Vec::new();
                     for rule in FIXABLE_RULES {
@@ -17550,9 +17554,6 @@ fn main() {
                     // `&lint_set` (pattern-deref): the set is borrowed, not
                     // moved — the P21 oracle merge below needs it after this
                     // loop (the lane's corpus-set precondition).
-                    // Edition-2024 unlocks (the collapsible_if let-chain
-                    // fold): resolved once per file from the owning manifest.
-                    let allow_let_chains = riir_refine::fmt::edition_allows_let_chains(file);
                     for &lint in &lint_set {
                         // Issue 102 T2: a demoted clippy rule's proposer
                         // stands down (the auto re-admit at run end watches
