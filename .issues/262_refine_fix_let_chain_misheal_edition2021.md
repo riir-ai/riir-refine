@@ -1,6 +1,7 @@
 # Issue 262: cargo refine fix healed Rust-2024 let-chains into an edition-2021 crate (collapsible_if class)
 
 **Status:** Open — the mis-heal is hand-fixed at the consumer (riir-infer `i1254-p0a-p0b` commit `3992a74`, 2026-11-28); this issue owns the PROPOSER-side defect so the class cannot re-fire. Unclaimed — the repair belongs in the rulewright's collapsible_if proposer + its compile-gate posture (the `fix_verify` lane that failed to catch it).
+**Claimed:** zed-r1262@amo, 1795867211, expires 2026-11-30T12:00:11+00:00
 
 ## The incident (2026-11-28, riir-infer lane 1254, session zed-3591ad54@4090)
 
