@@ -2,7 +2,7 @@
 
 **Status:** LANDED 2026-11-28 — T0–T7 complete in one session (the batch lane's landing commit is the record): entries_gpu_174 (1 rule, Dispatch) + 1 count-neutral census face on merge-dispatches gpu_02; fixtures b430 5/5 standalone-compiled AND executed pre-entry (debug AND -O); gates lib 4021/0 both postures + clippy -D ×3 (default / kernel_opt / all-features) + pins_manifest 1154 AGREE (--write in-landing) + G1 census PASS 299 green / 0 FAIL (1154 rows, the Issue-260 emit-status rule rode) + count web one-landing (README 1154, AGENTS 1154 + Batch-430 head, .docs/11_domains/kernel_opt.md 1154 + the standing-total note, health_views kernel 1154 + total 1891, router witness 1154, the re-pin chain ×3 sites) + fmt on touched files + dual_allocation 0/0/0; T5 honest drops NONE (the verdict's yield was 1 rule + 1 face, both landed); release-set rebuild NOT owed (suggestion-only delta, the B368/B402 disclosure convention); score-bench/freeze NOT owed (zero clippy_lints delta).
 
-**Claimed:** zed-24878713@amo, 1795877700, expires 2026-11-30T01:00:00+00:00
+**Lease closed:** zed-24878713@amo, 1795877700, was expires 2026-11-30T01:00:00+00:00 — discharged by the Batch 430 landing (the plan's own Status row, T0–T7 complete; claim never folded at landing — reshaped 2026-11-28 by the amo housekeeping lane).
 
 ## Source
 
