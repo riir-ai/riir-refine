@@ -1,24 +1,20 @@
 # Issue 261 — rulewright divergence: the deref→unsize trait-object rewrite class compiles to NOTHING at the verifying posture (riir-chain E0277 + a dropped let-binding casualty)
 
-**Status:** Open — filed 2026-11-28 (amo idle lane zed-eb03c1fb@amo) from the riir-chain heal; both consumer-side casualties are ALREADY FIXED (riir-chain `45cce96a`); this issue owns the proposer-side root cause + the posture hole.
+**Status:** Open — filed 2026-11-28 (amo idle lane zed-eb03c1fb@amo) from the riir-chain heal; both consumer-side casualties ALREADY FIXED (riir-chain `45cce96a`); **the proposer-side adjudication LANDED same session (the fixture pins + the divergence disclosure) — the guards that refuse both shapes POSTDATE the 11-24 batch, so no new proposer code was owed.** What remains open: the posture hole (below) as a standing watch.
 
-## The two casualties (same rulewright session, zed-8fa4839b@amo 2026-11-24, commits 3180cdf4 + 52529a02)
+## Adjudication (2026-11-28, same session)
 
-1. **`explicit_auto_deref` rewrote `&*self.nft_registry` → `&self.nft_registry` at an `&dyn RecipientRegistry` parameter** (`src/forensic/attribution_agent.rs:324`). Rust does NOT chain deref→unsize for trait objects in argument position — `&Arc<S>` does not coerce to `&dyn T` unless `Arc<S>: T` itself (standalone repro: `f(&arc)` with `impl T for S` is E0277, `required for the cast from &Arc<S> to &dyn T`). Result: `cargo check --all-features` has been red on riir-chain develop since 11-24. The mechanical was *lint-driven by clippy itself* — clippy fires `explicit_auto_deref` there because it models the deref, not the unsize target — so the class will RE-FIRE wherever a `&*x` feeds a `&dyn Trait` param through an `Arc`/`Box` smart pointer.
-2. **The unused-variable family dropped `let status = ` from a `loop { break s }`** (`crates/riir-chaind/tests/e2e_crash_recovery.rs:268`) feeding the file's own shutdown-canary assertions — E0425 in the e2e test binary. The test's doc comment says those assertions ARE the fix ("The one-line fix is not what keeps it fixed. This is."); the mechanical lobotomized the guard.
+- **Casualty 1** (`explicit_auto_deref`, `&*self.nft_registry` → `&self.nft_registry` at an `&dyn RecipientRegistry` param): the i258 owned-binding guard (`6401ef1a`, 2026-11-27) refuses the exact shape — the operand is a multi-segment path (unproven binding form → refuse-on-uncertainty). The 11-24 batch ran with the guard-less proposer. **Fixture pinned:** `smart_pointer_field_projection_at_trait_object_param_refuses_i261` (the measured shape through the public `propose_fix` seam). Residual SILENT class disclosed in the module's divergence table: an operand PROVEN owned (owned `let` init) at a `&dyn` param still breaks — parse-only cannot see the parameter type; bounded to owned-let operands, caught by `--verify` only at a posture that compiles the call site.
+- **Casualty 2** (the dropped `let status = ` in the chaind e2e canary): the let_unit_value value-break guard (`926d1608`, 2026-11-24 06:56 ICT — 3 h AFTER the batch) refuses `loop { break <value>; }` inits. **Fixture pinned against the MEASURED shape:** `trait_object_param_value_break_loop_let_refuses_i261` (a match arm's `break s` inside the loop body — the guard's wholesale descent covers it; now provably).
+- **The P20 question is ANSWERED — no P20 mystery:** both guards postdate the batch; the compile gate at the default posture saw both cfg-gated sites compile to nothing (the green-zero class), and the guards that now refuse the shapes did not exist yet. The standing posture hole that REMAINS: **a cfg-gated edit verified at a posture that compiles it to nothing can ship a break the NEXT posture that arms the gate reds** — P20's module-decl audit (issue-182 class) is the disclosure layer for exactly this; its reach (does it fire on a `#[cfg]` one hop up on `pub mod attribution_agent;`?) is verified by its own tests, and the consumer-side net is the repo's own `--all-features` layer (riir-chain guard Layer 3, which HAD been passing only because nobody ran it between 11-24 and today).
 
-## Why the compile gate certified both as green
+## Standing watch (what stays open)
 
-- Casualty 1's call site is gated `chain_asset_fingerprinting` → compiled to NOTHING at the default-posture verify (the green-zero class). Casualty 2's test binary compiles only under the posture that arms chaind e2e features — never default.
-- **The open question this issue owns: did the P20 cfg audit fire?** The verify's cfg audit (edits inside cfg-gated regions → `verified=false` down the recorder) shipped before 11-24. Either the 11-24 binary predates a working P20, the audit's cfg detection missed a mid-file `#[cfg]` on the module decl one hop up (`forensic/mod.rs` gates `attribution_agent` — the MODULE-DECL audit, issue-182 class), or it disclosed and the batch landed anyway. Re-run today's binary on the healed tree's pre-state (git checkout the 11-24 parents in a scratch worktree, replay `cargo refine fix` dry) and adjudicate which. If P20 works today, the residue is just the old binary; if not, the module-decl hop detection needs a fixture.
-
-## Fix space (root cause, in priority order)
-
-1. **Refuse the deref→unsize class in `explicit_auto_deref`'s fixer:** when the borrow's coercion target is a trait object (`&dyn …` — resolvable at the call site's parameter type) AND the receiver is a smart pointer (`Arc`/`Box`/`Rc`), the rewrite is compile-breaking → decline + record the divergence. Fallback posture if the target type is not resolvable parse-side: annotate `explicit_auto_deref` as verify-only (never `--fix`) for smart-pointer receivers.
-2. **Fixture regression:** standalone crate with `impl T for S` + `f(&Arc::new(S))` + `f(&*arc)` — assert the fixer declines both rewrites.
-3. **The P20/module-decl adjudication above** (may be a no-op if today's binary is clean).
+- The sweep gate for cfg-gated repos: after any mechanical batch on a repo whose sites are feature-gated, the consumer repo's own `--all-features` clippy is the verifying posture. The batch runner cannot know this parse-side — the residue is the consumer repo's guard discipline (riir-chain Layer 3 exists and is green again); no refine-side code change owed.
+- The trait-object-callee silent class (owned-let operand + `&dyn` param) stays disclosed-only; re-open bar: a SECOND measured instance whose operand is an owned let.
 
 ## Provenance
 
-- Fixed consumer-side: riir-chain `45cce96a` (this repo's heal landed first; the comment at the call site names the class).
-- Standing rule honored: "wrong suggestion → fix the proposer at root cause; NEVER suppress, NEVER hand-edit past it without a fixture."
+- Consumer-side fixes: riir-chain `45cce96a` (heal + comments at both sites).
+- Guards that close the classes: `6401ef1a` (i258, 2026-11-27) + `926d1608` (255 T0+T2, 2026-11-24 06:56 ICT).
+- Standing rule honored: "wrong suggestion → fix the proposer at root cause" — here the root cause was temporal (guards landed after the batch), so the deliverable is the measured-shape fixtures + the disclosure, not new refusal code.

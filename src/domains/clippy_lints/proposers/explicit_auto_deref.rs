@@ -43,6 +43,18 @@
 //!   mis-fire (E0308) and this silent class is the residual risk, bounded
 //!   by how rare `&*`/`&**` args to GENERIC callees are (the specimens
 //!   were concrete-typed helpers).
+//! - **The trait-object-callee class (SILENT, i261)**: a kind-1 collapse on
+//!   an operand PROVEN owned (bare path, owned `let` init) still breaks when
+//!   the callee's parameter is a trait object — `&Arc<T>` does not coerce to
+//!   `&dyn Trait` (Rust does not chain deref→unsize for trait objects in
+//!   argument position; measured: riir-chain `45cce96a`, the `--all-features`
+//!   posture E0277 red since 2026-11-24). A parse-only proposer cannot see
+//!   the parameter type; the i258 owned-binding guard already refuses every
+//!   UNPROVEN operand (field projections, fn params), so this residual class
+//!   is bounded to owned-`let` operands at `&dyn` params. Disclosed like the
+//!   generic-callee class above; the `--verify` compile gate catches it ONLY
+//!   at a posture that compiles the call site (a cfg-gated site compiles to
+//!   nothing at default — the posture hole i261 records).
 //! - **Let-init positions refuse**: `let x: &u8 = &*b;` — the annotation
 //!   makes the coercion site explicit and the rewrite would change the
 //!   inferred binding type on UN-annotated lets (`let x = &*b` binds
@@ -292,6 +304,39 @@ mod tests {
         let input = "fn g(m: &M) -> Option<u8> { bare_ident(&*m.receiver) } fn bare_ident(e: &Expr) -> Option<u8> { None }";
         let out = propose_fix("explicit_auto_deref", input);
         assert!(out.is_none(), "unproven projection refuses: {out:?}");
+    }
+
+    #[test]
+    fn smart_pointer_field_projection_at_trait_object_param_refuses_i261() {
+        // i261 (the measured riir-chain casualty, fixed there 45cce96a):
+        // `&*self.nft_registry` at an `&dyn RecipientRegistry` parameter.
+        // The rewrite compiles at a CONCRETE param (deref coercion) but is
+        // E0277 at a trait-object param — Rust does NOT chain deref→unsize
+        // for trait objects in argument position. The operand is a
+        // multi-segment path (unproven binding form) → the i258 guard's
+        // refuse-on-uncertainty arm must already decline it. This test
+        // pins that refusal against the EXACT measured shape.
+        let input = "struct A { r: std::sync::Arc<S> } struct S; trait T {} impl T for S {} fn f(_t: &dyn T) {} fn g(a: &A) { f(&*a.r) }";
+        let out = propose_fix("explicit_auto_deref", input);
+        assert!(
+            out.is_none(),
+            "smart-pointer projection at a &dyn param must refuse: {out:?}"
+        );
+    }
+
+    #[test]
+    fn trait_object_param_value_break_loop_let_refuses_i261() {
+        // i261 casualty 2's shape (riir-chain e2e_crash_recovery.rs, the
+        // shutdown canary): `let status = loop { match … { Some(s) => break
+        // s, … } };` — the let_unit_value value-break guard (926d1608,
+        // landed 3h AFTER the 11-24 batch that shipped the E0425) must
+        // refuse the EXACT measured body shape (a match arm's `break s`),
+        // not just the probe shapes the guard's own tests pin.
+        let src = "fn probe(n: &mut N) { let status = loop { match n.try_wait().expect(\"try_wait\") { Some(s) => break s, None if n.deadline() => { break n.read(); } None => {} } }; assert!(status.success()); }";
+        assert!(
+            propose_fix("let_unit_value", src).is_none(),
+            "a match-arm value-break inside the loop must refuse"
+        );
     }
 
     #[test]
