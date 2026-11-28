@@ -13,6 +13,14 @@
 - The sweep gate for cfg-gated repos: after any mechanical batch on a repo whose sites are feature-gated, the consumer repo's own `--all-features` clippy is the verifying posture. The batch runner cannot know this parse-side — the residue is the consumer repo's guard discipline (riir-chain Layer 3 exists and is green again); no refine-side code change owed.
 - The trait-object-callee silent class (owned-let operand + `&dyn` param) stays disclosed-only; re-open bar: a SECOND measured instance whose operand is an owned let.
 
+## The riir-train half — ADJUDICATED + REPAIRED 2026-11-28 17:41 ICT (folded by the adjudicating session zed-218f83ef@amo, epoch 1795863766 — the lane's own head-up reply `01a221bf` delivered it; the refine lane had not folded it)
+
+The refining batch `aad54860` DID break feature/test-gated sites in **riir-train** — the verifying posture (`cargo check --workspace --all-features --tests`, isolated target) found the damage the default posture compiles to nothing. Repair: riir-train `b87b4f17` (pushed to develop; the posture is GREEN, lib + tests + all features).
+
+- **aad54860 damage CONFIRMED — 4 sites, exactly the classes the post-batch guards refuse:** (1) `plan433_phase1_warmup_battle.rs`: `map(f)` over `Vec<&T>` broke `FnMut(&&T)` (E0277; reverted); (2) `issue_307_archetype_library_gates.rs`: `explicit_auto_deref` stripped load-bearing `&*` on `Box<dyn Trait>` args ×2 (reverted); (3) `ciacot_bomber_real.rs`: `chunks_exact`→`as_chunks` left `c.try_into()` invalid on `&[u8; 4]` (fixed: `f32::from_le_bytes(*c)`); (4) `actflow_verify/tests.rs`: `useless_vec` made `[String; 50]` — `String` is not `Copy` (reverted to `vec!`).
+- **Pre-existing rot (NOT aad54860 — attribution corrected so the class map stays honest):** `game/mod.rs` duplicate/cfg'd `mod` rows (E0428 at all-features since i518 T1's `f1d4359f`, 11-27 — red for 6 days unnoticed); `fourier_ahla_proof/experiment_a.rs` test initializer missing plan-490's `teacher_target_scramble` field (`eada14b7`, 11-07); `kimi_k3_gpu_backward.rs` test initializer missing plan-627-T5's `MoeConfig` fields (katgpt-rs `102302031`, same day).
+- **The posture hole CONFIRMED a THIRD time on a second repo** (this file's standing watch): the cfg-gated green-zero class is not riir-chain-specific — a repo's own `--all-features` tests posture is the verifying posture for any batch touching its gated sites, and the drift can sit UNNOTICED for days when nobody runs it (riir-train's rot rows sat 6–21 days).
+
 ## Provenance
 
 - Consumer-side fixes: riir-chain `45cce96a` (heal + comments at both sites).
