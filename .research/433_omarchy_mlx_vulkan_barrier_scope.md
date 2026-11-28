@@ -1,6 +1,6 @@
 # 433 — omarchy-mlx Vulkan barrier-scope article (joshuawarren.com, 2026-11-22)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED — Batch 430 (2026-11-28, Plan 421-sibling slot; the verdict taken to execution by the idle-loop batch lane: entries_gpu_174 `compute-to-compute-narrow-barrier-transfer-guarded` + 1 count-neutral census face on merge-dispatches gpu_02; fixtures b430 5/5 standalone debug AND -O; lib 4021/0 both postures + clippy -D ×3 + pins_manifest 1154 AGREE + G1 census 299 green / 0 FAIL / 1154 rows; T0 re-clone at tip cccad655 — the mined surfaces untouched by the 83 commits past the article pin). Prior status: DISTILLED — pending owner decision
 
 ## Source
 
